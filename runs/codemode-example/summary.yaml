@@ -1,0 +1,8 @@
+record_version: 3
+experiment_id: exp_codemode_model_comparison_20260501T170741939880Z
+benchmark_id: codemode-model-comparison
+run_count: 10
+passed_count: 0
+failed_count: 10
+errored_count: 0
+skipped_count: 0

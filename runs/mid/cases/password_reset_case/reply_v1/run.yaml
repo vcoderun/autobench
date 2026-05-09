@@ -1,0 +1,484 @@
+record_version: 3
+run_id: run_0003_0001_password_reset_case__reply_v1
+experiment_id: exp_mid_reply_quality_20260501T165119307783Z
+benchmark_id: mid-reply-quality
+case_id: password_reset_case
+variant_id: reply_v1
+status: failed
+evaluation_status: failed
+task_status: passed
+case:
+  id: password_reset_case
+  input:
+    ticket: I cannot sign in and need help resetting my password today.
+  expected:
+    resolution: password_reset
+    required_phrases:
+    - password
+    - account access
+  metadata:
+    latencies_ms:
+      baseline:
+      - 14
+      - 13
+      - 15
+      optimized:
+      - 8
+      - 7
+      - 9
+    tokens:
+      baseline:
+        input: 580
+        output: 140
+      optimized:
+        input: 460
+        output: 120
+  tags: []
+  attachments: []
+task_output:
+  resolution: password_reset
+  response_text: I can help reset your password.
+  success: true
+observations:
+- id: obs_1
+  name: prompt_version
+  kind: factor
+  semantic_type: prompt.version
+  value: reply-v1
+  unit: null
+  direction: null
+  role: null
+  span_id: null
+  source: variant
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_2
+  name: provider
+  kind: factor
+  semantic_type: llm.provider
+  value: demo
+  unit: null
+  direction: null
+  role: null
+  span_id: null
+  source: variant
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_3
+  name: model
+  kind: factor
+  semantic_type: llm.model.name
+  value: demo-mini
+  unit: null
+  direction: null
+  role: null
+  span_id: null
+  source: variant
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_4
+  name: provider
+  kind: factor
+  semantic_type: llm.provider
+  value: demo
+  unit: null
+  direction: null
+  role: null
+  span_id: span_1
+  source: task_observation
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_5
+  name: model
+  kind: factor
+  semantic_type: llm.model.name
+  value: demo-mini
+  unit: null
+  direction: null
+  role: null
+  span_id: span_1
+  source: task_observation
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_6
+  name: reply_latency.median_ms
+  kind: metric
+  semantic_type: time.latency
+  value: 14.0
+  unit: ms
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_7
+  name: reply_latency.p95_ms
+  kind: metric
+  semantic_type: time.latency
+  value: 14.9
+  unit: ms
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_8
+  name: reply_latency.mean_ms
+  kind: metric
+  semantic_type: time.latency
+  value: 14.0
+  unit: ms
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_9
+  name: reply_latency.min_ms
+  kind: metric
+  semantic_type: time.latency
+  value: 13.0
+  unit: ms
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_10
+  name: reply_latency.max_ms
+  kind: metric
+  semantic_type: time.latency
+  value: 15.0
+  unit: ms
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_11
+  name: reply_latency.stddev_ms
+  kind: metric
+  semantic_type: null
+  value: 0.816496580927726
+  unit: ms
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_12
+  name: reply_latency.noise_pct
+  kind: metric
+  semantic_type: null
+  value: 14.285714285714285
+  unit: '%'
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_13
+  name: reply_latency.repetitions
+  kind: metric
+  semantic_type: null
+  value: 3
+  unit: null
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_14
+  name: reply_latency.timed_out
+  kind: metric
+  semantic_type: null
+  value: false
+  unit: null
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_15
+  name: reply_latency.samples_ms
+  kind: artifact
+  semantic_type: null
+  value: artifact_1
+  unit: null
+  direction: null
+  role: null
+  span_id: span_1
+  source: task_observation
+  tags:
+    profile: baseline
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_16
+  name: tokens.input
+  kind: metric
+  semantic_type: llm.tokens.input
+  value: 580
+  unit: tokens
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_17
+  name: tokens.output
+  kind: metric
+  semantic_type: llm.tokens.output
+  value: 140
+  unit: tokens
+  direction: minimize
+  role: diagnostic
+  span_id: span_1
+  source: task_observation
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_18
+  name: reply_preview
+  kind: artifact
+  semantic_type: null
+  value: artifact_2
+  unit: null
+  direction: null
+  role: null
+  span_id: span_1
+  source: task_observation
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_19
+  name: success
+  kind: metric
+  semantic_type: result.success
+  value: true
+  unit: null
+  direction: null
+  role: objective
+  span_id: span_1
+  source: task_observation
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_20
+  name: success
+  kind: metric
+  semantic_type: result.success
+  value: true
+  unit: null
+  direction: maximize
+  role: objective
+  span_id: null
+  source: score
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_21
+  name: resolution_correctness
+  kind: metric
+  semantic_type: quality.correctness
+  value: 1.0
+  unit: null
+  direction: maximize
+  role: objective
+  span_id: null
+  source: score
+  tags: {}
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_22
+  name: response_quality
+  kind: metric
+  semantic_type: quality.score
+  value: 0.5
+  unit: null
+  direction: maximize
+  role: objective
+  span_id: null
+  source: score
+  tags:
+    matched_phrases: 1
+    required_phrases: 2
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: obs_23
+  name: cost
+  kind: metric
+  semantic_type: money.cost
+  value: 0.00086
+  unit: usd
+  direction: minimize
+  role: constraint
+  span_id: null
+  source: derived
+  tags:
+    provider: demo
+    model: demo-mini
+    pricing_path: /Users/mert/Desktop/autobench/workspace/autobench/examples/mid/pricing/demo-models.yaml
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: run_0003_0001_password_reset_case__reply_v1_policy_1
+  name: response_quality_floor
+  kind: event
+  semantic_type: policy.result
+  value: false
+  unit: null
+  direction: null
+  role: constraint
+  span_id: null
+  source: derived
+  tags:
+    metric: quality.score
+    actual: 0.5
+    reason: requirement_failed
+  case_id: password_reset_case
+  variant_id: reply_v1
+- id: run_0003_0001_password_reset_case__reply_v1_policy_2
+  name: cost_cap
+  kind: event
+  semantic_type: policy.result
+  value: true
+  unit: null
+  direction: null
+  role: constraint
+  span_id: null
+  source: derived
+  tags:
+    metric: money.cost
+    actual: 0.00086
+    reason: null
+  case_id: password_reset_case
+  variant_id: reply_v1
+scores:
+- name: success
+  semantic_type: result.success
+  value: true
+  unit: null
+  direction: maximize
+  role: objective
+  optional: false
+  actual_value: true
+  expected_value: null
+  error: null
+  tags: {}
+- name: resolution_correctness
+  semantic_type: quality.correctness
+  value: 1.0
+  unit: null
+  direction: maximize
+  role: objective
+  optional: false
+  actual_value: password_reset
+  expected_value: password_reset
+  error: null
+  tags: {}
+- name: response_quality
+  semantic_type: quality.score
+  value: 0.5
+  unit: null
+  direction: maximize
+  role: objective
+  optional: false
+  actual_value: null
+  expected_value: null
+  error: null
+  tags:
+    matched_phrases: 1
+    required_phrases: 2
+spans:
+- id: span_1
+  name: compose_reply
+  parent_id: null
+  started_at: '2026-05-01T16:51:19.330794Z'
+  ended_at: '2026-05-01T16:51:19.330893Z'
+  duration_seconds: 9.549991227686405e-05
+  observations:
+  - obs_4
+  - obs_5
+  - obs_6
+  - obs_7
+  - obs_8
+  - obs_9
+  - obs_10
+  - obs_11
+  - obs_12
+  - obs_13
+  - obs_14
+  - obs_15
+  - obs_16
+  - obs_17
+  - obs_18
+  - obs_19
+  artifacts:
+  - artifact_1
+  - artifact_2
+  error: null
+  tags: {}
+artifacts:
+- id: artifact_1
+  name: reply_latency.samples_ms
+  media_type: application/x.autobench.samples+yaml
+  value: artifacts/run_0003_0001_password_reset_case__reply_v1/artifact_1.yaml
+  span_id: span_1
+  tags:
+    profile: baseline
+- id: artifact_2
+  name: reply_preview
+  media_type: null
+  value: artifacts/run_0003_0001_password_reset_case__reply_v1/artifact_2.yaml
+  span_id: span_1
+  tags: {}
+factors:
+- name: prompt_version
+  value: reply-v1
+  semantic_type: prompt.version
+  optimize: false
+- name: provider
+  value: demo
+  semantic_type: llm.provider
+  optimize: false
+- name: model
+  value: demo-mini
+  semantic_type: llm.model.name
+  optimize: false
+asset_versions: []
+parent_run_id: null
+errors: []
+error: null

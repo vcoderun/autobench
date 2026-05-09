@@ -1,0 +1,650 @@
+record_version: 3
+experiment_id: exp_basic_ticket_routing_20260501T170128185127Z
+benchmark_id: basic-ticket-routing
+plan:
+  benchmark_id: basic-ticket-routing
+  dataset_id: support-routing-cases
+  dataset_version: null
+  dataset_hash: d2d48b8796cbaaa5368679c1a62092ca906de6f9f3d0cd4bbfad37c9b6aca67d
+  case_ids:
+  - refund_request
+  - shipping_status
+  - password_reset
+  - account_cancellation
+  case_count: 4
+  variant_count: 2
+  planned_run_count: 8
+  warnings: []
+environment:
+  python_version: 3.11.13
+  platform: macOS-26.1-arm64-arm-64bit
+  cwd: /Users/mert/Desktop/autobench/workspace/autobench
+semantic_registry:
+  version: 1
+  types:
+    llm.tokens.input:
+      id: llm.tokens.input
+      parent: null
+      unit: tokens
+      value_shape: integer
+      aliases: []
+      deprecated: false
+      tags: {}
+    llm.tokens.output:
+      id: llm.tokens.output
+      parent: null
+      unit: tokens
+      value_shape: integer
+      aliases: []
+      deprecated: false
+      tags: {}
+    llm.tokens.total:
+      id: llm.tokens.total
+      parent: null
+      unit: tokens
+      value_shape: integer
+      aliases: []
+      deprecated: false
+      tags: {}
+    llm.model.name:
+      id: llm.model.name
+      parent: null
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    llm.provider:
+      id: llm.provider
+      parent: null
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    llm.temperature:
+      id: llm.temperature
+      parent: null
+      unit: null
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    llm.optimizer.model:
+      id: llm.optimizer.model
+      parent: llm.model.name
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    llm.student.model:
+      id: llm.student.model
+      parent: llm.model.name
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    money.cost:
+      id: money.cost
+      parent: null
+      unit: usd
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    optimization.cost:
+      id: optimization.cost
+      parent: money.cost
+      unit: usd
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    serving.cost:
+      id: serving.cost
+      parent: money.cost
+      unit: usd
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    lifetime.cost:
+      id: lifetime.cost
+      parent: money.cost
+      unit: usd
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    time.latency:
+      id: time.latency
+      parent: null
+      unit: s
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    result.success:
+      id: result.success
+      parent: null
+      unit: null
+      value_shape: boolean
+      aliases: []
+      deprecated: false
+      tags: {}
+    quality.score:
+      id: quality.score
+      parent: null
+      unit: null
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    quality.correctness:
+      id: quality.correctness
+      parent: quality.score
+      unit: null
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    coverage.ratio:
+      id: coverage.ratio
+      parent: null
+      unit: null
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    agent.version:
+      id: agent.version
+      parent: null
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    agent.orchestration.quality:
+      id: agent.orchestration.quality
+      parent: quality.score
+      unit: null
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    agent.tool.name:
+      id: agent.tool.name
+      parent: null
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    agent.tool.version:
+      id: agent.tool.version
+      parent: null
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    agent.tool_call.quality:
+      id: agent.tool_call.quality
+      parent: quality.score
+      unit: null
+      value_shape: number
+      aliases: []
+      deprecated: false
+      tags: {}
+    agent.serving.volume:
+      id: agent.serving.volume
+      parent: null
+      unit: null
+      value_shape: integer
+      aliases: []
+      deprecated: false
+      tags: {}
+    prompt.version:
+      id: prompt.version
+      parent: null
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    dataset.version:
+      id: dataset.version
+      parent: null
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags: {}
+    ai.codegen.spec_model:
+      id: ai.codegen.spec_model
+      parent: llm.model.name
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags:
+        role: spec_generator
+    ai.codegen.exploration_model:
+      id: ai.codegen.exploration_model
+      parent: llm.model.name
+      unit: null
+      value_shape: string
+      aliases: []
+      deprecated: false
+      tags:
+        role: explorer
+  aliases:
+    quality.answer: quality.score
+    agent.tool_call.correctness: agent.tool_call.quality
+report_spec_data:
+  leaderboard:
+    metrics:
+    - name: pass_rate
+      semantic_type: result.success
+      fn: ratio_true
+    - name: avg_correctness
+      semantic_type: quality.correctness
+      fn: mean
+    - name: avg_confidence
+      semantic_type: quality.score
+      fn: mean
+  case_matrix:
+    semantic_type: quality.correctness
+  comparisons:
+  - baseline: route_v1
+    candidate: route_v2
+    metrics:
+    - name: pass_rate
+      semantic_type: result.success
+      fn: ratio_true
+    - name: avg_correctness
+      semantic_type: quality.correctness
+      fn: mean
+  distributions: []
+  visuals: []
+spec_snapshot:
+  benchmark:
+    id: basic-ticket-routing
+    description: Deterministic support routing benchmark with semantic scoring.
+  dataset:
+    id: support-routing-cases
+    source: file://datasets/cases.yaml
+    version: null
+    metadata: {}
+    cases:
+    - id: refund_request
+      input:
+        subject: Duplicate charge on my card
+        body: I need a refund for the second billing charge from yesterday.
+      expected:
+        queue: billing
+      metadata: {}
+      tags: []
+      attachments: []
+    - id: shipping_status
+      input:
+        subject: Where is my package?
+        body: The tracking page has not updated since Monday.
+      expected:
+        queue: shipping
+      metadata: {}
+      tags: []
+      attachments: []
+    - id: password_reset
+      input:
+        subject: I cannot log in
+        body: Please help me reset my password and regain account access.
+      expected:
+        queue: support
+      metadata: {}
+      tags: []
+      attachments: []
+    - id: account_cancellation
+      input:
+        subject: I want to cancel my subscription
+        body: I am planning to leave and close account access this week.
+      expected:
+        queue: retention
+      metadata: {}
+      tags: []
+      attachments: []
+    case_defaults:
+      input: null
+      expected: null
+      metadata: {}
+      tags: []
+      attachments: []
+  task:
+    kind: python
+    target: examples.basic.basic_autobench:run_ticket_case
+  variants:
+  - id: route_v1
+    label: baseline keyword router
+    factors:
+    - name: prompt_version
+      value: route-v1
+      semantic_type: prompt.version
+      optimize: false
+    - name: routing_profile
+      value: baseline
+      semantic_type: null
+      optimize: false
+  - id: route_v2
+    label: improved keyword router
+    factors:
+    - name: prompt_version
+      value: route-v2
+      semantic_type: prompt.version
+      optimize: false
+    - name: routing_profile
+      value: improved
+      semantic_type: null
+      optimize: false
+  scoring:
+  - name: success
+    semantic_type: result.success
+    unit: null
+    direction: maximize
+    role: objective
+    optional: false
+    kind: pass_fail
+    path: output.matched
+  - name: routing_correctness
+    semantic_type: quality.correctness
+    unit: null
+    direction: maximize
+    role: objective
+    optional: false
+    kind: exact
+    actual: output.queue
+    expected: case.expected.queue
+  - name: routing_confidence
+    semantic_type: quality.score
+    unit: null
+    direction: maximize
+    role: diagnostic
+    optional: false
+    kind: output
+    path: output.confidence
+  derive: []
+  post_derive: []
+  policies: []
+  reports:
+    leaderboard:
+      metrics:
+      - name: pass_rate
+        semantic_type: result.success
+        fn: ratio_true
+      - name: avg_correctness
+        semantic_type: quality.correctness
+        fn: mean
+      - name: avg_confidence
+        semantic_type: quality.score
+        fn: mean
+    case_matrix:
+      semantic_type: quality.correctness
+    comparisons:
+    - baseline: route_v1
+      candidate: route_v2
+      metrics:
+      - name: pass_rate
+        semantic_type: result.success
+        fn: ratio_true
+      - name: avg_correctness
+        semantic_type: quality.correctness
+        fn: mean
+    distributions: []
+    visuals: []
+  semantic_registry:
+    version: 1
+    types:
+      llm.tokens.input:
+        id: llm.tokens.input
+        parent: null
+        unit: tokens
+        value_shape: integer
+        aliases: []
+        deprecated: false
+        tags: {}
+      llm.tokens.output:
+        id: llm.tokens.output
+        parent: null
+        unit: tokens
+        value_shape: integer
+        aliases: []
+        deprecated: false
+        tags: {}
+      llm.tokens.total:
+        id: llm.tokens.total
+        parent: null
+        unit: tokens
+        value_shape: integer
+        aliases: []
+        deprecated: false
+        tags: {}
+      llm.model.name:
+        id: llm.model.name
+        parent: null
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      llm.provider:
+        id: llm.provider
+        parent: null
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      llm.temperature:
+        id: llm.temperature
+        parent: null
+        unit: null
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      llm.optimizer.model:
+        id: llm.optimizer.model
+        parent: llm.model.name
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      llm.student.model:
+        id: llm.student.model
+        parent: llm.model.name
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      money.cost:
+        id: money.cost
+        parent: null
+        unit: usd
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      optimization.cost:
+        id: optimization.cost
+        parent: money.cost
+        unit: usd
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      serving.cost:
+        id: serving.cost
+        parent: money.cost
+        unit: usd
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      lifetime.cost:
+        id: lifetime.cost
+        parent: money.cost
+        unit: usd
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      time.latency:
+        id: time.latency
+        parent: null
+        unit: s
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      result.success:
+        id: result.success
+        parent: null
+        unit: null
+        value_shape: boolean
+        aliases: []
+        deprecated: false
+        tags: {}
+      quality.score:
+        id: quality.score
+        parent: null
+        unit: null
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      quality.correctness:
+        id: quality.correctness
+        parent: quality.score
+        unit: null
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      coverage.ratio:
+        id: coverage.ratio
+        parent: null
+        unit: null
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      agent.version:
+        id: agent.version
+        parent: null
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      agent.orchestration.quality:
+        id: agent.orchestration.quality
+        parent: quality.score
+        unit: null
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      agent.tool.name:
+        id: agent.tool.name
+        parent: null
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      agent.tool.version:
+        id: agent.tool.version
+        parent: null
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      agent.tool_call.quality:
+        id: agent.tool_call.quality
+        parent: quality.score
+        unit: null
+        value_shape: number
+        aliases: []
+        deprecated: false
+        tags: {}
+      agent.serving.volume:
+        id: agent.serving.volume
+        parent: null
+        unit: null
+        value_shape: integer
+        aliases: []
+        deprecated: false
+        tags: {}
+      prompt.version:
+        id: prompt.version
+        parent: null
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      dataset.version:
+        id: dataset.version
+        parent: null
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags: {}
+      ai.codegen.spec_model:
+        id: ai.codegen.spec_model
+        parent: llm.model.name
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags:
+          role: spec_generator
+      ai.codegen.exploration_model:
+        id: ai.codegen.exploration_model
+        parent: llm.model.name
+        unit: null
+        value_shape: string
+        aliases: []
+        deprecated: false
+        tags:
+          role: explorer
+    aliases:
+      quality.answer: quality.score
+      agent.tool_call.correctness: agent.tool_call.quality
+spec_hash: 9319d7474810cce9c6c1de2c3f2e4365deb45a68fd899008af02f11b34f5f637
+file_hashes:
+- path: /Users/mert/Desktop/autobench/workspace/autobench/examples/basic/autobench.yaml
+  sha256: ecf89b39866cd708bdd23ef5d67eb737a177952fb7fa8de1167cd621a1b7919c
+- path: /Users/mert/Desktop/autobench/workspace/autobench/examples/basic/datasets/cases.yaml
+  sha256: 9c5e56f3e503d81e5c6309c0a4ab16715a2325478afa0657446242a94ebac287
+- path: /Users/mert/Desktop/autobench/workspace/autobench/examples/basic/basic_autobench.py
+  sha256: 5be6156dbc877be9d69a913be0177555f4b31573fbb2ad561fa4d8c15cc20faf
+run_paths:
+- cases/refund_request/route_v1/run.yaml
+- cases/refund_request/route_v2/run.yaml
+- cases/shipping_status/route_v1/run.yaml
+- cases/shipping_status/route_v2/run.yaml
+- cases/password_reset/route_v1/run.yaml
+- cases/password_reset/route_v2/run.yaml
+- cases/account_cancellation/route_v1/run.yaml
+- cases/account_cancellation/route_v2/run.yaml
+run_count: 8
+passed_count: 7
+failed_count: 1
+errored_count: 0
+skipped_count: 0

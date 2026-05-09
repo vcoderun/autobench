@@ -1,0 +1,17 @@
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-toml
+
+  - repo: local
+    hooks:
+      - id: make-prod
+        name: make prod
+        entry: make prod
+        language: system
+        pass_filenames: false

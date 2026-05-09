@@ -1,0 +1,36 @@
+site_name: Autobench
+site_description: YAML-first benchmark and evidence framework
+repo_url: https://github.com/vcoderun/autobench
+repo_name: vcoderun/autobench
+theme:
+  name: readthedocs
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+nav:
+  - Overview: index.md
+  - Getting Started: getting-started.md
+  - Concepts: concepts.md
+  - YAML Spec: yaml-spec.md
+  - Python API: python-api.md
+  - Scoring And Derivation: scoring-and-derivation.md
+  - Recording And Reporting: recording-and-reporting.md
+  - CLI: cli.md
+  - API Reference: api-reference.md
+  - Release Notes:
+      - 0.1.0: release-notes/0.1.0.md

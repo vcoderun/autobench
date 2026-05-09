@@ -1,0 +1,6 @@
+id: artifact_1
+name: routing_trace
+media_type: null
+span_id: span_1
+tags: {}
+payload_path: artifacts/run_0002_0002_shipping_status__route_v2/artifact_1.yaml

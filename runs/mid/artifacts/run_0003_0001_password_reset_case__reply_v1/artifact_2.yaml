@@ -1,0 +1,5 @@
+profile: baseline
+required_phrases:
+- password
+- account access
+response: I can help reset your password.

@@ -1,0 +1,178 @@
+record_version: 3
+run_id: run_0004_0001_eval_rpn__model_pair_1
+experiment_id: exp_codemode_model_comparison_20260501T170741939880Z
+benchmark_id: codemode-model-comparison
+case_id: eval_rpn
+variant_id: model_pair_1
+status: failed
+evaluation_status: not_evaluated
+task_status: failed
+case:
+  id: eval_rpn
+  input:
+    function_name: eval_rpn
+    description: 'Evaluate a Reverse Polish Notation expression. Supports +, -, *,
+      and /. Division truncates toward zero and malformed expressions raise errors.
+
+      '
+    code: "def eval_rpn(tokens: list[str]) -> int:\n    if not tokens:\n        raise\
+      \ ValueError(\"Empty expression\")\n    stack: list[int] = []\n    operators\
+      \ = {\"+\", \"-\", \"*\", \"/\"}\n    for token in tokens:\n        if token\
+      \ in operators:\n            if len(stack) < 2:\n                raise ValueError(f\"\
+      Not enough operands for {token!r}\")\n            b, a = stack.pop(), stack.pop()\n\
+      \            if token == \"+\":\n                stack.append(a + b)\n     \
+      \       elif token == \"-\":\n                stack.append(a - b)\n        \
+      \    elif token == \"*\":\n                stack.append(a * b)\n           \
+      \ else:\n                if b == 0:\n                    raise ZeroDivisionError(\"\
+      Division by zero\")\n                stack.append(int(a / b))\n        else:\n\
+      \            stack.append(int(token))\n    if len(stack) != 1:\n        raise\
+      \ ValueError(f\"Invalid expression: {len(stack)} values remaining\")\n    return\
+      \ stack[0]\n"
+  expected:
+    all_passed: true
+  metadata:
+    difficulty: advanced
+    complexity: 1.3
+  tags:
+  - codemode
+  - advanced
+  attachments: []
+task_output: null
+observations:
+- id: obs_1
+  name: spec_model
+  kind: factor
+  semantic_type: ai.codegen.spec_model
+  value: openrouter:google/gemini-3-flash-preview
+  unit: null
+  direction: null
+  role: null
+  span_id: null
+  source: variant
+  tags: {}
+  case_id: eval_rpn
+  variant_id: model_pair_1
+- id: obs_2
+  name: exploration_model
+  kind: factor
+  semantic_type: ai.codegen.exploration_model
+  value: openrouter:google/gemini-3-flash-preview
+  unit: null
+  direction: null
+  role: null
+  span_id: null
+  source: variant
+  tags: {}
+  case_id: eval_rpn
+  variant_id: model_pair_1
+- id: obs_3
+  name: model_slug
+  kind: factor
+  semantic_type: variant.slug
+  value: gemini_3_flash
+  unit: null
+  direction: null
+  role: null
+  span_id: null
+  source: variant
+  tags: {}
+  case_id: eval_rpn
+  variant_id: model_pair_1
+scores:
+- name: all_passed
+  semantic_type: result.success
+  value: null
+  unit: null
+  direction: maximize
+  role: objective
+  optional: false
+  actual_value: null
+  expected_value: null
+  error:
+    error_type: KeyError
+    message: '"Path segment ''success'' not found on object ''NoneType''."'
+    traceback: "Traceback (most recent call last):\n  File \"/Users/mert/Desktop/autobench/workspace/autobench/src/autobench/scoring.py\"\
+      , line 142, in evaluate_scoring_specs\n    record = await _evaluate_scoring_spec(spec,\
+      \ call=call, subjects=subjects)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\
+      \  File \"/Users/mert/Desktop/autobench/workspace/autobench/src/autobench/scoring.py\"\
+      , line 192, in _evaluate_scoring_spec\n    actual_value = resolve_dotted_path(subjects,\
+      \ spec.path)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\
+      \  File \"/Users/mert/Desktop/autobench/workspace/autobench/src/autobench/scoring.py\"\
+      , line 231, in resolve_dotted_path\n    raise KeyError(\nKeyError: \"Path segment\
+      \ 'success' not found on object 'NoneType'.\"\n"
+    span_id: null
+  tags: {}
+- name: coverage
+  semantic_type: coverage.ratio
+  value: null
+  unit: null
+  direction: maximize
+  role: objective
+  optional: false
+  actual_value: null
+  expected_value: null
+  error:
+    error_type: KeyError
+    message: '"Path segment ''coverage'' not found on object ''NoneType''."'
+    traceback: "Traceback (most recent call last):\n  File \"/Users/mert/Desktop/autobench/workspace/autobench/src/autobench/scoring.py\"\
+      , line 142, in evaluate_scoring_specs\n    record = await _evaluate_scoring_spec(spec,\
+      \ call=call, subjects=subjects)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\
+      \  File \"/Users/mert/Desktop/autobench/workspace/autobench/src/autobench/scoring.py\"\
+      , line 188, in _evaluate_scoring_spec\n    value = resolve_dotted_path(subjects,\
+      \ spec.path)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"\
+      /Users/mert/Desktop/autobench/workspace/autobench/src/autobench/scoring.py\"\
+      , line 231, in resolve_dotted_path\n    raise KeyError(\nKeyError: \"Path segment\
+      \ 'coverage' not found on object 'NoneType'.\"\n"
+    span_id: null
+  tags: {}
+spans: []
+artifacts: []
+factors:
+- name: spec_model
+  value: openrouter:google/gemini-3-flash-preview
+  semantic_type: ai.codegen.spec_model
+  optimize: true
+- name: exploration_model
+  value: openrouter:google/gemini-3-flash-preview
+  semantic_type: ai.codegen.exploration_model
+  optimize: true
+- name: model_slug
+  value: gemini_3_flash
+  semantic_type: variant.slug
+  optimize: false
+asset_versions: []
+parent_run_id: null
+errors:
+- error_type: CodeModeDependencyError
+  message: The CodeMode example requires optional dependencies. Install `vowel` and
+    any model-provider packages documented in `examples/codemode/README.md`.
+  traceback: "Traceback (most recent call last):\n  File \"/Users/mert/Desktop/autobench/workspace/autobench/examples/codemode/codemode_autobench.py\"\
+    , line 150, in _load_codemode_runtime\n    from vowel.codemode import CodeModeGenerator\n\
+    ModuleNotFoundError: No module named 'vowel'\n\nThe above exception was the direct\
+    \ cause of the following exception:\n\nTraceback (most recent call last):\n  File\
+    \ \"/Users/mert/Desktop/autobench/workspace/autobench/src/autobench/tasks.py\"\
+    , line 83, in run_python_task\n    output = await output\n             ^^^^^^^^^^^^\n\
+    \  File \"/Users/mert/Desktop/autobench/workspace/autobench/examples/codemode/codemode_autobench.py\"\
+    , line 58, in run_codemode_case\n    runtime = _load_codemode_runtime()\n    \
+    \          ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/mert/Desktop/autobench/workspace/autobench/examples/codemode/codemode_autobench.py\"\
+    , line 153, in _load_codemode_runtime\n    raise CodeModeDependencyError(\nexamples.codemode.codemode_autobench.CodeModeDependencyError:\
+    \ The CodeMode example requires optional dependencies. Install `vowel` and any\
+    \ model-provider packages documented in `examples/codemode/README.md`.\n"
+  span_id: null
+error:
+  error_type: CodeModeDependencyError
+  message: The CodeMode example requires optional dependencies. Install `vowel` and
+    any model-provider packages documented in `examples/codemode/README.md`.
+  traceback: "Traceback (most recent call last):\n  File \"/Users/mert/Desktop/autobench/workspace/autobench/examples/codemode/codemode_autobench.py\"\
+    , line 150, in _load_codemode_runtime\n    from vowel.codemode import CodeModeGenerator\n\
+    ModuleNotFoundError: No module named 'vowel'\n\nThe above exception was the direct\
+    \ cause of the following exception:\n\nTraceback (most recent call last):\n  File\
+    \ \"/Users/mert/Desktop/autobench/workspace/autobench/src/autobench/tasks.py\"\
+    , line 83, in run_python_task\n    output = await output\n             ^^^^^^^^^^^^\n\
+    \  File \"/Users/mert/Desktop/autobench/workspace/autobench/examples/codemode/codemode_autobench.py\"\
+    , line 58, in run_codemode_case\n    runtime = _load_codemode_runtime()\n    \
+    \          ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/mert/Desktop/autobench/workspace/autobench/examples/codemode/codemode_autobench.py\"\
+    , line 153, in _load_codemode_runtime\n    raise CodeModeDependencyError(\nexamples.codemode.codemode_autobench.CodeModeDependencyError:\
+    \ The CodeMode example requires optional dependencies. Install `vowel` and any\
+    \ model-provider packages documented in `examples/codemode/README.md`.\n"
+  span_id: null
