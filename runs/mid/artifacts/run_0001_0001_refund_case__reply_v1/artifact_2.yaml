@@ -1,5 +1,0 @@
-profile: baseline
-required_phrases:
-- refund
-- 5 business days
-response: I can process the refund today.

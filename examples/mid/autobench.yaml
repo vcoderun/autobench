@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=../../schemas/0.1.0/benchmark_schema.json
+benchmark:
+  reply-quality-and-cost:
+    description: Evaluate response quality, token usage, latency, cost, and policy constraints.
+    dataset:
+      source: file://datasets/cases.yaml
+      version: "2026-08-02"
+    run:
+      python: reply_benchmark:run
+    variants:
+      baseline:
+        label: Baseline reply model
+        factors:
+          model:
+            value: demo-small
+            semantic: llm.model.name
+            optimize: true
+          provider:
+            value: local
+            semantic: llm.provider
+          response_style: terse
+      candidate:
+        label: Helpful reply model
+        factors:
+          model:
+            value: demo-large
+            semantic: llm.model.name
+            optimize: true
+          provider:
+            value: local
+            semantic: llm.provider
+          response_style: helpful
+    score:
+      acceptable_reply:
+        pass: output.acceptable
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+      success:
+        pass: output.success
+        semantic: result.success
+        role: constraint
+    derive:
+      - kind: token_cost
+        pricing: file://pricing/demo-models.yaml
+        output:
+          name: request_cost
+          semantic_type: money.cost
+          unit: usd
+          direction: minimize
+          role: constraint
+    policies:
+      - name: request-must-succeed
+        metric: result.success
+        must_equal: true
+      - name: cost-cap
+        metric: money.cost
+        must_less_equal: 0.001
+    report:
+      leaderboard:
+        show:
+          acceptance:
+            metric: quality.correctness
+            aggregate: ratio_true
+          success:
+            metric: result.success
+            aggregate: ratio_true
+          total_cost:
+            metric: money.cost
+            aggregate: sum
+          average_latency:
+            metric: time.latency
+            aggregate: mean
+      matrix:
+        metric: quality.correctness
+      compare:
+        baseline -> candidate:
+          show:
+            acceptance:
+              metric: quality.correctness
+              aggregate: ratio_true
+            total_cost:
+              metric: money.cost
+              aggregate: sum
+      distributions:
+        - name: request_cost
+          semantic_type: money.cost
+          summaries: [min, median, p95, max]

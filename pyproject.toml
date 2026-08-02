@@ -16,7 +16,6 @@ classifiers = [
 keywords = ["benchmarks", "evals", "agents", "experiments", "yaml"]
 dependencies = [
     "click>=8.1.8",
-    "matplotlib>=3.9",
     "pydantic>=2.7",
     "PyYAML>=6.0.2",
     "rich>=13.9.4",
@@ -51,6 +50,23 @@ path = "src/autobench/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/autobench"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.autobench",
+    "/AGENTS.md",
+    "/autobench-opus-export-final",
+    "/COVERAGE",
+    "/docs/*-plan.md",
+    "/docs/plans",
+    "/docs/plans.md",
+    "/mocks",
+    "/plans",
+    "/references",
+    "/runs",
+    "/site",
+    "/uv.lock",
+]
 
 [tool.ruff]
 line-length = 100

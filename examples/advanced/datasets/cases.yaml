@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../../schemas/0.1.0/dataset_schema.json
+dataset:
+  search-workloads:
+    version: "2026-08-02"
+    cases:
+      - id: small-hit
+        input:
+          size: 100
+          needle: 99
+        expected:
+          found: true
+      - id: medium-miss
+        input:
+          size: 1000
+          needle: 1001
+        expected:
+          found: false
+      - id: large-hit
+        input:
+          size: 5000
+          needle: 4999
+        expected:
+          found: true

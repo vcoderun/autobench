@@ -1,7 +1,0 @@
-id: artifact_1
-name: reply_latency.samples_ms
-media_type: application/x.autobench.samples+yaml
-span_id: span_1
-tags:
-  profile: baseline
-payload_path: artifacts/run_0002_0001_shipping_case__reply_v1/artifact_1.yaml

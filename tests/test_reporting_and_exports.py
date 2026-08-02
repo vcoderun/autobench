@@ -27,8 +27,6 @@ from autobench.data.variants import FactorValue
 from autobench.io import load_yaml
 from autobench.reports.exporting import (
     export_markdown_report,
-    export_png_report,
-    export_png_report_set,
     export_runs_csv,
     export_summary_yaml,
 )
@@ -247,18 +245,6 @@ async def test_report_spec_controls_leaderboard_and_case_matrix(
                     "summaries": ["min", "median", "max"],
                 }
             ],
-            "visuals": [
-                {"kind": "leaderboard", "render_as": "bar", "metric": "max_cost"},
-                {"kind": "case_matrix", "render_as": "heatmap"},
-                {
-                    "kind": "comparison",
-                    "baseline": "baseline",
-                    "candidate": "candidate",
-                    "render_as": "bar",
-                    "metric": "coverage_delta",
-                },
-                {"kind": "distribution", "name": "cost_distribution", "render_as": "boxplot"},
-            ],
         }
     )
 
@@ -290,49 +276,6 @@ async def test_report_spec_controls_leaderboard_and_case_matrix(
     assert "## Comparisons" in markdown
     assert "## Distributions" in markdown
     assert "### cost_distribution (`money.cost`)" in markdown
-    assert report_spec.visuals[0].kind == "leaderboard"
-    assert report_spec.visuals[2].kind == "comparison"
-
-
-async def test_png_export_writes_matplotlib_report_image_and_honors_visual_specs(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _write_module(tmp_path)
-    monkeypatch.syspath_prepend(str(tmp_path))
-    result = await run_benchmark_spec(_reporting_spec(), experiment_id="exp_reporting")
-    png_path = tmp_path / "report.png"
-    report_spec = ReportSpec.model_validate(
-        {
-            "comparisons": [{"baseline": "baseline", "candidate": "candidate"}],
-            "distributions": [
-                {
-                    "name": "cost_distribution",
-                    "semantic_type": Semantic.MONEY_COST,
-                    "summaries": ["min", "median", "max"],
-                }
-            ],
-            "visuals": [
-                {"kind": "leaderboard", "render_as": "bar", "metric": "avg_coverage"},
-                {"kind": "case_matrix", "render_as": "heatmap"},
-                {
-                    "kind": "comparison",
-                    "baseline": "baseline",
-                    "candidate": "candidate",
-                    "render_as": "bar",
-                },
-                {"kind": "distribution", "name": "cost_distribution", "render_as": "boxplot"},
-            ],
-        }
-    )
-
-    exported = export_png_report(result, png_path, report_spec=report_spec)
-    exported_set = export_png_report_set(result, tmp_path / "figures", report_spec=report_spec)
-
-    assert exported == str(png_path)
-    assert png_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-    assert len(exported_set) == 4
-    assert all(Path(path).read_bytes().startswith(b"\x89PNG\r\n\x1a\n") for path in exported_set)
 
 
 async def test_rich_renderers_cover_no_factor_deltas_and_runs_preview(

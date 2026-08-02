@@ -1,5 +1,0 @@
-profile: baseline
-required_phrases:
-- delivery
-- tracking
-response: Your shipment is in transit.

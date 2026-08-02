@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../../schemas/0.1.0/benchmark_schema.json
+benchmark:
+  codemode-spec-generation:
+    description: Generate and replay Vowel evaluation specs for real Python functions.
+    dataset:
+      source: file://datasets/scenarios.yaml
+      version: "2026-08-02"
+    run:
+      python: codemode_benchmark:run
+    variants:
+      model_pair_1:
+        label: Gemini Flash spec and exploration
+        factors:
+          spec_model:
+            value: openrouter:google/gemini-3-flash-preview
+            semantic: ai.codegen.spec_model
+            optimize: true
+          exploration_model:
+            value: openrouter:google/gemini-3-flash-preview
+            semantic: ai.codegen.exploration_model
+            optimize: true
+      model_pair_2:
+        label: Gemini Flash Lite spec and exploration
+        factors:
+          spec_model:
+            value: openrouter:google/gemini-3.1-flash-lite-preview
+            semantic: ai.codegen.spec_model
+            optimize: true
+          exploration_model:
+            value: openrouter:google/gemini-3.1-flash-lite-preview
+            semantic: ai.codegen.exploration_model
+            optimize: true
+    score:
+      coverage:
+        value: output.coverage
+        semantic: coverage.ratio
+        goal: maximize
+        role: objective
+      generated_spec_passed:
+        pass: output.success
+        semantic: result.success
+        role: constraint
+    report:
+      leaderboard:
+        show:
+          coverage:
+            metric: coverage.ratio
+            aggregate: mean
+          success:
+            metric: result.success
+            aggregate: ratio_true
+          latency:
+            metric: time.latency
+            aggregate: mean
+      matrix:
+        metric: coverage.ratio
+      compare:
+        model_pair_1 -> model_pair_2:
+          show:
+            coverage:
+              metric: coverage.ratio
+              aggregate: mean
+            success:
+              metric: result.success
+              aggregate: ratio_true

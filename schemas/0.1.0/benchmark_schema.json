@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Autobench 0.1.0 Benchmark DSL",
+  "type": "object",
+  "required": ["benchmark"],
+  "properties": {
+    "benchmark": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["run", "variants"],
+        "properties": {
+          "description": {"type": "string"},
+          "cases": {"oneOf": [{"type": "array"}, {"type": "object"}, {"type": "string"}]},
+          "dataset": {"type": "object"},
+          "run": {"oneOf": [{"type": "string"}, {"type": "object"}]},
+          "variants": {"type": "object"},
+          "score": {"type": "object"},
+          "derive": {"type": "array"},
+          "post_derive": {"type": "array"},
+          "policies": {"type": "array"},
+          "report": {"type": "object"},
+          "semantic_registry": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

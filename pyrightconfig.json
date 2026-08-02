@@ -1,7 +1,7 @@
 {
   "pythonVersion": "3.11",
   "typeCheckingMode": "standard",
-  "exclude": ["**/.*", "references/**", "mocks/**", "examples/**", "ornek.py"],
+  "exclude": ["**/.*", "references/**", "mocks/**", "ornek.py"],
   "extraPaths": ["src"],
   "reportAny": "none",
   "reportExplicitAny": "none",

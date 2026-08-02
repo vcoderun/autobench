@@ -31,6 +31,13 @@ benchmark:
           actual: output.queue
           expected: case.expected.queue
         semantic: quality.correctness
+      tool_arguments:
+        expected_action:
+          metric: arguments
+          observed_kind: tool
+        span:
+          kind: tool
+        semantic: agent.tool.argument.correctness
     report:
       leaderboard:
         show:
@@ -84,6 +91,8 @@ benchmark:
 - variant factors accept either mapping or list form.
 - YAML does not execute inline expressions.
 - importable code hooks such as Python scorers remain explicit dotted targets.
+- `score.<name>.span` can target component spans by kind, name, tag, path, or semantic type.
+- `expected_action` scores compare `case.expected.actions` or `case.expected.tool_calls` with observed spans.
 
 ## Safe Extensibility
 
@@ -147,8 +156,19 @@ metrics:
 
 spans:
   call_router:
+    kind: workflow
     started_at: "2026-05-07T12:00:00Z"
-    duration_ms: 12.4
+    duration: 0.0124
+    attributes:
+      component: router
+  lookup_user:
+    kind: tool
+    parent: call_router
+    input:
+      user_id: u1
+    output:
+      tier: gold
+    duration: 0.004
 
 artifacts:
   trace:
@@ -229,16 +249,18 @@ pricing:
         - google:gemini-3-flash-preview
         - openrouter/google/gemini-3-flash-preview
       input:
-        per_million_tokens: 0.3
+        unit: mtok
+        price: 0.3
         tiers:
-          - up_to_tokens: 1000000
-            per_million_tokens: 0.3
-          - above_tokens: 1000000
-            per_million_tokens: 0.6
+          - up_to: 1000000
+            price: 0.3
+          - price: 0.6
       output:
-        per_million_tokens: 2.5
+        unit: mtok
+        price: 2.5
       cache_read:
-        per_million_tokens: 0.03
+        unit: mtok
+        price: 0.03
 ```
 
 ## Exported Report YAML

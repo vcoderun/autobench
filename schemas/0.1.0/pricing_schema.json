@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Autobench 0.1.0 Pricing DSL",
+  "type": "object",
+  "required": ["pricing"],
+  "properties": {
+    "record": {"type": "object"},
+    "pricing": {
+      "type": "object",
+      "required": ["models"],
+      "properties": {
+        "provider": {"type": ["string", "null"]},
+        "source": {"type": ["string", "null"]},
+        "updated_at": {"type": ["string", "null"]},
+        "models": {"type": "object"},
+        "providers": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

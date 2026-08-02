@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev --frozen
+      - run: make prod
+      - run: make pre-commit
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - name: Verify distributions
+        run: |
+          python -m venv /tmp/autobench-wheel
+          /tmp/autobench-wheel/bin/pip install dist/*.whl
+          /tmp/autobench-wheel/bin/autobench --help
+          if tar -tzf dist/*.tar.gz | grep -E '/(runs|site|references|mocks)/'; then
+            echo "Source distribution contains excluded development artifacts."
+            exit 1
+          fi
+          if tar -tzf dist/*.tar.gz | grep -E '/(AGENTS\.md|COVERAGE)$'; then
+            echo "Source distribution contains internal project artifacts."
+            exit 1
+          fi

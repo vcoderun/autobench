@@ -28,7 +28,9 @@ class PydanticEvalsDatasetPayload(BaseModel):
     cases: list[PydanticEvalCasePayload]
 
 
-class PydanticEvalsRuntime:
+class PydanticEvalsBridge:
+    """Build Pydantic Evals-shaped payloads without owning evaluation execution."""
+
     def __init__(self, *, module_name: str = "pydantic_evals") -> None:
         self.module_name = module_name
 
@@ -60,7 +62,7 @@ class PydanticEvalsRuntime:
 
 __all__ = (
     "PydanticEvalCasePayload",
+    "PydanticEvalsBridge",
     "PydanticEvalsDatasetPayload",
-    "PydanticEvalsRuntime",
     "PydanticEvalsUnavailableError",
 )

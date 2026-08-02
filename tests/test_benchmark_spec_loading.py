@@ -17,7 +17,6 @@ from autobench import (
     DistributionReportSpec,
     FactorValue,
     LeaderboardReportSpec,
-    LeaderboardVisualSpec,
     MetricAggregation,
     ObservationRole,
     PairedBaselineDeriverSpec,
@@ -464,7 +463,6 @@ def test_benchmark_spec_yaml_view_covers_exporter_optional_branches() -> None:
             distributions=(
                 DistributionReportSpec(name="score_distribution", semantic_type="quality.score"),
             ),
-            visuals=(LeaderboardVisualSpec(render_as="bar", metric="avg_score"),),
         ),
         semantic_registry=custom_registry,
     )
@@ -535,12 +533,6 @@ def test_benchmark_spec_yaml_view_covers_exporter_optional_branches() -> None:
             {
                 "name": "score_distribution",
                 "semantic_type": "quality.score",
-            }
-        ],
-        "visuals": [
-            {
-                "render_as": "bar",
-                "metric": "avg_score",
             }
         ],
     }
@@ -861,7 +853,6 @@ def test_load_benchmark_spec_supports_authoring_dsl_alternate_shapes(
                 "            quick_metric: quality.score",
                 "        list_factor_variant -> empty_variant:",
                 "      distributions: []",
-                "      visuals: []",
             )
         ),
         encoding="utf-8",

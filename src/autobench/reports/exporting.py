@@ -14,7 +14,6 @@ from autobench.reports.reporting import (
     metric_value,
     render_markdown_report,
 )
-from autobench.reports.visualization import export_png_report, export_png_report_set
 from autobench.runtime.pipeline import ExperimentResult
 
 CSV_METRICS: tuple[tuple[str, str], ...] = (
@@ -140,8 +139,6 @@ def export_markdown_report(
 __all__ = (
     "CSV_METRICS",
     "export_markdown_report",
-    "export_png_report",
-    "export_png_report_set",
     "export_runs_csv",
     "export_summary_yaml",
     "report_to_yaml_view",

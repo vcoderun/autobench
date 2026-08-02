@@ -373,6 +373,42 @@ async def test_record_experiment_ignores_missing_source_files(
     assert record.file_hashes == ()
 
 
+async def test_record_experiment_can_write_portable_source_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_module(
+        tmp_path,
+        "portable_tasks.py",
+        """
+        def run(ctx, case):
+            return {"success": True}
+        """,
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    source_dir = tmp_path / "examples" / "portable"
+    source_dir.mkdir(parents=True)
+    source_file = source_dir / "autobench.yaml"
+    source_file.write_text("benchmark: portable\n", encoding="utf-8")
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="portable"),
+        dataset=DatasetSpec(cases=[Case(id="case_1")]),
+        task=TaskSpec(kind="python", target="portable_tasks:run"),
+        variants=[Variant(id="variant_1")],
+    )
+
+    result = await run_benchmark_spec(spec, experiment_id="exp_portable")
+    record = record_experiment(
+        result,
+        tmp_path / "recorded",
+        source_files=[source_file],
+        path_root=tmp_path,
+    )
+
+    assert record.file_hashes[0].path == "examples/portable/autobench.yaml"
+    assert not Path(record.environment.cwd).is_absolute()
+
+
 async def test_artifact_refs_are_relative_and_artifact_payloads_are_written(
     tmp_path: Path,
     monkeypatch,

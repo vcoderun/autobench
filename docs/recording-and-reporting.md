@@ -34,44 +34,7 @@ Built-in exports:
 - Markdown
 - YAML summary
 - CSV run table
-- PNG visual report
 
 These are generated from replayed evidence, not from re-running the benchmark.
 The CLI writes them to explicit file paths and renders Rich terminal previews
 instead of printing raw Markdown, YAML, or CSV to stdout.
-
-## Visual Reports
-
-`reports.visuals` lets a YAML spec describe Matplotlib-backed report images.
-
-```yaml
-reports:
-  visuals:
-    - kind: variant_config
-      render_as: table
-    - kind: status
-      render_as: pie
-    - kind: leaderboard
-      render_as: bar
-      metric: avg_quality
-    - kind: leaderboard
-      render_as: grouped_bar
-    - kind: case_matrix
-      render_as: heatmap
-    - kind: case_matrix
-      render_as: grouped_bar
-    - kind: comparison
-      baseline: baseline
-      candidate: candidate
-      render_as: delta_bar
-    - kind: distribution
-      name: latency_distribution
-      render_as: boxplot
-```
-
-Then export it with:
-
-```bash
-uv run autobench export runs/example --format png --path runs/example/report.png
-uv run autobench export runs/example --format png-set --path runs/example/figures
-```

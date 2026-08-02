@@ -42,6 +42,9 @@ env/
 .coverage
 htmlcov/
 .tox/
+coverage.json
+coverage.xml
+coverage.txt
 
 # Backup files
 *.backup
@@ -49,6 +52,21 @@ htmlcov/
 
 # Logs
 *.log
+
+# Internal project files
+/AGENTS.md
+/references/
+/plans/
+/docs/plans/
+/docs/plans.md
+/docs/*-plan.md
+/mocks/
+
+# Generated benchmark evidence
+/.autobench/
+/runs/
+/autobench-opus-export-final/
+/COVERAGE
 
 # Distribution / packaging
 .Python
@@ -61,8 +79,4 @@ tmp/
 # Cache & Config
 .pytest_cache/
 .ruff_cache
-uv.lock
 .logfire
-
-# Coverage
-coverage.(json|xml|txt)

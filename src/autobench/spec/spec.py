@@ -9,6 +9,7 @@ from autobench.data.variants import FactorValue, Variant
 from autobench.errors import SpecValidationError
 from autobench.evaluation.scoring import (
     ExactScorer,
+    ExpectedActionScorer,
     OutputMetricScorer,
     PassFailScorer,
     PythonScorer,
@@ -191,7 +192,11 @@ def _normalize_score(name: str, *, raw_score: Any) -> dict[str, Any]:
         raise SpecValidationError(f"benchmark.<id>.score.{name} must be a mapping")
 
     score = _normalize_score_common(name, raw_score)
-    actions = [key for key in ("pass", "value", "exact", "schema", "python") if key in raw_score]
+    actions = [
+        key
+        for key in ("pass", "value", "exact", "schema", "python", "expected_action")
+        if key in raw_score
+    ]
     if len(actions) != 1:
         raise SpecValidationError(
             f"benchmark.<id>.score.{name} must define exactly one scoring action"
@@ -218,6 +223,19 @@ def _normalize_score(name: str, *, raw_score: Any) -> dict[str, Any]:
             "path": raw_score.get("path", raw_score.get("from", "output")),
             "schema": schema,
         }
+    if action == "expected_action":
+        action_config = raw_score["expected_action"]
+        if isinstance(action_config, str):
+            return score | {"kind": "expected_action", "metric": action_config}
+        if not isinstance(action_config, dict):
+            raise SpecValidationError(
+                f"benchmark.<id>.score.{name}.expected_action must be a string or mapping"
+            )
+        return score | {
+            "kind": "expected_action",
+            "metric": action_config.get("metric", "selection"),
+            "observed_kind": action_config.get("observed_kind", "tool"),
+        }
     return score | {"kind": "python", "target": raw_score["python"]}
 
 
@@ -229,6 +247,7 @@ def _normalize_score_common(name: str, raw_score: dict[str, Any]) -> dict[str, A
         ("unit", "unit"),
         ("role", "role"),
         ("optional", "optional"),
+        ("span", "span"),
     ):
         if source in raw_score:
             score[target] = raw_score[source]
@@ -250,7 +269,7 @@ def _normalize_report_section(raw_report: Any) -> dict[str, Any]:
         report["case_matrix"] = _normalize_matrix_report(raw_report["matrix"])
     if "compare" in raw_report:
         report["comparisons"] = _normalize_compare_report(raw_report["compare"])
-    for key in ("distributions", "visuals"):
+    for key in ("distributions",):
         if key in raw_report:
             report[key] = raw_report[key]
     return report
@@ -398,6 +417,11 @@ def _score_to_yaml_view(score: ScoringSpec) -> dict[str, Any]:
         view["schema"] = score.schema_definition
         if score.path != "output":
             view["from"] = score.path
+    elif isinstance(score, ExpectedActionScorer):
+        view["expected_action"] = {
+            "metric": score.metric,
+            "observed_kind": score.observed_kind,
+        }
     else:
         assert isinstance(score, PythonScorer)
         view["python"] = score.target
@@ -410,6 +434,8 @@ def _score_to_yaml_view(score: ScoringSpec) -> dict[str, Any]:
         view["role"] = score.role.value
     if score.optional:
         view["optional"] = True
+    if score.span is not None:
+        view["span"] = _compact_model_dump(score.span)
     return view
 
 
@@ -438,8 +464,6 @@ def _report_to_yaml_view(report: ReportSpec) -> dict[str, Any]:
         view["distributions"] = [
             _compact_model_dump(distribution) for distribution in report.distributions
         ]
-    if report.visuals:
-        view["visuals"] = [_compact_model_dump(visual) for visual in report.visuals]
     return view
 
 

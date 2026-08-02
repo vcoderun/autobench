@@ -1,13 +1,20 @@
 from __future__ import annotations as _annotations
 
 import importlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from inspect import isawaitable
 from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from autobench.errors import ErrorRecord, TaskResolutionError
+from autobench.evaluation.actions import (
+    ActionMetric,
+    action_metric_score,
+    expected_actions_from_case,
+    observed_action_spans,
+)
+from autobench.evaluation.spans import SpanSelector, select_spans
 from autobench.metrics.observations import (
     Direction,
     Observation,
@@ -16,7 +23,7 @@ from autobench.metrics.observations import (
     ObservationSource,
 )
 from autobench.metrics.semantics import SemanticType
-from autobench.runtime.context import RunContext
+from autobench.runtime.context import RunContext, SpanRecord
 from autobench.runtime.tasks import TaskResult
 
 
@@ -30,6 +37,7 @@ class ScoreRecord(BaseModel):
     optional: bool = False
     actual_value: Any | None = None
     expected_value: Any | None = None
+    span_id: str | None = None
     error: ErrorRecord | None = None
     tags: dict[str, Any] = Field(default_factory=dict)
 
@@ -49,6 +57,7 @@ class ScoreRecord(BaseModel):
             unit=self.unit,
             direction=self.direction,
             role=self.role,
+            span_id=self.span_id,
             source=ObservationSource.SCORE,
             tags=self.tags,
             case_id=case_id,
@@ -63,6 +72,7 @@ class ScoringSpecBase(BaseModel):
     direction: Direction | None = None
     role: ObservationRole | None = None
     optional: bool = False
+    span: SpanSelector | None = None
 
 
 class OutputMetricScorer(ScoringSpecBase):
@@ -95,8 +105,19 @@ class PythonScorer(ScoringSpecBase):
     module_search_paths: tuple[str, ...] = Field(default_factory=tuple, exclude=True)
 
 
+class ExpectedActionScorer(ScoringSpecBase):
+    kind: Literal["expected_action"] = "expected_action"
+    metric: ActionMetric = "selection"
+    observed_kind: str = "tool"
+
+
 ScoringSpec: TypeAlias = Annotated[
-    OutputMetricScorer | PassFailScorer | ExactScorer | SchemaScorer | PythonScorer,
+    OutputMetricScorer
+    | PassFailScorer
+    | ExactScorer
+    | SchemaScorer
+    | PythonScorer
+    | ExpectedActionScorer,
     Field(discriminator="kind"),
 ]
 
@@ -105,6 +126,7 @@ ScoringSpec: TypeAlias = Annotated[
 class ScoringCall:
     ctx: RunContext
     task_result: TaskResult
+    selected_spans: list[SpanRecord] = field(default_factory=list)
 
     @property
     def output(self) -> Any:
@@ -122,6 +144,10 @@ class ScoringCall:
     def observations(self) -> list[Observation]:
         return self.task_result.observations
 
+    @property
+    def spans(self) -> list[SpanRecord]:
+        return self.selected_spans
+
 
 async def evaluate_scoring_specs(
     scoring: list[ScoringSpec],
@@ -130,14 +156,20 @@ async def evaluate_scoring_specs(
     task_result: TaskResult,
 ) -> list[ScoreRecord]:
     records: list[ScoreRecord] = []
-    call = ScoringCall(ctx=ctx, task_result=task_result)
-    subjects = {
-        "output": task_result.output,
-        "case": ctx.case,
-        "variant": ctx.variant,
-    }
-
     for spec in scoring:
+        selected_spans = select_spans(
+            spec.span,
+            spans=task_result.spans,
+            observations=task_result.observations,
+        )
+        call = ScoringCall(ctx=ctx, task_result=task_result, selected_spans=selected_spans)
+        subjects = {
+            "output": task_result.output,
+            "case": ctx.case,
+            "variant": ctx.variant,
+            "spans": selected_spans,
+            "span": selected_spans[0] if selected_spans else None,
+        }
         try:
             record = await _evaluate_scoring_spec(spec, call=call, subjects=subjects)
         except Exception as exc:
@@ -148,8 +180,11 @@ async def evaluate_scoring_specs(
                 direction=spec.direction,
                 role=spec.role,
                 optional=spec.optional,
+                span_id=_selected_span_id(selected_spans),
                 error=ErrorRecord.from_exception(exc),
             )
+        if record.span_id is None:
+            record = record.model_copy(update={"span_id": _selected_span_id(selected_spans)})
         records.append(record)
 
     return records
@@ -208,6 +243,16 @@ async def _evaluate_scoring_spec(
             spec,
             value=validate_schema_value(actual_value, spec.schema_definition),
             actual_value=actual_value,
+        )
+
+    if isinstance(spec, ExpectedActionScorer):
+        expected_actions = expected_actions_from_case(call.ctx.case)
+        observed_spans = observed_action_spans(call.selected_spans, kind=spec.observed_kind)
+        return _build_score_record(
+            spec,
+            value=action_metric_score(expected_actions, observed_spans, metric=spec.metric),
+            actual_value=[span.model_dump(mode="json") for span in observed_spans],
+            expected_value=[action.model_dump(mode="json") for action in expected_actions],
         )
 
     scorer = resolve_python_scorer(spec.target, search_paths=spec.module_search_paths)
@@ -296,8 +341,15 @@ def _build_score_record(
     )
 
 
+def _selected_span_id(selected_spans: list[SpanRecord]) -> str | None:
+    if len(selected_spans) != 1:
+        return None
+    return selected_spans[0].id
+
+
 __all__ = (
     "ExactScorer",
+    "ExpectedActionScorer",
     "OutputMetricScorer",
     "PassFailScorer",
     "PythonScorer",

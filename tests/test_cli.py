@@ -332,40 +332,7 @@ def test_cli_report_export_and_compare_recorded_evidence(
     record_dir = tmp_path / "recorded"
 
     run = runner.invoke(cli, ["run", str(spec_path), "--record", str(record_dir)])
-    run_png_path = tmp_path / "run-report.png"
-    run_with_png = runner.invoke(
-        cli,
-        [
-            "run",
-            str(spec_path),
-            "--record",
-            str(tmp_path / "recorded-run-png"),
-            "--save-png",
-            str(run_png_path),
-        ],
-    )
-    run_png_dir = tmp_path / "run-figures"
-    run_with_png_dir = runner.invoke(
-        cli,
-        [
-            "run",
-            str(spec_path),
-            "--record",
-            str(tmp_path / "recorded-run-png-dir"),
-            "--save-png-dir",
-            str(run_png_dir),
-        ],
-    )
     report_stdout = runner.invoke(cli, ["report", str(record_dir)])
-    report_png_path = tmp_path / "report-view.png"
-    report_png = runner.invoke(cli, ["report", str(record_dir), "--save-png", str(report_png_path)])
-    replay_png_path = tmp_path / "replay-view.png"
-    replay_png = runner.invoke(cli, ["replay", str(record_dir), "--save-png", str(replay_png_path)])
-    report_png_dir = tmp_path / "report-figures"
-    report_png_set = runner.invoke(
-        cli,
-        ["report", str(record_dir), "--save-png-dir", str(report_png_dir)],
-    )
     summary_path = tmp_path / "report.yaml"
     summary_stdout = runner.invoke(
         cli,
@@ -381,40 +348,16 @@ def test_cli_report_export_and_compare_recorded_evidence(
         cli,
         ["export", str(record_dir), "--format", "markdown", "--path", str(markdown_path)],
     )
-    png_path = tmp_path / "report.png"
-    png_file = runner.invoke(
-        cli,
-        ["export", str(record_dir), "--format", "png", "--path", str(png_path)],
-    )
-    png_set_dir = tmp_path / "export-figures"
-    png_set = runner.invoke(
-        cli,
-        ["export", str(record_dir), "--format", "png-set", "--path", str(png_set_dir)],
-    )
     comparison_stdout = runner.invoke(
         cli,
         ["compare", str(record_dir), "--baseline", "baseline", "--candidate", "candidate"],
     )
 
     assert run.exit_code == 0
-    assert run_with_png.exit_code == 0
-    assert "Saved PNG Visualization" in run_with_png.output
-    assert run_png_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-    assert run_with_png_dir.exit_code == 0
-    assert any(path.suffix == ".png" for path in run_png_dir.iterdir())
     assert report_stdout.exit_code == 0
     assert "Benchmark Report" in report_stdout.output
     assert "Leaderboard" in report_stdout.output
     assert "candidate" in report_stdout.output
-    assert report_png.exit_code == 0
-    assert "Saved PNG Visualization" in report_png.output
-    assert report_png_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-    assert replay_png.exit_code == 0
-    assert "Saved PNG Visualization" in replay_png.output
-    assert replay_png_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-    assert report_png_set.exit_code == 0
-    assert "Saved PNG Visualization" in report_png_set.output
-    assert any(path.suffix == ".png" for path in report_png_dir.iterdir())
     assert summary_stdout.exit_code == 0
     assert "Exported YAML" in summary_stdout.output
     assert "Leaderboard" in summary_stdout.output
@@ -430,12 +373,6 @@ def test_cli_report_export_and_compare_recorded_evidence(
     assert markdown_stdout.exit_code == 0
     assert "Exported MARKDOWN" in markdown_stdout.output
     assert markdown_path.read_text(encoding="utf-8").startswith("# cli-reporting\n")
-    assert png_file.exit_code == 0
-    assert "Exported PNG" in png_file.output
-    assert png_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-    assert png_set.exit_code == 0
-    assert "Exported PNG-SET" in png_set.output
-    assert any(path.suffix == ".png" for path in png_set_dir.iterdir())
     assert comparison_stdout.exit_code == 0
     assert "Variant Comparison" in comparison_stdout.output
     assert "Factor Deltas" in comparison_stdout.output

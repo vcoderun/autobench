@@ -22,7 +22,7 @@ from autobench import (
     FieldAsset,
     ParamAsset,
     PassFailScorer,
-    PydanticEvalsRuntime,
+    PydanticEvalsBridge,
     PydanticEvalsUnavailableError,
     RunContext,
     Semantic,
@@ -370,7 +370,7 @@ def test_run_context_attach_tracked_asset_deduplicates_versions() -> None:
 
 
 def test_pydantic_evals_runtime_payloads_and_optional_import() -> None:
-    runtime = PydanticEvalsRuntime(module_name="sys")
+    runtime = PydanticEvalsBridge(module_name="sys")
     spec = (
         Benchmark("runtime-demo")
         .dataset(
@@ -396,7 +396,7 @@ def test_pydantic_evals_runtime_payloads_and_optional_import() -> None:
     assert payload.cases[0].metadata == {"tags": ["greeting"], "difficulty": "easy"}
 
     fallback_payload = runtime.dataset_payload(Benchmark("runtime-fallback").dataset([]).to_spec())
-    unavailable = PydanticEvalsRuntime(module_name="missing_autobench_runtime_module")
+    unavailable = PydanticEvalsBridge(module_name="missing_autobench_runtime_module")
     assert fallback_payload.name == "runtime-fallback"
     assert unavailable.is_available() is False
     with pytest.raises(PydanticEvalsUnavailableError, match="not installed"):

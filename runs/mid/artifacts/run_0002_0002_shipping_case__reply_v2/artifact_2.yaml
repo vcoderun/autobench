@@ -1,6 +1,0 @@
-profile: optimized
-required_phrases:
-- delivery
-- tracking
-response: I checked the shipment and your delivery is in transit with tracking updated
-  today.

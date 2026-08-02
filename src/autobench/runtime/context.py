@@ -3,11 +3,12 @@ from __future__ import annotations as _annotations
 from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime
+from enum import StrEnum
 from time import perf_counter
 from types import TracebackType
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from autobench.data.datasets import Case
 from autobench.data.variants import Variant
@@ -34,13 +35,30 @@ class DurationMetricSpec(BaseModel):
     tags: dict[str, Any] = Field(default_factory=dict)
 
 
+class SpanKind(StrEnum):
+    AGENT = "agent"
+    LLM = "llm"
+    TOOL = "tool"
+    RETRIEVER = "retriever"
+    PARSER = "parser"
+    WORKFLOW = "workflow"
+    CUSTOM = "custom"
+
+
 class SpanRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
     name: str
+    kind: SpanKind | str = SpanKind.CUSTOM
     parent_id: str | None = None
     started_at: datetime
     ended_at: datetime | None = None
     duration_seconds: float | None = None
+    input: Any = None
+    output: Any = None
+    attributes: dict[str, Any] = Field(default_factory=dict)
+    usage: dict[str, Any] = Field(default_factory=dict)
     observations: list[str] = Field(default_factory=list)
     artifacts: list[str] = Field(default_factory=list)
     error: ErrorRecord | None = None
@@ -103,6 +121,10 @@ class RunContext:
         self,
         name: str,
         *,
+        kind: SpanKind | str = SpanKind.CUSTOM,
+        input: Any = None,
+        attributes: dict[str, Any] | None = None,
+        usage: dict[str, Any] | None = None,
         duration_metric: DurationMetricSpec | dict[str, Any] | None = None,
         tags: dict[str, Any] | None = None,
     ) -> Span:
@@ -116,6 +138,10 @@ class RunContext:
         return Span(
             context=self,
             name=name,
+            kind=kind,
+            input=input,
+            attributes=attributes or {},
+            usage=usage or {},
             duration_metric=metric_spec,
             tags=tags or {},
         )
@@ -302,17 +328,18 @@ class RunContext:
             "repetitions": measurement.repetition_count,
             "timed_out": measurement.timed_out,
         }
+        measurement_semantics = {
+            "median_ms": semantic_type,
+            "p95_ms": f"{semantic_type}.p95",
+            "mean_ms": f"{semantic_type}.mean",
+            "min_ms": f"{semantic_type}.min",
+            "max_ms": f"{semantic_type}.max",
+        }
         metrics = tuple(
             self.metrics(
                 name,
                 values,
-                semantic_types={
-                    "median_ms": semantic_type,
-                    "p95_ms": semantic_type,
-                    "mean_ms": semantic_type,
-                    "min_ms": semantic_type,
-                    "max_ms": semantic_type,
-                },
+                semantic_types=measurement_semantics,
                 units={
                     "median_ms": unit,
                     "p95_ms": unit,
@@ -439,13 +466,26 @@ class RunContext:
                 span_record.observations.append(observation.id)
         return observation
 
-    def _start_span(self, name: str, *, tags: dict[str, Any]) -> tuple[SpanRecord, float]:
+    def _start_span(
+        self,
+        name: str,
+        *,
+        kind: SpanKind | str = SpanKind.CUSTOM,
+        input: Any = None,
+        attributes: dict[str, Any] | None = None,
+        usage: dict[str, Any] | None = None,
+        tags: dict[str, Any],
+    ) -> tuple[SpanRecord, float]:
         parent_id = self._span_stack[-1] if self._span_stack else None
         span_record = SpanRecord(
             id=self._next_span_id(),
             name=name,
+            kind=kind,
             parent_id=parent_id,
             started_at=datetime.now(UTC),
+            input=input,
+            attributes=attributes or {},
+            usage=usage or {},
             tags=tags,
         )
         self.spans.append(span_record)
@@ -504,11 +544,19 @@ class Span(AbstractContextManager["Span"]):
         *,
         context: RunContext,
         name: str,
+        kind: SpanKind | str,
+        input: Any,
+        attributes: dict[str, Any],
+        usage: dict[str, Any],
         duration_metric: DurationMetricSpec | None,
         tags: dict[str, Any],
     ) -> None:
         self._context = context
         self._name = name
+        self._kind = kind
+        self._input = input
+        self._attributes = attributes
+        self._usage = usage
         self._duration_metric = duration_metric
         self._tags = tags
         self._record: SpanRecord | None = None
@@ -529,6 +577,10 @@ class Span(AbstractContextManager["Span"]):
     def __enter__(self) -> Span:
         self._record, self._started_at = self._context._start_span(
             self._name,
+            kind=self._kind,
+            input=self._input,
+            attributes=self._attributes,
+            usage=self._usage,
             tags=self._tags,
         )
         return self
@@ -551,6 +603,15 @@ class Span(AbstractContextManager["Span"]):
 
     def __iter__(self) -> Iterator[SpanRecord]:
         yield self.record
+
+    def set_output(self, value: Any) -> None:
+        self.record.output = value
+
+    def set_attribute(self, name: str, value: Any) -> None:
+        self.record.attributes[name] = value
+
+    def set_usage(self, name: str, value: Any) -> None:
+        self.record.usage[name] = value
 
     def metric(
         self,
@@ -737,5 +798,6 @@ __all__ = (
     "MeasurementRecord",
     "RunContext",
     "Span",
+    "SpanKind",
     "SpanRecord",
 )

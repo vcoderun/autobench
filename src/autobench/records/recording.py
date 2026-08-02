@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+from os.path import relpath
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,7 @@ def record_experiment(
     output_dir: Path,
     *,
     source_files: list[Path] | None = None,
+    path_root: Path | None = None,
 ) -> ExperimentRecord:
     if (output_dir / "experiment.yaml").exists():
         raise RecordingError(f"Experiment record already exists: {output_dir}")
@@ -132,13 +134,15 @@ def record_experiment(
         experiment_id=result.experiment_id,
         benchmark_id=result.benchmark_id,
         plan=result.plan,
-        environment=result.environment,
+        environment=_recorded_environment(result.environment, path_root=path_root),
         semantic_registry=result.semantic_registry,
         report_spec_data=result.report_spec_data,
         spec_snapshot=result.spec_snapshot,
         spec_hash=result.spec_hash,
         file_hashes=tuple(
-            hash_file(path) for path in (source_files or []) if path.exists() and path.is_file()
+            hash_file(path, relative_to=path_root)
+            for path in (source_files or [])
+            if path.exists() and path.is_file()
         ),
         run_paths=tuple(run_paths),
         run_count=result.total_count,
@@ -154,6 +158,18 @@ def record_experiment(
     )
     dump_yaml(experiment_summary(record), output_dir / "summary.yaml", schema_name="summary")
     return record
+
+
+def _recorded_environment(
+    environment: EnvironmentMetadata,
+    *,
+    path_root: Path | None,
+) -> EnvironmentMetadata:
+    if path_root is None:
+        return environment
+    return environment.model_copy(
+        update={"cwd": Path(relpath(Path(environment.cwd), path_root.resolve())).as_posix()}
+    )
 
 
 def run_record_from_result(
@@ -532,6 +548,7 @@ def _scores_view(scores: tuple[ScoreRecord, ...]) -> dict[str, Any]:
                 "optional": score.optional or None,
                 "actual": _to_serializable(score.actual_value),
                 "expected": _to_serializable(score.expected_value),
+                "span": score.span_id,
                 "error": _model_dump(score.error) if score.error is not None else None,
                 "tags": _to_serializable(score.tags),
             }
@@ -584,10 +601,15 @@ def _spans_view(spans: tuple[SpanRecord, ...]) -> dict[str, Any]:
         mapped[span.id] = _compact(
             {
                 "name": span.name,
+                "kind": str(span.kind),
                 "parent": span.parent_id,
                 "started_at": span.model_dump(mode="json")["started_at"],
                 "ended_at": span.model_dump(mode="json")["ended_at"],
                 "duration": span.duration_seconds,
+                "input": _to_serializable(span.input),
+                "output": _to_serializable(span.output),
+                "attributes": _to_serializable(span.attributes),
+                "usage": _to_serializable(span.usage),
                 "observations": span.observations,
                 "artifacts": span.artifacts,
                 "error": _model_dump(span.error) if span.error is not None else None,
@@ -668,6 +690,7 @@ def _scores_payload(raw_scores: Any) -> list[dict[str, Any]]:
                     "optional": score.get("optional", False),
                     "actual_value": score.get("actual", score.get("actual_value")),
                     "expected_value": score.get("expected", score.get("expected_value")),
+                    "span_id": score.get("span", score.get("span_id")),
                     "error": score.get("error"),
                     "tags": score.get("tags", {}),
                 }
@@ -737,10 +760,15 @@ def _spans_payload(raw_spans: Any) -> list[dict[str, Any]]:
                 {
                     "id": span.get("id", span_id),
                     "name": span.get("name", span_id),
+                    "kind": span.get("kind", "custom"),
                     "parent_id": span.get("parent", span.get("parent_id")),
                     "started_at": span.get("started_at"),
                     "ended_at": span.get("ended_at"),
                     "duration_seconds": span.get("duration", span.get("duration_seconds")),
+                    "input": span.get("input"),
+                    "output": span.get("output"),
+                    "attributes": span.get("attributes", {}),
+                    "usage": span.get("usage", {}),
                     "observations": span.get("observations", []),
                     "artifacts": span.get("artifacts", []),
                     "error": span.get("error"),

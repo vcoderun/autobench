@@ -65,3 +65,46 @@ Tasks may be sync or async.
 - `error`
 
 Span duration is owned by Autobench. Tasks do not need to hand-roll `perf_counter` timing for benchmark spans.
+
+## Agentic Evidence
+
+Agent and workflow runs can record typed spans:
+
+```python
+from autobench import Semantic, SpanKind
+
+
+def run_case(ctx, case):
+    with ctx.span("support_agent", kind=SpanKind.AGENT) as agent:
+        agent.metric("task_completed", True, semantic_type=Semantic.AGENT_TASK_COMPLETION)
+        with ctx.span("lookup_user", kind=SpanKind.TOOL, input={"user_id": "u1"}) as tool:
+            tool.set_output({"tier": "gold"})
+```
+
+Expected tool/action checks can be expressed as scorers:
+
+```python
+from autobench import ExpectedActionScorer, Semantic, SpanSelector
+
+scorer = ExpectedActionScorer(
+    name="tool_arguments",
+    semantic_type=Semantic.AGENT_TOOL_ARGUMENT_CORRECTNESS,
+    metric="arguments",
+    span=SpanSelector(kind="tool"),
+)
+```
+
+Cases can use either `expected.actions` or `expected.tool_calls`:
+
+```python
+Case(
+    id="refund",
+    expected={
+        "actions": [
+            {"tool": "lookup_user", "args": {"user_id": "u1"}, "order": 1},
+        ]
+    },
+)
+```
+
+External framework traces can be attached with `TraceEnvelope`, and Pydantic AI usage can be recorded through `PydanticAIUsage` without making either OpenTelemetry or Pydantic AI a core dependency.

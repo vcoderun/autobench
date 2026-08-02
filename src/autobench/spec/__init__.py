@@ -279,6 +279,8 @@ def _normalize_dataset_dsl(raw: dict[str, Any]) -> dict[str, Any]:
         raise SpecValidationError("dataset.<id> must be a mapping")
     normalized: dict[str, Any] = {str(key): value for key, value in body.items() if key != "id"}
     normalized["id"] = str(dataset_id)
+    if "defaults" in normalized and "case_defaults" not in normalized:
+        normalized["case_defaults"] = normalized.pop("defaults")
     return normalized
 
 

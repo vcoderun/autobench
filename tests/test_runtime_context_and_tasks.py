@@ -157,6 +157,14 @@ def test_context_helpers_record_measurements_bundles_checks_and_outcomes() -> No
     assert no_reason_check.observation.tags == {}
     assert recorded.samples_artifact is not None
     assert recorded.samples_artifact.name == "latency.samples_ms"
+    semantics_by_name = {
+        observation.name: observation.semantic_type for observation in recorded.metrics
+    }
+    assert semantics_by_name["latency.median_ms"] == Semantic.TIME_LATENCY
+    assert semantics_by_name["latency.p95_ms"] == "time.latency.p95"
+    assert semantics_by_name["latency.mean_ms"] == "time.latency.mean"
+    assert semantics_by_name["latency.min_ms"] == "time.latency.min"
+    assert semantics_by_name["latency.max_ms"] == "time.latency.max"
     names = {observation.name for observation in ctx.observations}
     assert {
         "correctness",

@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import platform
 import sys
 from hashlib import sha256
+from os.path import relpath
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -27,12 +28,18 @@ def capture_environment(*, cwd: Path | None = None) -> EnvironmentMetadata:
     )
 
 
-def hash_file(path: Path) -> ResolvedFileHash:
+def hash_file(path: Path, *, relative_to: Path | None = None) -> ResolvedFileHash:
     digest = sha256()
     with path.open("rb") as file:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
-    return ResolvedFileHash(path=str(path.resolve()), sha256=digest.hexdigest())
+    resolved_path = path.resolve()
+    recorded_path = (
+        Path(relpath(resolved_path, relative_to.resolve())).as_posix()
+        if relative_to is not None
+        else str(resolved_path)
+    )
+    return ResolvedFileHash(path=recorded_path, sha256=digest.hexdigest())
 
 
 __all__ = (

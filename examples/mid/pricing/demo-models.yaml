@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=../../../schemas/0.1.0/pricing_schema.json
+record:
+  type: pricing
+  version: 1
+pricing:
+  provider: local
+  source: example-static-pricing
+  updated_at: "2026-08-02"
+  models:
+    demo-small:
+      name: Demo Small
+      input:
+        unit: mtok
+        price: 0.20
+      output:
+        unit: mtok
+        price: 0.80
+    demo-large:
+      name: Demo Large
+      input:
+        unit: mtok
+        price: 0.50
+      output:
+        unit: mtok
+        price: 1.50

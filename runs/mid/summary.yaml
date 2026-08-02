@@ -1,8 +1,0 @@
-record_version: 3
-experiment_id: exp_mid_reply_quality_20260501T165119307783Z
-benchmark_id: mid-reply-quality
-run_count: 6
-passed_count: 3
-failed_count: 3
-errored_count: 0
-skipped_count: 0

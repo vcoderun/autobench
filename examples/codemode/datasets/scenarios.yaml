@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=../../../schemas/0.1.0/dataset_schema.json
+dataset:
+  codemode-scenarios:
+    version: "2026-08-02"
+    metadata:
+      runtime: vowel.codemode
+    cases:
+      - id: flatten
+        tags: [intermediate, collections]
+        input:
+          name: flatten
+          description: Recursively flatten an arbitrarily nested list and reject non-list input.
+          code: |
+            def flatten(values: list) -> list:
+                if not isinstance(values, list):
+                    raise TypeError("values must be a list")
+                flattened = []
+                for value in values:
+                    if isinstance(value, list):
+                        flattened.extend(flatten(value))
+                    else:
+                        flattened.append(value)
+                return flattened
+      - id: parse_cron
+        tags: [advanced, parsing]
+        input:
+          name: parse_cron
+          description: Parse a five-field cron expression with wildcards, ranges, steps, and lists.
+          code: |
+            def parse_cron(expression: str) -> dict[str, list[int]]:
+                fields = expression.split()
+                if len(fields) != 5:
+                    raise ValueError("cron expression must contain five fields")
+                bounds = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 6))
+                names = ("minute", "hour", "day_of_month", "month", "day_of_week")
+
+                def expand(field: str, minimum: int, maximum: int) -> list[int]:
+                    values = set()
+                    for part in field.split(","):
+                        base, separator, raw_step = part.partition("/")
+                        step = int(raw_step) if separator else 1
+                        if step <= 0:
+                            raise ValueError("step must be positive")
+                        if base == "*":
+                            start, end = minimum, maximum
+                        elif "-" in base:
+                            raw_start, raw_end = base.split("-", 1)
+                            start, end = int(raw_start), int(raw_end)
+                        else:
+                            start = end = int(base)
+                        if start < minimum or end > maximum or start > end:
+                            raise ValueError("cron field is outside its valid range")
+                        values.update(range(start, end + 1, step))
+                    return sorted(values)
+
+                return {
+                    name: expand(field, *bound)
+                    for name, field, bound in zip(names, fields, bounds, strict=True)
+                }

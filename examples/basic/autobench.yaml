@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../../schemas/0.1.0/benchmark_schema.json
+benchmark:
+  support-routing:
+    description: Compare two deterministic support-ticket routing profiles.
+    dataset:
+      source: file://datasets/cases.yaml
+      version: "2026-08-02"
+    run:
+      python: support_benchmark:run
+    variants:
+      route_v1:
+        label: Baseline router
+        factors:
+          routing_profile:
+            value: baseline
+            optimize: true
+      route_v2:
+        label: Priority-aware router
+        factors:
+          routing_profile:
+            value: priority
+            optimize: true
+    score:
+      route_correctness:
+        exact:
+          actual: output.queue
+          expected: case.expected.queue
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+      handled:
+        pass: output.handled
+        semantic: result.success
+        role: constraint
+    report:
+      leaderboard:
+        show:
+          accuracy:
+            metric: quality.correctness
+            aggregate: ratio_true
+          handled:
+            metric: result.success
+            aggregate: ratio_true
+      matrix:
+        metric: quality.correctness
+      compare:
+        route_v1 -> route_v2:
+          show:
+            accuracy:
+              metric: quality.correctness
+              aggregate: ratio_true

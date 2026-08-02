@@ -3,7 +3,7 @@ from __future__ import annotations as _annotations
 from collections import defaultdict
 from math import prod
 from statistics import median, pstdev
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -57,64 +57,11 @@ class DistributionReportSpec(BaseModel):
     summaries: tuple[AggregationFn, ...] = ("min", "median", "p95", "max")
 
 
-class VariantConfigVisualSpec(BaseModel):
-    kind: Literal["variant_config"] = "variant_config"
-    render_as: Literal["table"] = "table"
-    title: str | None = None
-
-
-class StatusVisualSpec(BaseModel):
-    kind: Literal["status"] = "status"
-    render_as: Literal["table", "bar", "pie"] = "pie"
-    title: str | None = None
-
-
-class LeaderboardVisualSpec(BaseModel):
-    kind: Literal["leaderboard"] = "leaderboard"
-    render_as: Literal["table", "bar", "grouped_bar", "line", "pie"] = "table"
-    title: str | None = None
-    metric: str | None = None
-
-
-class CaseMatrixVisualSpec(BaseModel):
-    kind: Literal["case_matrix"] = "case_matrix"
-    render_as: Literal["table", "heatmap", "grouped_bar", "line"] = "heatmap"
-    title: str | None = None
-
-
-class ComparisonVisualSpec(BaseModel):
-    kind: Literal["comparison"] = "comparison"
-    baseline: str
-    candidate: str
-    render_as: Literal["table", "bar", "delta_bar"] = "table"
-    title: str | None = None
-    metric: str | None = None
-
-
-class DistributionVisualSpec(BaseModel):
-    kind: Literal["distribution"] = "distribution"
-    name: str
-    render_as: Literal["table", "boxplot", "line"] = "boxplot"
-    title: str | None = None
-
-
-VisualizationSpec = Annotated[
-    VariantConfigVisualSpec
-    | StatusVisualSpec
-    | LeaderboardVisualSpec
-    | CaseMatrixVisualSpec
-    | ComparisonVisualSpec
-    | DistributionVisualSpec,
-    Field(discriminator="kind"),
-]
-
-
 class ReportSpec(BaseModel):
     leaderboard: LeaderboardReportSpec = Field(default_factory=LeaderboardReportSpec)
     case_matrix: CaseMatrixReportSpec = Field(default_factory=CaseMatrixReportSpec)
     comparisons: tuple[ComparisonReportSpec, ...] = ()
     distributions: tuple[DistributionReportSpec, ...] = ()
-    visuals: tuple[VisualizationSpec, ...] = ()
 
     def leaderboard_metrics(self) -> tuple[MetricAggregation, ...]:
         if self.leaderboard.metrics:
@@ -675,24 +622,17 @@ __all__ = (
     "BenchmarkReport",
     "CaseMatrix",
     "CaseMatrixReportSpec",
-    "CaseMatrixVisualSpec",
     "ComparisonReportSpec",
     "ComparisonReport",
-    "ComparisonVisualSpec",
     "DEFAULT_LEADERBOARD_METRICS",
     "DistributionReportSpec",
-    "DistributionVisualSpec",
     "LeaderboardReportSpec",
     "LeaderboardRow",
-    "LeaderboardVisualSpec",
     "MetricDistribution",
     "MetricAggregation",
     "ReportSpec",
     "RunMetricRow",
-    "StatusVisualSpec",
     "VariantConfigRow",
-    "VariantConfigVisualSpec",
-    "VisualizationSpec",
     "aggregate_values",
     "build_case_matrix",
     "build_leaderboard",

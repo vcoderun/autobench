@@ -8,10 +8,10 @@ uv sync --extra dev
 
 ## Validate A Spec
 
-Create a benchmark spec in the current DSL format, then validate it:
+Validate the smallest complete benchmark:
 
 ```bash
-uv run autobench validate path/to/benchmark.yaml
+uv run autobench validate examples/minimal/autobench.yaml
 ```
 
 Expected output includes:
@@ -24,7 +24,7 @@ Expected output includes:
 ## Run And Record
 
 ```bash
-uv run autobench run path/to/benchmark.yaml --record runs/benchmark
+uv run autobench run examples/minimal/autobench.yaml --record /tmp/autobench-minimal
 ```
 
 This executes the task matrix and writes:
@@ -37,11 +37,10 @@ This executes the task matrix and writes:
 ## Replay, Report, Export
 
 ```bash
-uv run autobench replay runs/benchmark
-uv run autobench report runs/benchmark
-uv run autobench export runs/benchmark --format yaml --path runs/benchmark/report.yaml
-uv run autobench export runs/benchmark --format csv --path runs/benchmark/runs.csv
-uv run autobench export runs/benchmark --format png --path runs/benchmark/report.png
+uv run autobench replay /tmp/autobench-minimal
+uv run autobench report /tmp/autobench-minimal
+uv run autobench export /tmp/autobench-minimal --format yaml --path /tmp/minimal-report.yaml
+uv run autobench export /tmp/autobench-minimal --format csv --path /tmp/minimal-runs.csv
 ```
 
 Replay does not import or execute the original task target. It only reads recorded evidence.
@@ -53,6 +52,8 @@ Report and compare render Rich terminal tables. Export writes a file and shows a
 make prod
 make pre-commit
 make docs
+make examples
 ```
 
-`make prod` covers tests, `100%` source line and branch coverage, formatting, linting, typing, docs, and the Python validation matrix.
+`make prod` covers tests, `100%` source line and branch coverage, formatting checks, linting,
+typing, docs, the Python validation matrix, and all offline examples.

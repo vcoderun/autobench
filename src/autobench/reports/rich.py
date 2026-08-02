@@ -150,16 +150,6 @@ def render_export_preview(
     render_report(console, build_report(result))
 
 
-def render_saved_visualization(console: Console, *, output_path: Path) -> None:
-    console.print(
-        Panel.fit(
-            Text(str(output_path), style="bold green"),
-            title="Saved PNG Visualization",
-            border_style="green",
-        )
-    )
-
-
 def render_model_configurations(
     console: Console,
     model_pairs: Sequence[tuple[str, str]],
@@ -587,6 +577,5 @@ __all__ = (
     "render_model_configurations",
     "render_recorded_runs",
     "render_report",
-    "render_saved_visualization",
     "render_validation_summary",
 )

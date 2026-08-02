@@ -34,11 +34,21 @@ QualitySemanticType: TypeAlias = Literal[
 
 AgentSemanticType: TypeAlias = Literal[
     "agent.version",
+    "agent.task.completion",
+    "agent.goal.accuracy",
+    "agent.plan.quality",
+    "agent.plan.adherence",
+    "agent.step.efficiency",
     "agent.orchestration.quality",
     "agent.tool.name",
     "agent.tool.version",
+    "agent.tool.selection.correctness",
+    "agent.tool.argument.correctness",
+    "agent.tool.sequence.correctness",
     "agent.tool_call.quality",
     "agent.serving.volume",
+    "agent.output.correctness",
+    "agent.output.structure.validity",
 ]
 
 PromptSemanticType: TypeAlias = Literal["prompt.version"]
@@ -85,6 +95,16 @@ class Semantic:
     AGENT_SERVING_VOLUME: Final[str] = "agent.serving.volume"
     PROMPT_VERSION: Final[str] = "prompt.version"
     DATASET_VERSION: Final[str] = "dataset.version"
+    AGENT_TASK_COMPLETION: Final[str] = "agent.task.completion"
+    AGENT_GOAL_ACCURACY: Final[str] = "agent.goal.accuracy"
+    AGENT_PLAN_QUALITY: Final[str] = "agent.plan.quality"
+    AGENT_PLAN_ADHERENCE: Final[str] = "agent.plan.adherence"
+    AGENT_STEP_EFFICIENCY: Final[str] = "agent.step.efficiency"
+    AGENT_TOOL_SELECTION_CORRECTNESS: Final[str] = "agent.tool.selection.correctness"
+    AGENT_TOOL_ARGUMENT_CORRECTNESS: Final[str] = "agent.tool.argument.correctness"
+    AGENT_TOOL_SEQUENCE_CORRECTNESS: Final[str] = "agent.tool.sequence.correctness"
+    AGENT_OUTPUT_CORRECTNESS: Final[str] = "agent.output.correctness"
+    AGENT_OUTPUT_STRUCTURE_VALIDITY: Final[str] = "agent.output.structure.validity"
 
 
 class SemanticTypeInfo(BaseModel):
@@ -191,6 +211,31 @@ class SemanticRegistry(BaseModel):
                 id=Semantic.AGENT_VERSION,
                 value_shape="string",
             ),
+            Semantic.AGENT_TASK_COMPLETION: SemanticTypeInfo(
+                id=Semantic.AGENT_TASK_COMPLETION,
+                parent=Semantic.RESULT_SUCCESS,
+                value_shape="boolean",
+            ),
+            Semantic.AGENT_GOAL_ACCURACY: SemanticTypeInfo(
+                id=Semantic.AGENT_GOAL_ACCURACY,
+                parent=Semantic.QUALITY_SCORE,
+                value_shape="number",
+            ),
+            Semantic.AGENT_PLAN_QUALITY: SemanticTypeInfo(
+                id=Semantic.AGENT_PLAN_QUALITY,
+                parent=Semantic.QUALITY_SCORE,
+                value_shape="number",
+            ),
+            Semantic.AGENT_PLAN_ADHERENCE: SemanticTypeInfo(
+                id=Semantic.AGENT_PLAN_ADHERENCE,
+                parent=Semantic.QUALITY_SCORE,
+                value_shape="number",
+            ),
+            Semantic.AGENT_STEP_EFFICIENCY: SemanticTypeInfo(
+                id=Semantic.AGENT_STEP_EFFICIENCY,
+                parent=Semantic.TIME_LATENCY,
+                value_shape="number",
+            ),
             Semantic.AGENT_ORCHESTRATION_QUALITY: SemanticTypeInfo(
                 id=Semantic.AGENT_ORCHESTRATION_QUALITY,
                 parent=Semantic.QUALITY_SCORE,
@@ -204,6 +249,21 @@ class SemanticRegistry(BaseModel):
                 id=Semantic.AGENT_TOOL_VERSION,
                 value_shape="string",
             ),
+            Semantic.AGENT_TOOL_SELECTION_CORRECTNESS: SemanticTypeInfo(
+                id=Semantic.AGENT_TOOL_SELECTION_CORRECTNESS,
+                parent=Semantic.QUALITY_CORRECTNESS,
+                value_shape="number",
+            ),
+            Semantic.AGENT_TOOL_ARGUMENT_CORRECTNESS: SemanticTypeInfo(
+                id=Semantic.AGENT_TOOL_ARGUMENT_CORRECTNESS,
+                parent=Semantic.QUALITY_CORRECTNESS,
+                value_shape="number",
+            ),
+            Semantic.AGENT_TOOL_SEQUENCE_CORRECTNESS: SemanticTypeInfo(
+                id=Semantic.AGENT_TOOL_SEQUENCE_CORRECTNESS,
+                parent=Semantic.QUALITY_CORRECTNESS,
+                value_shape="number",
+            ),
             Semantic.AGENT_TOOL_CALL_QUALITY: SemanticTypeInfo(
                 id=Semantic.AGENT_TOOL_CALL_QUALITY,
                 parent=Semantic.QUALITY_SCORE,
@@ -212,6 +272,16 @@ class SemanticRegistry(BaseModel):
             Semantic.AGENT_SERVING_VOLUME: SemanticTypeInfo(
                 id=Semantic.AGENT_SERVING_VOLUME,
                 value_shape="integer",
+            ),
+            Semantic.AGENT_OUTPUT_CORRECTNESS: SemanticTypeInfo(
+                id=Semantic.AGENT_OUTPUT_CORRECTNESS,
+                parent=Semantic.QUALITY_CORRECTNESS,
+                value_shape="number",
+            ),
+            Semantic.AGENT_OUTPUT_STRUCTURE_VALIDITY: SemanticTypeInfo(
+                id=Semantic.AGENT_OUTPUT_STRUCTURE_VALIDITY,
+                parent=Semantic.QUALITY_CORRECTNESS,
+                value_shape="boolean",
             ),
             Semantic.PROMPT_VERSION: SemanticTypeInfo(
                 id=Semantic.PROMPT_VERSION,
@@ -237,6 +307,11 @@ class SemanticRegistry(BaseModel):
         aliases = {
             "quality.answer": Semantic.QUALITY_SCORE,
             "agent.tool_call.correctness": Semantic.AGENT_TOOL_CALL_QUALITY,
+            "agent.task_completion": Semantic.AGENT_TASK_COMPLETION,
+            "agent.goal_accuracy": Semantic.AGENT_GOAL_ACCURACY,
+            "agent.tool.correctness": Semantic.AGENT_TOOL_SELECTION_CORRECTNESS,
+            "agent.tool.args.correctness": Semantic.AGENT_TOOL_ARGUMENT_CORRECTNESS,
+            "agent.output.valid": Semantic.AGENT_OUTPUT_STRUCTURE_VALIDITY,
         }
         return cls(types=types, aliases=aliases)
 

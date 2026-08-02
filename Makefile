@@ -3,7 +3,7 @@ GREEN := \033[1;32m
 RESET := \033[0m
 PYTHON_VERSIONS := 3.11.13 3.12.10 3.13.9
 
-.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs all prod pre-commit
+.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs examples build release all prod pre-commit
 
 format:
 	@printf "$(BLUE)==>$(RESET) Formatting code with ruff...\n"
@@ -28,9 +28,9 @@ check-matrix:
 	@for version in $(PYTHON_VERSIONS); do \
 		short_version=$${version%.*}; \
 		printf "$(BLUE)==>$(RESET) Running validation matrix for Python $$version...\n"; \
-		uv run --extra dev --python $$version ruff check src/autobench tests || exit $$?; \
-		uv run --extra dev --python $$version ty check --python-version $$short_version || exit $$?; \
-		uv run --extra dev --python $$version basedpyright --pythonversion $$short_version src tests || exit $$?; \
+		uv run --isolated --extra dev --python $$version sh -c \
+			"ruff check src/autobench tests && ty check --python-version $$short_version && basedpyright --pythonversion $$short_version src tests" \
+			|| exit $$?; \
 	done
 	@printf "$(GREEN)✔ Matrix checking complete.$(RESET)\n"
 
@@ -65,9 +65,30 @@ docs:
 	@uv run --extra dev mkdocs build --strict
 	@printf "$(GREEN)✔ Docs build complete.$(RESET)\n"
 
+examples:
+	@printf "$(BLUE)==>$(RESET) Running offline examples end to end...\n"
+	@set -e; root=$$(mktemp -d "$${TMPDIR:-/tmp}/autobench-examples.XXXXXX"); \
+		trap 'rm -rf "$$root"' EXIT; \
+		for example in minimal basic mid advanced; do \
+			uv run autobench validate "examples/$$example/autobench.yaml"; \
+			uv run autobench run "examples/$$example/autobench.yaml" --record "$$root/$$example"; \
+			uv run autobench replay "$$root/$$example"; \
+			uv run autobench report "$$root/$$example"; \
+			uv run autobench export "$$root/$$example" --format yaml --path "$$root/$$example-report.yaml"; \
+			uv run autobench export "$$root/$$example" --format csv --path "$$root/$$example-runs.csv"; \
+		done
+	@printf "$(GREEN)✔ Offline examples complete.$(RESET)\n"
+
+build:
+	@printf "$(BLUE)==>$(RESET) Building wheel and source distribution...\n"
+	@uv build
+	@printf "$(GREEN)✔ Build complete.$(RESET)\n"
+
 all: format check
 
-prod: tests check-coverage format check docs check-matrix
+prod: tests check-coverage check-formatted check docs check-matrix examples
+
+release: prod pre-commit build
 
 pre-commit:
 	@printf "$(BLUE)==>$(RESET) Running pre-commit checks...\n"

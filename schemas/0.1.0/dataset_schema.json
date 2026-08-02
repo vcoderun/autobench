@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Autobench 0.1.0 Dataset DSL",
+  "type": "object",
+  "required": ["dataset"],
+  "properties": {
+    "record": {"type": "object"},
+    "dataset": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["cases"],
+        "properties": {
+          "version": {"type": ["string", "null"]},
+          "metadata": {"type": "object"},
+          "defaults": {"type": "object"},
+          "cases": {"type": "array"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

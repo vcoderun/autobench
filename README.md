@@ -21,26 +21,25 @@ uv sync --extra dev
 
 ## Quickstart
 
-Validate a spec:
+Run the smallest complete example:
 
 ```bash
-uv run autobench validate examples/minimal.yaml
+uv run autobench validate examples/minimal/autobench.yaml
+uv run autobench run examples/minimal/autobench.yaml --record /tmp/autobench-minimal
 ```
 
 Run and record it:
 
 ```bash
-uv run autobench run examples/minimal.yaml --record runs/minimal
+uv run autobench run examples/basic/autobench.yaml --record /tmp/autobench-basic
 ```
 
 Replay and report without executing the task again:
 
 ```bash
-uv run autobench replay runs/minimal
-uv run autobench report runs/minimal
-uv run autobench export runs/minimal --format yaml --path runs/minimal/report.yaml
-uv run autobench export runs/minimal --format png --path runs/minimal/report.png
-uv run autobench export runs/minimal --format png-set --path runs/minimal/figures
+uv run autobench replay /tmp/autobench-basic
+uv run autobench report /tmp/autobench-basic
+uv run autobench export /tmp/autobench-basic --format yaml --path /tmp/basic-report.yaml
 ```
 
 ## What 0.1.0 Includes
@@ -56,19 +55,21 @@ uv run autobench export runs/minimal --format png-set --path runs/minimal/figure
 - policy checks
 - immutable YAML run records and replay
 - Rich terminal tables for run, replay, report, export, and compare
-- Markdown, YAML, CSV, composite PNG, and per-panel PNG-set exports
-- deterministic offline examples plus an optional real CodeMode integration example
+- Markdown, YAML, and CSV exports
+- portable source-file provenance for CLI-recorded evidence
+- offline minimal, basic, mid, and advanced end-to-end examples
+- a real, optional CodeMode integration example
 
-## Example Set
+## Examples
 
-- `examples/minimal.yaml`
-  Smallest runnable spec for quick validation and recording.
-- `examples/basic/`
-  Ticket-routing benchmark with semantic scoring and report configuration.
-- `examples/mid/`
-  Measurement, token-cost derivation, policies, custom reports, and paired-baseline comparison.
-- `examples/codemode/`
-  Advanced dogfood example that mirrors a real benchmark script shape.
+- `examples/minimal/`: inline cases, variants, exact scoring, reporting, and comparison.
+- `examples/basic/`: file-backed support tickets, spans, artifacts, and Rich reports.
+- `examples/mid/`: semantic token usage, pricing, cost derivation, policies, and distributions.
+- `examples/advanced/`: repeated measurement and paired-baseline speedup derivation.
+- `examples/codemode/`: live Vowel CodeMode generation and generated-spec replay.
+
+The first four run offline and are enforced by `make examples`. CodeMode is a live integration that
+requires its external runtime, model credentials, and network access.
 
 ## Development
 
@@ -78,6 +79,7 @@ Primary quality gates:
 make prod
 make pre-commit
 make docs
+make examples
 ```
 
 Source coverage for `src/autobench` is enforced at `100%` line and branch coverage.

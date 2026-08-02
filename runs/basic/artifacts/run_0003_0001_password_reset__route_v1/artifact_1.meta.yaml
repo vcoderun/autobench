@@ -1,6 +1,0 @@
-id: artifact_1
-name: routing_trace
-media_type: null
-span_id: span_1
-tags: {}
-payload_path: artifacts/run_0003_0001_password_reset__route_v1/artifact_1.yaml

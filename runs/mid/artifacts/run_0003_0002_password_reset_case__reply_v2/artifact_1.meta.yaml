@@ -1,7 +1,0 @@
-id: artifact_1
-name: reply_latency.samples_ms
-media_type: application/x.autobench.samples+yaml
-span_id: span_1
-tags:
-  profile: optimized
-payload_path: artifacts/run_0003_0002_password_reset_case__reply_v2/artifact_1.yaml

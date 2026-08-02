@@ -1,8 +1,0 @@
-record_version: 3
-experiment_id: exp_basic_ticket_routing_20260501T170128185127Z
-benchmark_id: basic-ticket-routing
-run_count: 8
-passed_count: 7
-failed_count: 1
-errored_count: 0
-skipped_count: 0

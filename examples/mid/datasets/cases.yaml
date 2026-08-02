@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../../schemas/0.1.0/dataset_schema.json
+dataset:
+  reply-cases:
+    version: "2026-08-02"
+    cases:
+      - id: cancellation
+        input:
+          question: How can I cancel my subscription?
+          required_phrase: account settings
+        expected:
+          success: true
+      - id: invoice
+        input:
+          question: Where can I download my invoice?
+          required_phrase: billing page
+        expected:
+          success: true
+      - id: password
+        input:
+          question: I forgot my password.
+          required_phrase: reset link
+        expected:
+          success: true

@@ -24,7 +24,9 @@ plugins:
             - src
 nav:
   - Overview: index.md
+  - Current Capabilities Guide: current-capabilities-guide.md
   - Getting Started: getting-started.md
+  - Examples: examples.md
   - Concepts: concepts.md
   - YAML Spec: yaml-spec.md
   - Python API: python-api.md

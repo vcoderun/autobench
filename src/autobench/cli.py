@@ -11,8 +11,6 @@ from autobench.records.recording import RecordingError, record_experiment
 from autobench.records.replay import replay_experiment
 from autobench.reports.exporting import (
     export_markdown_report,
-    export_png_report,
-    export_png_report_set,
     export_runs_csv,
     export_summary_yaml,
 )
@@ -22,15 +20,14 @@ from autobench.reports.rich import (
     render_experiment_result,
     render_export_preview,
     render_report,
-    render_saved_visualization,
     render_validation_summary,
 )
-from autobench.runtime.pipeline import ExperimentResult, run_benchmark_spec
+from autobench.runtime.pipeline import run_benchmark_spec
 from autobench.spec import collect_benchmark_source_files, load_benchmark_spec
 from autobench.spec import render_validation_summary as build_validation_summary
 
 _console = Console()
-_EXPORTERS = ("csv", "markdown", "png", "png-set", "yaml")
+_EXPORTERS = ("csv", "markdown", "yaml")
 
 
 @click.group()
@@ -77,27 +74,11 @@ def validate(spec_path: Path) -> None:
     default=False,
     help="Do not persist evidence for this run.",
 )
-@click.option(
-    "--save-png",
-    "png_path",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Save a Matplotlib PNG visualization for this run.",
-)
-@click.option(
-    "--save-png-dir",
-    "png_dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=None,
-    help="Save one PNG per configured visualization panel.",
-)
 def run(
     spec_path: Path,
     concurrency: int,
     record_path: Path | None,
     no_record: bool,
-    png_path: Path | None,
-    png_dir: Path | None,
 ) -> None:
     """Run a YAML Autobench spec."""
     try:
@@ -118,7 +99,12 @@ def run(
     if active_record_path is not None:
         try:
             source_files = list(collect_benchmark_source_files(spec_path))
-            record_experiment(result, active_record_path, source_files=source_files)
+            record_experiment(
+                result,
+                active_record_path,
+                source_files=source_files,
+                path_root=Path.cwd(),
+            )
         except RecordingError as exc:
             _console.print(f"[red]Recording failed:[/red] {exc}")
             raise SystemExit(1) from exc
@@ -129,56 +115,22 @@ def run(
         title="Benchmark Run Complete",
         record_path=active_record_path,
     )
-    _maybe_save_png(result, png_path)
-    _maybe_save_png_set(result, png_dir)
 
 
 @cli.command("replay")
 @click.argument("run_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option(
-    "--save-png",
-    "png_path",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Save a Matplotlib PNG visualization for this replayed experiment.",
-)
-@click.option(
-    "--save-png-dir",
-    "png_dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=None,
-    help="Save one PNG per configured visualization panel.",
-)
-def replay(run_dir: Path, png_path: Path | None, png_dir: Path | None) -> None:
+def replay(run_dir: Path) -> None:
     """Replay recorded YAML evidence without importing benchmark tasks."""
     result = replay_experiment(run_dir)
     render_experiment_result(_console, result, title="Replay Loaded")
-    _maybe_save_png(result, png_path)
-    _maybe_save_png_set(result, png_dir)
 
 
 @cli.command("report")
 @click.argument("run_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option(
-    "--save-png",
-    "png_path",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Save a Matplotlib PNG visualization for this report.",
-)
-@click.option(
-    "--save-png-dir",
-    "png_dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=None,
-    help="Save one PNG per configured visualization panel.",
-)
-def report(run_dir: Path, png_path: Path | None, png_dir: Path | None) -> None:
+def report(run_dir: Path) -> None:
     """Render the Rich terminal report from recorded evidence."""
     result = replay_experiment(run_dir)
     render_report(_console, build_report(result))
-    _maybe_save_png(result, png_path)
-    _maybe_save_png_set(result, png_dir)
 
 
 @cli.command("export")
@@ -204,10 +156,6 @@ def export(run_dir: Path, export_format: str, output_path: Path) -> None:
         export_runs_csv(result, output_path)
     elif export_format == "markdown":
         export_markdown_report(result, output_path)
-    elif export_format == "png":
-        export_png_report(result, output_path)
-    elif export_format == "png-set":
-        export_png_report_set(result, output_path)
     else:
         export_summary_yaml(result, output_path)
     render_export_preview(
@@ -238,21 +186,6 @@ def _print_spec_error(exc: SpecLoadError) -> None:
     if exc.line is not None and exc.column is not None:
         location = f" (line {exc.line}, column {exc.column})"
     _console.print(f"[red]Spec load failed:[/red] {exc}{location}")
-
-
-def _maybe_save_png(result: ExperimentResult, png_path: Path | None) -> None:
-    if png_path is None:
-        return
-    export_png_report(result, png_path)
-    render_saved_visualization(_console, output_path=png_path)
-
-
-def _maybe_save_png_set(result: ExperimentResult, png_dir: Path | None) -> None:
-    if png_dir is None:
-        return
-    exported_paths = export_png_report_set(result, png_dir)
-    for exported_path in exported_paths:
-        render_saved_visualization(_console, output_path=Path(exported_path))
 
 
 def main() -> int:

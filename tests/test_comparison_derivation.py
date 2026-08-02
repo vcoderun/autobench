@@ -263,12 +263,6 @@ def test_load_benchmark_spec_accepts_post_derive_and_report_config(tmp_path: Pat
                     fn: mean
               case_matrix:
                 semantic_type: performance.speedup
-              visuals:
-                - kind: leaderboard
-                  render_as: bar
-                  metric: avg_speedup
-                - kind: case_matrix
-                  render_as: heatmap
             policies:
               - name: minimum_speedup
                 metric: performance.speedup
@@ -289,8 +283,6 @@ def test_load_benchmark_spec_accepts_post_derive_and_report_config(tmp_path: Pat
     assert spec.post_derive[0].verdict.output.name == "latency_verdict"
     assert spec.reports.leaderboard.metrics[0].name == "avg_speedup"
     assert spec.reports.case_matrix.semantic_type == "performance.speedup"
-    assert spec.reports.visuals[0].kind == "leaderboard"
-    assert spec.reports.visuals[1].kind == "case_matrix"
     assert spec.policies[0].name == "minimum_speedup"
 
 

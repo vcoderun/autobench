@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/0.1.0/dataset_schema.json
+dataset:
+  support-tickets:
+    version: "2026-08-02"
+    metadata:
+      owner: support-platform
+    defaults:
+      tags:
+        - support
+    cases:
+      - id: refund-request
+        input:
+          subject: Refund for duplicate charge
+          customer_tier: standard
+        expected:
+          queue: billing
+      - id: locked-account
+        input:
+          subject: Cannot sign in after password reset
+          customer_tier: standard
+        expected:
+          queue: account
+      - id: enterprise-outage
+        input:
+          subject: Production API outage affecting every request
+          customer_tier: enterprise
+        expected:
+          queue: incident
