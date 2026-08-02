@@ -24,8 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "basedpyright",
-    "mkdocs",
-    "mkdocstrings[python]",
+    "mkdocstrings-python",
     "pre-commit",
     "pydantic>=2.7",
     "pytest",
@@ -33,13 +32,16 @@ dev = [
     "pytest-cov",
     "ruff",
     "ty",
+    "zensical",
 ]
 
 [project.scripts]
 autobench = "autobench.__main__:main"
 
 [project.urls]
+Documentation = "https://vcoderun.github.io/autobench/"
 Repository = "https://github.com/vcoderun/autobench"
+Changelog = "https://github.com/vcoderun/autobench/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]

@@ -3,7 +3,7 @@ GREEN := \033[1;32m
 RESET := \033[0m
 PYTHON_VERSIONS := 3.11.13 3.12.10 3.13.9
 
-.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs examples build release all prod pre-commit
+.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs docs-serve examples build release all prod pre-commit
 
 format:
 	@printf "$(BLUE)==>$(RESET) Formatting code with ruff...\n"
@@ -61,9 +61,13 @@ save-coverage:
 	@printf "$(GREEN)✔ Coverage summary written to COVERAGE.$(RESET)\n"
 
 docs:
-	@printf "$(BLUE)==>$(RESET) Building MkDocs site in strict mode...\n"
-	@uv run --extra dev mkdocs build --strict
+	@printf "$(BLUE)==>$(RESET) Building Zensical site in strict mode...\n"
+	@uv run --extra dev zensical build --clean --strict
 	@printf "$(GREEN)✔ Docs build complete.$(RESET)\n"
+
+docs-serve:
+	@printf "$(BLUE)==>$(RESET) Serving Zensical documentation...\n"
+	@uv run --extra dev zensical serve --open
 
 examples:
 	@printf "$(BLUE)==>$(RESET) Running offline examples end to end...\n"

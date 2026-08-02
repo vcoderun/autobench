@@ -86,8 +86,10 @@ Source coverage for `src/autobench` is enforced at `100%` line and branch covera
 
 ## Documentation
 
-The MkDocs site lives under `docs/` and can be built locally with:
+The documentation is published at [vcoderun.github.io/autobench](https://vcoderun.github.io/autobench/).
+It is built with Zensical's modern theme:
 
 ```bash
-uv run --extra dev mkdocs build --strict
+make docs
+make docs-serve
 ```

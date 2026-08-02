@@ -19,8 +19,10 @@ uv sync --extra dev
 ## Common Commands
 
 - `make format`: run `ruff format`
-- `make check`: run `ruff check` and `basedpyright`
+- `make check`: run `ruff`, `ty`, and `basedpyright`
 - `make tests`: run the test suite
+- `make docs`: build the Zensical documentation in strict mode
+- `make docs-serve`: preview the documentation locally
 - `make pre-commit`: run pre-commit hooks across the repository
 
 ## Pre-commit
@@ -42,11 +44,11 @@ uv run --extra dev pre-commit run --all-files
 1. Sync dependencies with `uv sync --extra dev`.
 2. Make your change.
 3. Run `make format`.
-4. Run `make check`.
-5. Run `make tests`.
+4. Run `make prod`.
+5. Run `make pre-commit`.
 
 ## Notes
 
 - Prefer `uv run ...` over ad hoc environment activation.
 - Keep core generic and move domain-specific logic into examples or adapters.
-- Preserve compatibility with the `src/` layout and the phase plan in `docs/`.
+- Preserve compatibility with the `src/` layout and documented public contracts.

@@ -2,6 +2,14 @@
 
 ## Install
 
+Install the released package in an application:
+
+```bash
+uv add autobench
+```
+
+For repository development and the bundled examples:
+
 ```bash
 uv sync --extra dev
 ```
@@ -57,3 +65,9 @@ make examples
 
 `make prod` covers tests, `100%` source line and branch coverage, formatting checks, linting,
 typing, docs, the Python validation matrix, and all offline examples.
+
+Preview the documentation while editing:
+
+```bash
+make docs-serve
+```

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Migrated the documentation build and GitHub Pages deployment to Zensical.
+
 ## 0.1.0
 
 - Added the YAML-first benchmark DSL and typed Python runtime.
