@@ -5,6 +5,7 @@
 - Migrated the documentation build and GitHub Pages deployment to Zensical.
 - Expanded the documentation to cover Autobench's complete public feature set.
 - Replaced top-level navigation tabs with a persistent vertical documentation menu.
+- Added `llms.txt`, `llms-full.txt`, and a Copy as Markdown action to every documentation page.
 
 ## 0.1.0
 

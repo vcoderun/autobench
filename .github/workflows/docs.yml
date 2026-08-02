@@ -7,8 +7,11 @@ on:
       - main
     paths:
       - ".github/workflows/docs.yml"
+      - "Makefile"
       - "docs/**"
       - "examples/**"
+      - "overrides/**"
+      - "scripts/llms.py"
       - "src/**"
       - "mkdocs.yml"
       - "pyproject.toml"
@@ -34,7 +37,7 @@ jobs:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       - run: uv sync --extra dev --frozen
-      - run: uv run zensical build --clean --strict
+      - run: make docs
       - name: Publish generated site branch
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:

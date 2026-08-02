@@ -3,7 +3,7 @@ GREEN := \033[1;32m
 RESET := \033[0m
 PYTHON_VERSIONS := 3.11.13 3.12.10 3.13.9
 
-.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs docs-serve examples build release all prod pre-commit
+.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs-llms docs docs-serve examples build release all prod pre-commit
 
 format:
 	@printf "$(BLUE)==>$(RESET) Formatting code with ruff...\n"
@@ -60,12 +60,19 @@ save-coverage:
 	@uv run --extra dev python scripts/save_coverage_summary.py
 	@printf "$(GREEN)✔ Coverage summary written to COVERAGE.$(RESET)\n"
 
+docs-llms:
+	@printf "$(BLUE)==>$(RESET) Generating LLM documentation bundle...\n"
+	@uv run --extra dev python scripts/llms.py --write
+	@printf "$(GREEN)✔ LLM documentation bundle generated.$(RESET)\n"
+
 docs:
+	@uv run --extra dev python scripts/llms.py --check
+	@uv run --extra dev python scripts/llms.py --stage
 	@printf "$(BLUE)==>$(RESET) Building Zensical site in strict mode...\n"
 	@uv run --extra dev zensical build --clean --strict
 	@printf "$(GREEN)✔ Docs build complete.$(RESET)\n"
 
-docs-serve:
+docs-serve: docs
 	@printf "$(BLUE)==>$(RESET) Serving Zensical documentation...\n"
 	@uv run --extra dev zensical serve --open
 

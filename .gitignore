@@ -60,6 +60,7 @@ coverage.txt
 /docs/plans/
 /docs/plans.md
 /docs/*-plan.md
+/docs/_markdown/
 /mocks/
 
 # Generated benchmark evidence

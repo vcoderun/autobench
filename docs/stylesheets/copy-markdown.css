@@ -1,0 +1,29 @@
+button[data-md-copy-markdown] {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+button[data-md-copy-markdown]:disabled {
+  cursor: wait;
+}
+
+button[data-md-copy-markdown][data-md-copy-markdown-state="copied"] {
+  color: var(--md-accent-fg-color);
+}
+
+button[data-md-copy-markdown][data-md-copy-markdown-state="failed"] {
+  color: var(--md-typeset-del-color);
+}
+
+.md-copy-markdown__status {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

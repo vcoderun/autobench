@@ -60,6 +60,7 @@ exclude = [
     "/autobench-opus-export-final",
     "/COVERAGE",
     "/docs/*-plan.md",
+    "/docs/_markdown",
     "/docs/plans",
     "/docs/plans.md",
     "/mocks",
