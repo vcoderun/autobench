@@ -39,9 +39,8 @@ theme:
     - navigation.instant
     - navigation.instant.progress
     - navigation.tracking
-    - navigation.tabs
-    - navigation.tabs.sticky
     - navigation.sections
+    - navigation.expand
     - navigation.path
     - navigation.top
     - toc.follow
@@ -68,12 +67,20 @@ plugins:
             - src
 nav:
   - Home: index.md
-  - Guide:
+  - Start:
       - Getting Started: getting-started.md
-      - Concepts: concepts.md
       - Examples: examples.md
-      - Current Capabilities: current-capabilities-guide.md
+      - Complete Feature Guide: current-capabilities-guide.md
+  - Foundations:
+      - Capability Map: capabilities.md
+      - Core Concepts: concepts.md
+      - Datasets And Variants: datasets-and-variants.md
+      - Tasks And Runtime: tasks-and-runtime.md
+      - Observations And Semantics: observations-and-semantics.md
   - Workflows:
+      - Instrumentation And Traces: instrumentation-and-traces.md
+      - Asset Tracking: asset-tracking.md
+      - Agentic Evaluation: agentic-evaluation.md
       - Scoring And Derivation: scoring-and-derivation.md
       - Recording And Reporting: recording-and-reporting.md
       - CLI: cli.md

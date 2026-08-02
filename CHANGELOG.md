@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Migrated the documentation build and GitHub Pages deployment to Zensical.
+- Expanded the documentation to cover Autobench's complete public feature set.
+- Replaced top-level navigation tabs with a persistent vertical documentation menu.
 
 ## 0.1.0
 

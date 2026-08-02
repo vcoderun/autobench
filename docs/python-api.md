@@ -1,6 +1,8 @@
 # Python API
 
-Autobench also exposes a small programmatic builder.
+Autobench exposes typed models and functions for every core layer. The `Benchmark` builder is a
+compact convenience API; direct `BenchmarkSpec` construction provides the complete configuration
+surface.
 
 ## Builder Example
 
@@ -34,6 +36,30 @@ result = (
     )
     .run()
 )
+```
+
+Builder methods cover description, dataset, variants, task, scoring, per-run derivation, spec
+compilation, and sync/async execution. `to_spec()` returns the canonical `BenchmarkSpec`.
+
+For post-derivation, policies, report configuration, or a custom semantic registry, construct or
+update the typed spec before calling `run_benchmark_spec`:
+
+```python
+from autobench import BenchmarkSpec, PolicySpec, run_benchmark_spec
+
+spec = BenchmarkSpec.model_validate(payload)
+spec = spec.model_copy(
+    update={
+        "policies": [
+            PolicySpec(
+                name="quality-gate",
+                metric="quality.correctness",
+                must_greater_equal=0.9,
+            )
+        ]
+    }
+)
+result = await run_benchmark_spec(spec, concurrency_limit=4)
 ```
 
 ## Task Signature
@@ -108,3 +134,75 @@ Case(
 ```
 
 External framework traces can be attached with `TraceEnvelope`, and Pydantic AI usage can be recorded through `PydanticAIUsage` without making either OpenTelemetry or Pydantic AI a core dependency.
+
+## Programmatic Layers
+
+| Layer | Primary APIs |
+| --- | --- |
+| Data | `Case`, `CaseDefaults`, `DatasetSpec`, `Variant`, `FactorValue` |
+| Spec | `BenchmarkInfo`, `BenchmarkSpec`, `TaskSpec`, `load_benchmark_spec`, `build_benchmark_plan` |
+| Runtime | `RunContext`, `Span`, `run_benchmark_spec`, `run_benchmark_path`, `expand_matrix` |
+| Evidence | `Observation`, `ObservationQuery`, `SemanticRegistry`, projection helpers |
+| Scoring | built-in scorer models, `ScoringCall`, `ScoreRecord`, `SpanSelector` |
+| Derivation | token cost, pricing models, paired-baseline derivation, policies, measurement |
+| Tracking | `track`, `TrackingRegistry`, tracked asset models and YAML views |
+| Records | `record_experiment`, record loaders, `replay_experiment`, environment capture |
+| Reports | report models, builders, comparison, aggregation, rendering, and exporters |
+| Feedback | `build_feedback_records`, `build_optimization_feedback_input` |
+
+## Loading And Running YAML
+
+```python
+from pathlib import Path
+
+from autobench import load_benchmark_spec, run_benchmark_path
+
+spec = load_benchmark_spec(Path("autobench.yaml"))
+result = await run_benchmark_path(
+    Path("autobench.yaml"),
+    experiment_id="candidate-42",
+    concurrency_limit=4,
+)
+```
+
+`load_benchmark_spec` supports authoring DSL and normalized model shapes. It merges custom semantic
+registries with built-ins and resolves file-backed datasets and pricing relative to the spec.
+
+## Recording And Replay
+
+```python
+from pathlib import Path
+
+from autobench import record_experiment, replay_experiment
+
+record_experiment(result, Path("runs/candidate-42"))
+replayed = replay_experiment(Path("runs/candidate-42"))
+```
+
+Replay returns normal runtime result models but never imports the task target.
+
+## Reports And Exports
+
+```python
+from pathlib import Path
+
+from autobench import build_report, export_runs_csv, export_summary_yaml
+
+report = build_report(replayed)
+export_summary_yaml(replayed, Path("analysis/summary.yaml"))
+export_runs_csv(replayed, Path("analysis/runs.csv"))
+```
+
+Report builders can also be called independently: `build_leaderboard`, `build_case_matrix`,
+`compare_variants`, `build_metric_distribution`, and `build_run_metric_rows`.
+
+## Extension Rules
+
+- Keep application execution in tasks.
+- Use custom Python scorers for domain evaluation, returning `ScoreRecord`.
+- Register domain semantics rather than overloading generic names.
+- Use adapters to convert external traces or usage into Autobench evidence.
+- Store large native payloads as artifacts.
+- Do not mutate recorded evidence; produce a new derived experiment or export.
+
+The complete signatures and model fields are available in [API Reference](api-reference.md).

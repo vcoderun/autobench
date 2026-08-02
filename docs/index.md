@@ -41,33 +41,44 @@ Most benchmark codebases keep re-implementing the same machinery:
 
 Autobench provides those utilities as framework primitives so users describe the benchmark instead of rebuilding the runner.
 
-## What 0.1.0 Ships
+## What Autobench Owns
 
-- YAML-first benchmark specs
-- cases, datasets, variants, and factors
-- sync and async Python task execution
-- semantic observations, spans, and artifacts
-- output, pass/fail, exact, schema, and Python scorers
-- token-cost derivation
-- paired-baseline post-derivation
-- policies, replay, export, and comparison
-- Rich terminal reports and YAML, CSV, and Markdown exports
-- tracked prompt, tool, type, and configuration assets
+Autobench is more than a matrix runner. It owns the evidence lifecycle from benchmark definition
+to optimization-ready records:
+
+| Layer | Capabilities |
+| --- | --- |
+| Definition | YAML DSL, Python builder, datasets, case defaults, variants, factors, schema hints |
+| Execution | deterministic matrix planning, sync/async tasks, concurrency, failure isolation, progress events |
+| Evidence | semantic observations, spans, artifacts, checks, diagnostics, errors, trace envelopes |
+| Evaluation | six scorer kinds, expected-action evaluation, policies, metric packs, custom scorers |
+| Derivation | token cost, tiered pricing, paired baselines, verdicts, measurement statistics |
+| Lineage | prompt/tool/type/config tracking, structured schemas, source hashes, versions, diffs |
+| Persistence | immutable YAML RunRecords, source hashes, environment metadata, portable artifacts |
+| Analysis | replay, Rich reports, leaderboards, case matrices, comparisons, distributions, exports |
+| Optimization | compact feedback records and semantic evidence for pydantic-gepa and autoptimize |
+
+See the [Capability Map](capabilities.md) for the complete feature inventory and ownership
+boundaries.
 
 ## Choose A Path
 
 | Goal | Start here |
 | --- | --- |
 | Run the smallest complete benchmark | [Getting Started](getting-started.md) |
-| Learn the evidence model | [Concepts](concepts.md) |
+| See everything Autobench supports | [Capability Map](capabilities.md) |
+| Learn the evidence model | [Core Concepts](concepts.md) |
 | Adapt a working integration | [Examples](examples.md) |
 | Define a benchmark declaratively | [YAML Spec](yaml-spec.md) |
-| Build custom tasks and scorers | [Python API](python-api.md) |
+| Instrument an existing application | [Instrumentation And Traces](instrumentation-and-traces.md) |
+| Track prompts, tools, and schemas | [Asset Tracking](asset-tracking.md) |
+| Evaluate agent behavior | [Agentic Evaluation](agentic-evaluation.md) |
 | Replay and compare recorded evidence | [Recording And Reporting](recording-and-reporting.md) |
 
 ## Start Here
 
 - [Getting Started](getting-started.md)
+- [Capability Map](capabilities.md)
 - [Examples](examples.md)
 - [YAML Spec](yaml-spec.md)
 - [Python API](python-api.md)

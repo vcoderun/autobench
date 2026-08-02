@@ -4,6 +4,111 @@ Autobench is YAML-first. Python builders compile to the same internal `Benchmark
 Every YAML file written by Autobench includes a `yaml-language-server` schema header that points
 to the versioned schema cache under `~/.autobench/<version>/schemas/`.
 
+## Authoring Sections
+
+The authoring DSL places the benchmark ID under `benchmark` and keeps all behavior inside that
+named benchmark:
+
+| Section | Required | Purpose |
+| --- | --- | --- |
+| `description` | No | Human-readable benchmark intent |
+| `dataset` | Yes | Inline or file-backed cases, defaults, version, and metadata |
+| `run` | For execution | Python task target |
+| `variants` | Yes | Named factor combinations |
+| `score` | No | Built-in or Python scorers |
+| `derive` | No | Per-run semantic derivation such as token cost |
+| `post_derive` | No | Cross-run derivation such as paired baseline |
+| `policies` | No | Semantic metric constraints |
+| `report` | No | Leaderboard, matrix, comparisons, and distributions |
+| `semantic_registry` | No | Custom semantic definitions and aliases |
+
+## Complete Authoring Example
+
+```yaml
+# yaml-language-server: $schema=./schemas/0.1.0/benchmark_schema.json
+benchmark:
+  support-routing:
+    description: Compare current and candidate routing behavior.
+    dataset:
+      source: file://datasets/cases.yaml
+      version: v2
+      defaults:
+        tags: [regression]
+    run:
+      python: benchmark_tasks:run_case
+    variants:
+      baseline:
+        factors:
+          model:
+            value: openai:gpt-4.1-mini
+            semantic: llm.model.name
+          prompt_version:
+            value: route-v3
+            semantic: prompt.version
+            optimize: true
+      candidate:
+        factors:
+          model:
+            value: openai:gpt-4.1-mini
+            semantic: llm.model.name
+          prompt_version:
+            value: route-v4
+            semantic: prompt.version
+            optimize: true
+    score:
+      route_correctness:
+        exact:
+          actual: output.route
+          expected: case.expected.route
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+      success:
+        pass: output.ok
+        semantic: result.success
+        role: constraint
+    derive:
+      - kind: token_cost
+        pricing: file://pricing/models.yaml
+        output:
+          name: request_cost
+          semantic_type: money.cost
+          unit: usd
+          direction: minimize
+          role: constraint
+    policies:
+      - name: must-succeed
+        metric: result.success
+        must_equal: true
+    report:
+      leaderboard:
+        show:
+          accuracy:
+            metric: quality.correctness
+            aggregate: ratio_true
+          total_cost:
+            metric: money.cost
+            aggregate: sum
+      matrix:
+        metric: quality.correctness
+      compare:
+        baseline -> candidate:
+          show:
+            accuracy:
+              metric: quality.correctness
+              aggregate: ratio_true
+```
+
+## Resolution Rules
+
+- File references resolve relative to the benchmark YAML.
+- Python targets use `module:callable` and receive inferred search paths from the spec directory.
+- Duplicate case and variant IDs are validation errors.
+- A nonempty runnable matrix requires a task.
+- Scorer definitions must select exactly one scoring action.
+- Remote file references are rejected; price-source URL loading is an explicit integration API.
+- Custom semantics should be declared in the semantic registry.
+
 ## Shape
 
 ```yaml
