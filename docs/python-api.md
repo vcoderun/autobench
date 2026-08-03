@@ -142,6 +142,7 @@ External framework traces can be attached with `TraceEnvelope`, and Pydantic AI 
 | Data | `Case`, `CaseDefaults`, `DatasetSpec`, `Variant`, `FactorValue` |
 | Spec | `BenchmarkInfo`, `BenchmarkSpec`, `TaskSpec`, `load_benchmark_spec`, `build_benchmark_plan` |
 | Runtime | `RunContext`, `Span`, `run_benchmark_spec`, `run_benchmark_path`, `expand_matrix` |
+| Native instrumentation | typed integration settings, `InstrumentationManager`, registry status, compatibility diagnostics |
 | Evidence | `Observation`, `ObservationQuery`, `SemanticRegistry`, projection helpers |
 | Scoring | built-in scorer models, `ScoringCall`, `ScoreRecord`, `SpanSelector` |
 | Derivation | token cost, pricing models, paired-baseline derivation, policies, measurement |
@@ -195,6 +196,49 @@ export_runs_csv(replayed, Path("analysis/runs.csv"))
 
 Report builders can also be called independently: `build_leaderboard`, `build_case_matrix`,
 `compare_variants`, `build_metric_distribution`, and `build_run_metric_rows`.
+
+## Typed Native Instrumentation
+
+Activate every compatible built-in integration available in the current environment:
+
+```python
+from autobench import Benchmark
+
+benchmark = Benchmark("chat").instrument_all(
+    exclude={"httpx"},
+    strict=False,
+)
+```
+
+Discovery skips unavailable integrations and records why on each run. `strict=True` turns the
+first unavailable or unsupported selected integration into an `InstrumentationError`. Explicit
+typed settings and custom runtime instrumentors take precedence over their discovered equivalent.
+
+Configure individual integrations when capture settings must be controlled directly:
+
+```python
+from autobench import (
+    Benchmark,
+    HTTPXCaptureSettings,
+    HTTPXInstrumentation,
+    OpenAIInstrumentation,
+    instrumentor_statuses,
+)
+
+benchmark = Benchmark("chat").instrument(
+    OpenAIInstrumentation(),
+    HTTPXInstrumentation(
+        capture=HTTPXCaptureSettings(path="hash", response_headers=("x-request-id",))
+    ),
+)
+
+for status in instrumentor_statuses():
+    print(status.name, status.compatibility.status)
+```
+
+Settings are part of `BenchmarkSpec` and round-trip through the YAML DSL. Custom `Instrumentor`
+instances can use the same fluent method but remain runtime-only. See
+[Native Instrumentation](native-instrumentation.md).
 
 ## Extension Rules
 

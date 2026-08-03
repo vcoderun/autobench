@@ -12,8 +12,11 @@ from autobench.metrics.observations import (
     ObservationSource,
 )
 from autobench.metrics.semantics import Semantic
+from autobench.protocol.traces import Trace
 from autobench.records.artifacts import ArtifactRef
 from autobench.runtime.context import RunContext, SpanKind, SpanRecord
+
+TRACE_RECORD_VERSION = 1
 
 
 class TraceEnvelope(BaseModel):
@@ -200,8 +203,71 @@ def _trace_event(
     )
 
 
+def trace_to_yaml_view(
+    trace: Trace,
+    *,
+    extensions: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = trace.model_dump(mode="json")
+    if extensions:
+        payload["extensions"] = extensions
+    return {
+        "record": {"type": "trace", "version": TRACE_RECORD_VERSION},
+        "trace": payload,
+    }
+
+
+def trace_payload_from_yaml_view(raw: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    record = raw.get("record")
+    payload = (
+        raw.get("trace") if isinstance(record, dict) and record.get("type") == "trace" else raw
+    )
+    if not isinstance(payload, dict):
+        raise ValueError("trace must be a mapping")
+
+    trace_payload = dict(payload)
+    extensions = trace_payload.pop("extensions", {})
+    if not isinstance(extensions, dict):
+        raise ValueError("trace.extensions must be a mapping")
+    extensions = dict(extensions)
+    known_fields = set(Trace.model_fields)
+    for key in tuple(trace_payload):
+        if key not in known_fields:
+            extensions[key] = trace_payload.pop(key)
+    return trace_payload, extensions
+
+
+def trace_yaml_schema() -> dict[str, Any]:
+    trace_schema = Trace.model_json_schema(ref_template="#/$defs/{model}")
+    definitions = trace_schema.pop("$defs", {})
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Autobench ABP Trace YAML",
+        "type": "object",
+        "required": ["record", "trace"],
+        "properties": {
+            "record": {
+                "type": "object",
+                "required": ["type", "version"],
+                "properties": {
+                    "type": {"const": "trace"},
+                    "version": {"const": TRACE_RECORD_VERSION},
+                },
+                "additionalProperties": False,
+            },
+            "trace": trace_schema,
+        },
+        "$defs": definitions,
+        "additionalProperties": False,
+    }
+
+
 __all__ = (
+    "TRACE_RECORD_VERSION",
     "TraceEnvelope",
     "attach_trace",
+    "trace_payload_from_yaml_view",
     "trace_to_observations",
+    "trace_to_yaml_view",
+    "trace_yaml_schema",
 )

@@ -238,6 +238,76 @@ external CodeMode runtime, an `OPENROUTER_API_KEY`, and network access.
 CodeMode-specific calls remain in the example task. Autobench core only owns the generic dataset,
 variant, task, observation, artifact, scoring, recording, replay, and reporting seams.
 
+## Pydantic AI
+
+```bash
+uv sync --extra instrumentation
+export OPENROUTER_API_KEY=...
+export OPENROUTER_MODEL=openai/gpt-4.1-mini
+uv run python examples/pydantic_ai/openrouter_instrument_all.py \
+  --record /tmp/autobench-openrouter
+```
+
+This live benchmark makes a real OpenRouter request through Pydantic AI's OpenAI-compatible model.
+It uses a tracked prompt, a catalog tool, streaming execution, and structured Pydantic output.
+`Benchmark.instrument_all()` discovers Pydantic AI, OpenAI, and HTTPX automatically, producing a
+layered framework/client/transport trace plus semantic token, model, latency, tool, validation,
+streaming, HTTP, scoring, and asset-version evidence. The task contains no manual `ctx.span()` or
+`ctx.metric()` calls. The complete experiment is recorded as replayable YAML under the supplied
+directory.
+
+`agent_benchmark.py` remains the provider-neutral variant for any configured Pydantic AI model.
+
+## ABP Manual And Method
+
+```bash
+uv run autobench run examples/abp_manual/autobench.yaml --record /tmp/abp-manual
+```
+
+Combines a manual workflow span with automatic `TicketRouter.route` instrumentation. The method
+instrumentor emits a nested span, one metric, and one factor while preserving the method signature
+and result.
+
+## ABP Concurrent
+
+```bash
+uv run autobench run examples/abp_concurrent/autobench.yaml --concurrency 2 \
+  --record /tmp/abp-concurrent
+```
+
+Runs asynchronous worker siblings under a workflow span. It demonstrates task-local ABP context,
+correct sibling parentage, and concurrent benchmark matrix execution.
+
+## OpenAI Streaming
+
+```bash
+uv sync --extra instrumentation
+uv run python examples/abp_openai/run_openai_streaming.py
+```
+
+Uses the official OpenAI client with a real streaming parser and an offline HTTPX mock transport.
+The resulting trace contains client and transport spans, first-chunk evidence, and normal stream
+completion without network access or credentials.
+
+## OpenAI Agents
+
+```bash
+uv sync --extra openai-agents
+uv run python examples/abp_openai_agents/run_openai_agents.py
+```
+
+Runs a real OpenAI Agents workflow, function span, and custom span through the native trace
+processor. No model or network call is required.
+
+## Replay And Extraction
+
+```bash
+uv run python examples/abp_replay/replay_and_extract.py /tmp/recorded-experiment
+```
+
+Loads each recorded RunRecord and creates an immutable extraction-derived record with signal, span,
+and usage observations. The script imports no provider SDK.
+
 ---
 
 ## Complete Feature Guide
@@ -766,7 +836,7 @@ Autobench tarafindan yazilan YAML'lar schema header alir. Schema cache path'i
 Autobench versiyonuna baglidir:
 
 ```yaml
-# yaml-language-server: $schema=/Users/you/.autobench/0.1.0/schemas/benchmark_schema.json
+# yaml-language-server: $schema=/Users/you/.autobench/0.2.0/schemas/benchmark_schema.json
 ```
 
 Bu sayede editor tarafinda auto-completion hedeflenir.
@@ -2657,24 +2727,24 @@ handle = instrument_method(
         InstrumentMetricSpec(
             name="input_tokens",
             semantic_type=Semantic.LLM_TOKENS_INPUT,
-            extractor=lambda call: call.result["usage"]["input_tokens"],
+            value_path="result.usage.input_tokens",
         ),
         InstrumentMetricSpec(
             name="output_tokens",
             semantic_type=Semantic.LLM_TOKENS_OUTPUT,
-            extractor=lambda call: call.result["usage"]["output_tokens"],
+            value_factory=lambda call: call.result["usage"]["output_tokens"],
         ),
     ],
     factors=[
         InstrumentFactorSpec(
             name="model",
             semantic_type=Semantic.LLM_MODEL_NAME,
-            extractor=lambda call: call.result["usage"]["model"],
+            value_path="result.usage.model",
         ),
         InstrumentFactorSpec(
             name="provider",
             semantic_type=Semantic.LLM_PROVIDER,
-            extractor=lambda call: call.result["usage"]["provider"],
+            value_path="result.usage.provider",
         ),
     ],
 )
@@ -2692,6 +2762,15 @@ Autobench pipeline calisirken active `RunContext` contextvar olarak set edilir.
 Instrumented method cagrildiginda metric/factor observation'lari aktif ctx'e
 yazilir.
 
+`value_factory` Python API'deki typed callback seam'idir. `value_path` ise
+mapping key, attribute ve sifir argumanli accessor zincirlerini declarative
+olarak cozer. YAML tarafinda arbitrary expression calistirilmaz.
+
+Method wrapper instance/static/class/inherited method'lari, sync/async call'lari,
+generator ve async generator stream'lerini ve sync/async context manager'lari
+destekler. Stream span'i iterator olusturulunca degil gercekten bittiginde,
+hata verdiginde veya erken kapandiginda kapanir.
+
 Handle kapatma:
 
 ```python
@@ -2707,6 +2786,94 @@ with instrument_method(LLMClient, "complete", metrics=[...]):
 
 Not: Bu OTel degildir. Autobench'in kendi lightweight instrumentation
 yuzeyidir. OTel/Logfire bridge future plan olarak dusunulur.
+
+Reusable entegrasyonlar `InstrumentorInfo`, `Compatibility`, `Instrumentor`,
+`InstrumentationRuntime` ve `InstrumentationManager` kontratini kullanir.
+Manager package version'ini hook/patch kurmadan once denetler, duplicate
+install'lari reference count ile birlestirir ve son handle kapandiginda native
+callback'i veya exact descriptor'u restore eder. Task-local
+`suppress_instrumentation("family")` sadece eslesen instrumentor/family'yi
+gecici olarak susturur.
+
+### 20.1 Native instrumentor DSL ve doctor
+
+Pydantic AI, OpenAI client, OpenAI Agents ve HTTPX instrumentor'lari typed
+Python ayarlariyla veya benchmark YAML icinden secilebilir:
+
+```yaml
+instrumentation:
+  all:
+    exclude: [httpx]
+    strict: false
+  pydantic_ai: {}
+  openai: {}
+  httpx:
+    capture:
+      path: hash
+      response_headers: [x-request-id]
+```
+
+Python builder'da ortamdaki tum kurulu ve uyumlu built-in entegrasyonlar
+`Benchmark.instrument_all()` ile acilir. `exclude` discovery alanini daraltir;
+`strict=True` kurulamayan ilk entegrasyonda hata verir. Default mod kurulamayan
+entegrasyonu atlar ve nedenini her run'a diagnostic evidence olarak yazar.
+Explicit config, `false` dahil, discovery sonucunu override eder; ayni ID'ye
+sahip custom runtime instrumentor da otomatik kurulumu engeller.
+
+Tekil config `Benchmark.instrument(...)` ile verilir. Ayarlar
+`BenchmarkSpec` icinde serialize edilir; custom `Instrumentor` instance'lari
+ayni method'dan gecse de runtime-only kalir. Pipeline instrumentor'lari tum
+matrix'ten once kurar ve hata halinde de kapatir.
+
+`autobench instrumentation doctor` kurulu/eksik extra'lari, version
+uyumlulugunu, layer/mechanism'i, sync/async/streaming capability'lerini,
+semantic aileleri ve capture default'larini Rich tablolarla gosterir. Eksik
+SDK import edilmez. `autobench instrumentation trace RUN_DIR` ise provider SDK
+ve task import etmeden recorded ABP trace composition ve partial state'i
+gosterir.
+
+HTTPX default'u body ve header toplamaz; path hash'lenir. Secret header/body
+alanlari explicit capture'da bile redact edilir ve body capture bounded'dir.
+Pydantic AI -> OpenAI -> HTTPX layer'lari parent-child olarak compose edilir;
+transport token/cost uretmez ve aggregate/direct accounting double count'i
+engeller.
+
+Detayli kontrat: [Native Instrumentation](native-instrumentation.md).
+
+### 20.2 ABP trace extraction ve accounting
+
+Instrumentor ham ABP fact'lerini toplar; extractor tamamlanmis immutable
+trace'ten tekrar kullanilabilir semantic evidence uretir:
+
+```python
+from autobench import CompositeExtractor, SignalExtractor, SpanExtractor, UsageExtractor
+
+extractor = CompositeExtractor(
+    SignalExtractor(),
+    SpanExtractor(),
+    UsageExtractor(),
+)
+```
+
+- `SignalExtractor`: measurement/event observation'larini scope, layer,
+  instrumentor ve logical operation provenance'i ile geri kurar.
+- `SpanExtractor`: direct span latency, operation count, max depth/fan-out,
+  critical path, parallelism, incomplete work, retry/recovery, validation,
+  approval, tool ve reference metric'lerini uretir.
+- `UsageExtractor`: LLM request/token accounting'i ile requested model,
+  response model ve provider factor'lerini uretir. Cost uretmez; cost mevcut
+  pricing deriver'inin sorumlulugudur.
+
+Parent aggregate ile child direct usage toplanmaz. Her semantic icin tek
+abstraction boundary secilir; logical operation ID'si ayni olan direct
+olcumler deduplicate edilir. Esdeger direct degerler cakisiyor ve unique bir
+authority yoksa total uydurulmaz, `ambiguous_direct_measurement` diagnostic'i
+uretilir. Aggregate deger direct toplamla uyusmazsa
+`aggregate_measurement_mismatch` kaydedilir.
+
+Extractor isim ve version'a sahiptir. `replay_extraction()` yeni bir derived
+RunRecord yazar; ayni extractor'in yeni version'i onceki observation'lari yeni
+derived record'da degistirir ve parent lineage'i korur.
 
 ---
 
@@ -3115,7 +3282,12 @@ Bir run record kabaca soyle gorunur:
 ```yaml
 record:
   type: run
-  version: 3
+  version: 4
+
+protocol:
+  name: abp
+  version: 1
+  semantic_registry: 1
 
 run:
   id: run_refund_request_route_v2
@@ -3785,6 +3957,11 @@ See [Tasks And Runtime](tasks-and-runtime.md).
 See [Observations And Semantics](observations-and-semantics.md) and
 [Instrumentation And Traces](instrumentation-and-traces.md).
 
+Native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX integrations can be selected through typed
+Python settings or the YAML `instrumentation` section. They emit ABP directly, compose across
+framework/client/transport layers, preserve streaming lifecycle, and remain optional for replay.
+See [Native Instrumentation](native-instrumentation.md).
+
 ## Scoring And Constraints
 
 | Scorer | Purpose |
@@ -4305,13 +4482,15 @@ framework whether those values share meaning.
 
 | Family | Examples |
 | --- | --- |
-| LLM | `llm.tokens.input`, `llm.tokens.output`, `llm.model.name`, `llm.provider`, `llm.temperature` |
+| LLM | `llm.tokens.input`, `llm.tokens.output`, `llm.request.count`, `llm.model.requested`, `llm.model.response`, `llm.provider.name` |
 | Cost | `money.cost`, `serving.cost`, `optimization.cost`, `lifetime.cost` |
-| Time | `time.latency` |
+| Time | `time.latency`, `time.first_chunk`, `time.critical_path` |
 | Result | `result.success` |
 | Quality | `quality.score`, `quality.correctness`, `coverage.ratio` |
 | Agent | task completion, plan quality/adherence, step efficiency, tool selection/arguments/sequence, output correctness |
 | Assets | `prompt.version`, `agent.tool.version`, `agent.version`, `dataset.version` |
+| Operations | count, maximum depth/fan-out, incomplete work, parallelism, retries, recovered retries, first-attempt success |
+| Workflow | validation failures, approval count/wait, tool-call success/failure, message growth, evidence-reference counts |
 
 `Semantic` exposes completion-friendly constants. `SemanticType` remains extensible so domain
 metrics can use names such as `retrieval.recall` or `business.conversion`.
@@ -4351,7 +4530,10 @@ optimization direction because they are not outcomes.
 
 The same semantic metric can be emitted by a task, scorer, deriver, policy, or adapter. Raw
 observations are never discarded. Projection chooses a canonical value using explicit source
-priority; equal-priority duplicates are marked ambiguous instead of silently picking one.
+priority and ABP accounting scope. A derived aggregate summary is preferred to same-source direct
+measurements for single-value reporting, while direct observations remain queryable. Logical
+operation IDs correlate equivalent framework/client evidence; equal-priority disagreements are
+marked ambiguous instead of silently picking one.
 
 Use `ObservationQuery` for raw or projected lookup and `filter_observations` for selectors such as
 semantic type, role, source, or span.
@@ -4378,156 +4560,6 @@ A `MetricPack` bundles reusable semantic defaults without forcing every metric i
 Built-in packs cover `agentic`, `structured_output`, `llm_usage`, and `performance`. Applications
 can register their own packs through `MetricPackRegistry` while keeping the RunRecord contract
 unchanged.
-
----
-
-## Instrumentation And Traces
-
-Canonical page: https://vcoderun.github.io/autobench/instrumentation-and-traces/
-
-# Instrumentation And Traces
-
-Autobench supports three collection styles that can be mixed in one run:
-
-1. Explicit `RunContext` and `Span` calls inside a task.
-2. Lightweight method instrumentation for existing application classes.
-3. Trace-envelope adapters for an external agent or workflow runtime.
-
-OpenTelemetry is not a core dependency. Future OTLP bridges can export Autobench spans, but the
-evidence model remains owned by Autobench.
-
-## Manual Spans
-
-```python
-from autobench import DurationMetricSpec, Semantic, SpanKind
-
-
-def run_case(ctx, case):
-    with ctx.span(
-        "support_agent",
-        kind=SpanKind.AGENT,
-        input=case.input,
-        duration_metric=DurationMetricSpec(
-            name="agent_latency",
-            semantic_type=Semantic.TIME_LATENCY,
-            unit="ms",
-        ),
-    ) as agent:
-        result = call_agent(case.input)
-        agent.set_output(result)
-        agent.outcome(result["ok"])
-        return result
-```
-
-Span duration is calculated when the context manager closes. Nested spans preserve parent-child
-relationships and retain evidence emitted before an exception.
-
-## Span Kinds
-
-`SpanKind` includes:
-
-- agent
-- LLM
-- tool
-- retriever
-- parser
-- workflow
-- custom
-
-Kinds are semantic selectors, not restrictions. A domain can use custom kinds and tags while
-generic agentic scorers continue selecting standard spans.
-
-## Method Instrumentation
-
-`instrument_method` patches one class method and records evidence only while a RunContext is
-active:
-
-```python
-from autobench import InstrumentMetricSpec, Semantic, instrument_method
-
-handle = instrument_method(
-    SearchClient,
-    "search",
-    span="search.request",
-    metrics=[
-        InstrumentMetricSpec(
-            name="result_count",
-            semantic_type="retrieval.result_count",
-            value_factory=lambda call: len(call.result),
-        )
-    ],
-)
-
-try:
-    run_benchmark()
-finally:
-    handle.close()
-```
-
-Instrumentation supports instance, static, and class methods plus sync and async results. The
-extractor receives an `InstrumentCall` containing call arguments, result, error, and context. An
-extractor error becomes structured diagnostic evidence rather than corrupting the application
-result.
-
-The returned `InstrumentationHandle` is also a context manager and restores the original method on
-close.
-
-## Trace Envelopes
-
-Adapters can normalize a completed external trace into `TraceEnvelope`:
-
-```python
-from autobench import TraceEnvelope, attach_trace
-
-trace = TraceEnvelope(
-    trace_id="trace-42",
-    name="checkout-agent",
-    input={"cart_id": "c1"},
-    output={"status": "complete"},
-    spans=tuple(converted_spans),
-    attributes={"framework": "custom-agent-runtime"},
-)
-
-attach_trace(ctx, trace)
-```
-
-`attach_trace` preserves spans and errors and projects known usage, model, provider, duration, and
-outcome fields into semantic observations. Large native trace payloads should be written as an
-artifact and referenced by `raw_artifact`.
-
-## Pydantic AI Usage
-
-Pydantic AI usage can be normalized without importing Pydantic AI into core:
-
-```python
-from autobench import PydanticAIUsage, record_pydantic_ai_usage
-
-record_pydantic_ai_usage(
-    ctx,
-    PydanticAIUsage(
-        requests=1,
-        input_tokens=420,
-        output_tokens=83,
-        model_name="gemini-3-flash-preview",
-        provider="openrouter",
-    ),
-)
-```
-
-The bridge emits canonical LLM token, model, and provider observations that pricing derivation and
-reports can consume.
-
-## Adapter Boundary
-
-Core instrumentation intentionally does not know Pydantic AI, OpenAI Agents, LangChain, DSPy, or
-OpenTelemetry internals. An integration should:
-
-1. Collect from the framework's stable hooks.
-2. Convert native calls or traces into Autobench spans and observations.
-3. Store large raw payloads as artifacts.
-4. Keep native dependencies optional.
-
-This boundary lets applications use existing instrumentation while RunRecords remain portable.
 
 ---
 
@@ -5152,14 +5184,22 @@ One `RunRecord` represents one case x variant execution:
 - final, task, and evaluation statuses
 - complete case snapshot and task output
 - observations and scores
-- span tree
+- canonical ABP trace, including signals, span graph, measurements, events, links, references,
+  diagnostics, and instrumentation scope provenance
+- ABP protocol and semantic registry versions
+- legacy span tree for records created before canonical trace storage
 - materialized artifacts
 - factors and tracked asset versions
-- parent run ID for lineage
+- extraction and source-map replay lineage
 - structured errors
 
 The YAML view groups the data for people rather than dumping internal Pydantic fields. A schema
 header points editors to the versioned Autobench JSON schema.
+
+Small traces remain inline in `run.yaml`. Larger traces are written to
+`artifacts/<run-id>/trace.yaml`; the RunRecord keeps a relative `ArtifactRef` and a compact trace
+summary. Trace artifacts have their own versioned JSON Schema header and load back into the same
+typed `Trace` model.
 
 ## ExperimentRecord
 
@@ -5216,6 +5256,29 @@ This enables:
 - baseline/candidate comparison after execution
 - future rescoring into a separate derived experiment
 - optimization systems consuming stable records
+
+Autobench distinguishes three replay modes:
+
+- **report replay** reads stored observations without re-extracting evidence
+- **extraction replay** runs a typed `TraceExtractor` against the immutable ABP trace and creates a
+  derived RunRecord
+- **canonicalization replay** applies newer source maps to retained source snapshots and creates a
+  separate derived RunRecord
+
+Derived records point to the original `run_id`, identify the extractor or source-map versions, and
+retain the source protocol and semantic registry versions. The original record and trace bytes are
+never rewritten. Replay resolves trace artifacts only inside the experiment directory and imports
+neither application task modules nor optional SDK integrations.
+
+The default `SignalExtractor` reconstructs canonical observations from stored ABP measurements and
+events. `SpanExtractor` derives generic topology and workflow evidence, while `UsageExtractor`
+owns LLM request/token/model accounting. `CompositeExtractor` can run them as one versioned replay
+processor. Custom extractors implement the typed `TraceExtractor` interface and return
+observations, diagnostics, and evidence references without mutating the trace.
+
+When a newer version of the same extractor is replayed, its observations replace the older
+version's observations in the new derived record. The previous derived record remains the lineage
+parent, so extractor evolution is auditable without mixing two versions of one derived metric.
 
 ## Rich Reports
 
@@ -5316,6 +5379,8 @@ tables. YAML, CSV, and Markdown are explicit file exports rather than raw termin
 | `report` | No | Yes | Render configured analysis views from records |
 | `export` | No | Yes | Write YAML, CSV, or Markdown and preview it |
 | `compare` | No | Yes | Compare two recorded variants without claiming causality |
+| `instrumentation doctor` | No | No | Inspect integration compatibility, capabilities, and capture defaults |
+| `instrumentation trace` | No | Yes | Summarize ABP trace composition and partial state |
 
 References inside a benchmark spec resolve relative to the spec file.
 
@@ -5381,10 +5446,27 @@ uv run autobench compare runs/example --baseline baseline --candidate optimized
 Both IDs must exist in the recorded experiment. The command shows paired-run count, changed
 factors, aggregate metric deltas, and a confounding flag.
 
+### Instrumentation Diagnostics
+
+```bash
+uv run autobench instrumentation doctor
+uv run autobench instrumentation trace runs/example
+```
+
+`doctor` inspects every built-in integration without importing unavailable SDKs. Its Rich tables
+show target versions, supported status, abstraction layer, hook/patch mechanism,
+sync/async/streaming support, span and semantic families, capture defaults, extras, and degradation
+details.
+
+`trace` operates only on recorded evidence. It reports case/variant span counts, roots, partial
+state, diagnostics, span kinds, and instrumentor composition without importing the benchmark task
+or provider SDKs.
+
 ## CLI Behavior
 
 - `run` executes the benchmark matrix, optionally records it, and renders Rich summary tables.
 - `replay`, `report`, `export`, and `compare` operate on recorded evidence.
+- `instrumentation trace` has the same replay-only dependency boundary.
 - `report` and `compare` render Rich terminal views instead of dumping Markdown or YAML.
 - `export` always writes a file and then shows a Rich preview of the exported projection.
 - default recording paths are placed under `.autobench/<spec-name>/<experiment-id>/`.
@@ -5406,6 +5488,874 @@ autobench run autobench.yaml --concurrency 4 --record runs/candidate-42
 autobench report runs/candidate-42
 autobench compare runs/candidate-42 --baseline baseline --candidate candidate
 autobench export runs/candidate-42 --format csv --path analysis/runs.csv
+```
+
+---
+
+## Protocol And Traces
+
+Canonical page: https://vcoderun.github.io/autobench/instrumentation-and-traces/
+
+# Instrumentation And Traces
+
+Autobench supports four collection styles that can be mixed in one run:
+
+1. Explicit `RunContext` and `Span` calls inside a task.
+2. Lightweight method instrumentation for existing application classes.
+3. Trace-envelope adapters for an external agent or workflow runtime.
+4. Native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX instrumentors configured from Python or
+   YAML.
+
+OpenTelemetry is not a core dependency. Future OTLP bridges can export Autobench spans, but the
+evidence model remains owned by Autobench.
+
+See [Native Instrumentation](native-instrumentation.md) for the typed fluent API, YAML DSL,
+compatibility doctor, privacy defaults, layered traces, and provider examples.
+
+ABP is the native collection protocol underneath these APIs. It owns signal ordering, task-local
+context, capture policy, instrumentation scope, trace materialization, and compatibility
+diagnostics. Instrumentors emit ABP evidence directly; they do not create OpenTelemetry spans and
+then convert them back into Autobench records.
+
+## Manual Spans
+
+```python
+from autobench import DurationMetricSpec, Semantic, SpanKind
+
+
+def run_case(ctx, case):
+    with ctx.span(
+        "support_agent",
+        kind=SpanKind.AGENT,
+        input=case.input,
+        duration_metric=DurationMetricSpec(
+            name="agent_latency",
+            semantic_type=Semantic.TIME_LATENCY,
+            unit="ms",
+        ),
+    ) as agent:
+        result = call_agent(case.input)
+        agent.set_output(result)
+        agent.outcome(result["ok"])
+        return result
+```
+
+Span duration is calculated when the context manager closes. Nested spans preserve parent-child
+relationships and retain evidence emitted before an exception.
+
+## Span Kinds
+
+`SpanKind` includes:
+
+- agent
+- LLM
+- tool
+- retriever
+- parser
+- workflow
+- custom
+
+Kinds are semantic selectors, not restrictions. A domain can use custom kinds and tags while
+generic agentic scorers continue selecting standard spans.
+
+## Method Instrumentation
+
+`instrument_method` is the high-level helper for one class method. It records evidence only while
+a `RunContext` is active:
+
+```python
+from autobench import InstrumentMetricSpec, Semantic, instrument_method
+
+handle = instrument_method(
+    SearchClient,
+    "search",
+    span="search.request",
+    metrics=[
+        InstrumentMetricSpec(
+            name="result_count",
+            semantic_type="retrieval.result_count",
+            value_factory=lambda call: len(call.result),
+        ),
+        InstrumentMetricSpec(
+            name="request_count",
+            semantic_type="llm.requests",
+            value_path="result.usage.requests",
+        ),
+    ],
+)
+
+try:
+    run_benchmark()
+finally:
+    handle.close()
+```
+
+Instrumentation supports:
+
+- instance, static, class, and inherited methods;
+- synchronous and asynchronous calls;
+- iterators and generators, including `send`, `throw`, and early close;
+- asynchronous iterators and generators, including `asend`, `athrow`, and `aclose`;
+- synchronous and asynchronous context managers.
+
+The wrapper preserves the original descriptor, callable signature, return value, exception
+identity, and lazy streaming behavior. A stream span ends when the stream actually completes,
+fails, times out, or closes, so its duration is not merely the time required to construct an
+iterator.
+
+`value_factory` is the typed Python extraction seam. It receives an `InstrumentCall` containing
+the bound instance, arguments, result, error, stream item count, and last stream item. `value_path`
+is the declarative alternative for trusted attribute, mapping, and zero-argument accessor paths.
+Autobench does not execute arbitrary YAML expressions.
+
+Extraction and lifecycle callback errors are recorded as evidence or compatibility diagnostics.
+They do not replace the application's result or exception.
+
+The returned `InstrumentationHandle` is also a context manager and restores the original method on
+close.
+
+## Scoped Suppression
+
+Instrumentation can be suppressed for the current task without changing global process state:
+
+```python
+from autobench import suppress_instrumentation
+
+with suppress_instrumentation("search.client"):
+    result = client.search("internal health check")
+```
+
+Suppression keys can identify an instrumentor or an operation family. Unrelated instrumentors stay
+active, nested scopes compose, and context tokens are reset even when application code raises. An
+empty `suppress_instrumentation()` scope suppresses all ABP instrumentation in the current task.
+
+## Native Instrumentors
+
+Reusable SDK integrations implement the `Instrumentor` contract:
+
+```python
+from autobench import (
+    AbstractionLayer,
+    CaptureMechanism,
+    Compatibility,
+    InstrumentationHandle,
+    InstrumentationRuntime,
+    InstrumentorInfo,
+)
+
+
+class ClientInstrumentor:
+    info = InstrumentorInfo(
+        id="example.client",
+        version="1.0.0",
+        target_distribution="example-client",
+        supported_versions=">=2,<3",
+        mechanism=CaptureMechanism.HOOK,
+        layer=AbstractionLayer.CLIENT,
+        span_kinds=("client.request",),
+        semantic_families=("request", "response"),
+    )
+
+    def check(self) -> Compatibility:
+        return Compatibility.compatible()
+
+    def install(self, runtime: InstrumentationRuntime) -> InstrumentationHandle:
+        unsubscribe = register_native_callback(...)
+        return InstrumentationHandle(unsubscribe, info=self.info)
+```
+
+Install instrumentors directly through one manager when building a custom integration:
+
+```python
+from autobench import InstrumentationManager
+
+with InstrumentationManager() as manager:
+    compatibility = manager.check(ClientInstrumentor())
+    if compatibility.installable:
+        manager.install(ClientInstrumentor())
+        run_benchmark()
+```
+
+`InstrumentorInfo` declares stable identity, target package and version range, mechanism, layer,
+semantic families, source convention, optional dependencies, and sync/async/streaming/native-hook
+capabilities. `Compatibility` distinguishes compatible, degraded, unavailable, unsupported, and
+conflicting installations. Missing or incompatible optional dependencies degrade only the feature
+that needs them; a missing required target package prevents installation.
+
+Installing the same instrumentor version twice increments an owner reference count instead of
+installing duplicate hooks. Closing the final handle unregisters native callbacks or restores the
+exact patched descriptor. Competing owners can instrument the same method independently, while an
+external wrapper replacement produces a conflict diagnostic instead of being overwritten.
+
+Mechanisms should be selected in this order:
+
+1. stable native processor or callback;
+2. stable native wrapper/decorator extension point;
+3. public method patch;
+4. explicitly version-pinned private method patch;
+5. unsupported with a compatibility diagnostic.
+
+Application benchmarks normally use the higher-level lifecycle owner instead:
+
+```python
+from autobench import Benchmark, HTTPXInstrumentation, OpenAIInstrumentation
+
+benchmark = Benchmark("chat").instrument(
+    OpenAIInstrumentation(),
+    HTTPXInstrumentation(),
+)
+result = benchmark.run()
+```
+
+`Benchmark.instrument(...)` installs configured and custom instrumentors before any matrix item,
+keeps them active through concurrent runs and streams, and closes them after execution.
+
+## Trace Envelopes
+
+Adapters can normalize a completed external trace into `TraceEnvelope`:
+
+```python
+from autobench import TraceEnvelope, attach_trace
+
+trace = TraceEnvelope(
+    trace_id="trace-42",
+    name="checkout-agent",
+    input={"cart_id": "c1"},
+    output={"status": "complete"},
+    spans=tuple(converted_spans),
+    attributes={"framework": "custom-agent-runtime"},
+)
+
+attach_trace(ctx, trace)
+```
+
+`attach_trace` preserves spans and errors and projects known usage, model, provider, duration, and
+outcome fields into semantic observations. Large native trace payloads should be written as an
+artifact and referenced by `raw_artifact`.
+
+## Pydantic AI Usage
+
+Install the optional native instrumentor when the application uses Pydantic AI:
+
+```bash
+pip install 'autobench[pydantic-ai]'
+```
+
+The integration uses Pydantic AI's public capability hooks and only injects its
+capability while an Autobench run is active:
+
+```python
+from autobench import Benchmark, PydanticAIInstrumentation
+
+experiment = benchmark.instrument(PydanticAIInstrumentation()).run()
+```
+
+No manual span or metric calls are required. The instrumentor captures:
+
+- agent runs and streamed execution;
+- model requests, requested and response model identities, providers, and direct usage;
+- tool argument validation, execution, retry, failure, approval, and deferred control flow;
+- structured-output validation;
+- first-chunk latency, partial streams, failures, and normal completion;
+- tracked prompt, tool, and output-schema versions;
+- multimodal metadata, with binary references only when the capture policy requests full content.
+
+The instrumentor composes with user event handlers and Pydantic AI's own
+`Instrumentation` capability. It does not configure, replace, or require
+OpenTelemetry. Supported Autobench 0.1.x builds pin the public integration seam
+to Pydantic AI 2.22.x; `InstrumentationManager.check()` reports incompatible
+versions before installing hooks.
+
+Application outputs and exceptions are passed through unchanged. Aggregate agent
+usage and direct model usage retain distinct accounting scopes, and cost remains a
+downstream derivation. Replaying recorded ABP evidence does not require Pydantic AI
+to be installed.
+
+See the [live Pydantic AI example](examples.md#pydantic-ai) for a tool-using,
+structured-output, streaming benchmark with a retry path.
+
+### Usage Bridge
+
+Pydantic AI usage can be normalized without importing Pydantic AI into core:
+
+```python
+from autobench import PydanticAIUsage, record_pydantic_ai_usage
+
+record_pydantic_ai_usage(
+    ctx,
+    PydanticAIUsage(
+        requests=1,
+        input_tokens=420,
+        output_tokens=83,
+        model_name="gemini-3-flash-preview",
+        provider="openrouter",
+    ),
+)
+```
+
+The bridge emits canonical LLM token, model, and provider observations that pricing derivation and
+reports can consume.
+
+## Trace Extraction And Accounting
+
+Instrumentors record immutable facts. Extractors turn a completed ABP trace into semantic
+observations without mutating that trace:
+
+```python
+from autobench import (
+    CompositeExtractor,
+    SignalExtractor,
+    SpanExtractor,
+    UsageExtractor,
+    replay_extraction,
+)
+
+extractor = CompositeExtractor(
+    SignalExtractor(),
+    SpanExtractor(),
+    UsageExtractor(),
+)
+derived_record = replay_extraction(record, extractor)
+```
+
+The extractors have separate ownership:
+
+- `SignalExtractor` reconstructs measurements and events and preserves their accounting scope,
+  abstraction layer, logical operation ID, and instrumentor identity.
+- `SpanExtractor` derives generic operation counts, direct durations, maximum depth and fan-out,
+  critical-path makespan, parallelism, incomplete work, retry/recovery, validation, approval,
+  tool-call, message-growth, and reference evidence.
+- `UsageExtractor` derives LLM request, token, requested-model, response-model, and provider
+  evidence. It never derives cost.
+
+Every extractor has a stable name and version. Replay records both in extraction evidence and
+RunRecord lineage. Replaying a newer version replaces observations owned by the older version in
+the derived record; the parent record remains unchanged.
+
+### Direct And Aggregate Evidence
+
+ABP keeps all raw measurements but prevents framework/client nesting from inflating totals:
+
+1. Aggregate parent measurements are never added to direct child measurements.
+2. Usage totals select one abstraction layer per semantic, preferring client evidence before
+   framework, application, and transport evidence.
+3. Equivalent direct operations with a shared logical operation ID are counted once.
+4. Equal equivalent values are deduplicated. Conflicting values require a unique explicit
+   authority; unresolved conflicts produce `ambiguous_direct_measurement` and are excluded from
+   the derived total.
+5. Aggregate values are retained as validation evidence. A disagreement with the direct total
+   produces `aggregate_measurement_mismatch`.
+6. Requested and response model identities remain separate factors.
+
+Reports and `ObservationQuery.first_exact()` prefer an accounting-safe aggregate summary over
+same-source per-operation direct evidence. Raw and projected queries can still inspect every
+underlying observation.
+
+Graph timing uses monotonic timestamps only. `time.critical_path` is the observed trace makespan,
+and `operation.parallelism` is completed leaf work divided by that makespan. Invalid or partial
+clock evidence is retained through diagnostics rather than repaired with wall-clock subtraction.
+
+## Adapter Boundary
+
+Core instrumentation intentionally does not know Pydantic AI, OpenAI Agents, LangChain, DSPy, or
+OpenTelemetry internals. An integration should:
+
+1. Collect from the framework's stable hooks.
+2. Convert native calls or traces into Autobench spans and observations.
+3. Store large raw payloads as artifacts.
+4. Keep native dependencies optional.
+
+This boundary lets applications use existing instrumentation while RunRecords remain portable.
+
+---
+
+## Native Instrumentation
+
+Canonical page: https://vcoderun.github.io/autobench/native-instrumentation/
+
+# Native Instrumentation
+
+Autobench native instrumentors collect ABP traces from supported SDKs without task-level
+`ctx.span()` or `ctx.metric()` calls. They are optional adapters around public hooks or pinned,
+reviewed patch points. Core benchmark, record, replay, and report imports do not require any of the
+instrumented SDKs.
+
+## Install
+
+Install one integration or the complete set:
+
+```bash
+pip install 'autobench[pydantic-ai]'
+pip install 'autobench[openai]'
+pip install 'autobench[openai-agents]'
+pip install 'autobench[httpx]'
+pip install 'autobench[instrumentation]'
+```
+
+The integration registry is lazy. Loading a YAML spec, replaying evidence, or running
+`autobench instrumentation doctor` does not import an SDK that is not installed.
+
+## Automatic Discovery
+
+Use `instrument_all()` when the benchmark should activate every built-in integration that is
+installed and compatible in the current environment:
+
+```python
+from autobench import Benchmark
+
+benchmark = Benchmark("support-agent").instrument_all()
+```
+
+Unavailable or unsupported integrations are skipped by default and recorded on each run as
+`instrumentation.skipped` diagnostic evidence. Use `strict=True` when the environment must support
+the complete selected set:
+
+```python
+benchmark = Benchmark("support-agent").instrument_all(
+    exclude={"httpx"},
+    strict=True,
+)
+```
+
+Explicit settings take precedence over discovery, including an explicit `false`. A custom runtime
+instrumentor with the same instrumentor ID also takes precedence, so automatic discovery does not
+install a duplicate. Calling `instrument_all()` again replaces the previous automatic settings.
+
+### Live OpenRouter Trace
+
+The live Pydantic AI example exercises automatic discovery across all three active layers:
+
+```bash
+uv sync --extra instrumentation
+export OPENROUTER_API_KEY=...
+export OPENROUTER_MODEL=openai/gpt-4.1-mini
+uv run python examples/pydantic_ai/openrouter_instrument_all.py \
+  --record /tmp/autobench-openrouter
+```
+
+The benchmark itself only opts in once:
+
+```python
+benchmark = (
+    Benchmark("openrouter-shopping-agent")
+    .instrument(PydanticAI(assets=[INSTRUCTIONS]))
+    .instrument_all()
+)
+```
+
+The explicit Pydantic AI instrumentor contributes tracked prompt metadata. Automatic discovery
+recognizes its instrumentor ID and does not install a duplicate, then adds the OpenAI client and
+HTTPX transport instrumentors. One real request therefore records agent, model, tool, output
+validation, stream, client request, and transport spans with their native parentage. It also records
+model identity, token usage, durations, HTTP method/host/path/status, score observations, asset
+versions, capture diagnostics, and replayable source provenance. HTTP bodies and credentials remain
+redacted by the default capture policy.
+
+The full source is `examples/pydantic_ai/openrouter_instrument_all.py`. It deliberately contains no
+manual `ctx.span()` or `ctx.metric()` calls so the resulting record demonstrates native collection
+rather than hand-authored benchmark telemetry.
+
+## YAML
+
+Instrumentation belongs to the named benchmark:
+
+```yaml
+# yaml-language-server: $schema=schemas/0.2.0/benchmark_schema.json
+benchmark:
+  support-agent:
+    dataset:
+      source: file://datasets/cases.yaml
+    run:
+      python: support_benchmark:run
+    variants:
+      baseline:
+        factors:
+          model.name: openai:gpt-4.1-mini
+    instrumentation:
+      all:
+        exclude: [httpx]
+        strict: false
+      pydantic_ai: {}
+      openai: {}
+      httpx:
+        capture:
+          path: hash
+          request_headers: [x-request-id]
+          response_headers: [x-request-id]
+          request_body: false
+          response_body: false
+          max_body_bytes: 65536
+```
+
+Use `false` to retain a known integration in a shared spec without installing it:
+
+```yaml
+instrumentation:
+  openai_agents: false
+```
+
+Unknown integration names and unknown settings fail validation. YAML never evaluates Python
+expressions.
+
+The `all` block follows the same precedence rules as the Python builder. In this example HTTPX is
+excluded from discovery but its explicit capture settings still install it; all explicit entries
+remain authoritative.
+
+## Python
+
+The fluent API accepts typed, serializable settings:
+
+```python
+from autobench import (
+    Benchmark,
+    HTTPXCaptureSettings,
+    HTTPXInstrumentation,
+    OpenAIInstrumentation,
+)
+
+benchmark = Benchmark("streaming-chat").instrument(
+    OpenAIInstrumentation(),
+    HTTPXInstrumentation(
+        capture=HTTPXCaptureSettings(
+            path="hash",
+            response_headers=("x-request-id",),
+        )
+    ),
+)
+experiment = benchmark.run()
+```
+
+It also accepts a custom `Instrumentor` instance. Runtime instances are installed for the whole
+benchmark matrix and closed even when execution fails. They are intentionally not serialized into
+the YAML spec:
+
+```python
+benchmark.instrument(MyNativeInstrumentor(settings))
+```
+
+Duplicate instrumentor IDs are rejected before hooks are installed. This avoids ambiguous
+ownership when a typed setting and a custom instance configure the same integration.
+
+## Built-In Integrations
+
+| Integration | Layer | Collection seam | Evidence |
+| --- | --- | --- | --- |
+| Pydantic AI | framework | public agent capability | agent/model/tool/validation spans, messages, structured output, usage, stream lifecycle |
+| OpenAI Python | client | reviewed public client methods and stream types | chat, responses, embeddings, raw responses, model identity, direct usage, stream lifecycle |
+| OpenAI Agents | framework | native trace processor | workflow, agent, generation, tool, handoff, guardrail, and custom spans |
+| HTTPX | transport | public transport methods | request method/host/path policy, status, selected headers, body metadata, stream lifecycle |
+
+Run compatibility diagnostics before a benchmark:
+
+```bash
+autobench instrumentation doctor
+```
+
+The Rich output shows availability, installed version, supported range, abstraction layer,
+mechanism, sync/async/streaming capabilities, span kinds, semantic families, capture defaults, and
+degradation diagnostics.
+
+## Layered Traces
+
+Instrumentors compose instead of flattening one another. A Pydantic AI request using the OpenAI
+client over HTTPX can produce this parent chain:
+
+```text
+task
+  agent
+    llm framework operation
+      OpenAI client operation
+        HTTP request
+```
+
+Transport spans do not emit token or cost usage. Framework aggregate usage and client direct usage
+retain different accounting scopes. Trace extraction selects one authoritative direct layer and
+keeps aggregate values as validation evidence, so enabling HTTPX cannot inflate LLM totals.
+
+## Streaming Lifecycle
+
+A stream span does not end when an SDK returns an iterator. It remains open until the stream:
+
+- completes normally;
+- raises;
+- is cancelled;
+- is explicitly closed early;
+- is abandoned when the instrumentor manager closes.
+
+ABP records first-chunk evidence, item/chunk counts, partial state, and the final end reason. Native
+items, exceptions, iterator methods, and context-manager behavior pass through unchanged.
+
+## HTTP Privacy Defaults
+
+HTTPX capture defaults are deliberately conservative:
+
+- query-free path hash, not the raw path;
+- no request or response headers unless named;
+- authorization, cookies, API keys, tokens, passwords, and secrets always redacted;
+- no request or response body capture;
+- bounded capture when bodies are explicitly enabled;
+- binary bodies represented by metadata and a digest, not embedded bytes.
+
+`path: full` is an explicit opt-in. Query strings and URL user information are not recorded by the
+path setting. Capture policies apply before evidence reaches a RunRecord.
+
+## Trace Diagnostics
+
+Every native span records an `InstrumentationScope`: instrumentor and target versions, mechanism,
+abstraction layer, and source convention. Source facts can be retained alongside canonical
+Autobench semantic attributes. Unsupported library versions fail installation instead of silently
+patching an unknown lifecycle.
+
+Inspect recorded trace shape without importing task modules or optional SDKs:
+
+```bash
+autobench instrumentation trace runs/support-agent/exp_...
+```
+
+The command reports per-case span/root counts, partial traces, diagnostics, span-kind totals, and
+instrumentor composition.
+
+## Replay Without SDKs
+
+RunRecords contain materialized ABP traces, not live provider objects. A reporting or optimization
+worker can replay and re-extract evidence with only Autobench installed:
+
+```python
+from autobench import CompositeExtractor, SignalExtractor, SpanExtractor, UsageExtractor
+from autobench.records.replay import load_run_record, replay_extraction
+
+record = load_run_record(path, root_dir=run_dir)
+derived = replay_extraction(
+    record,
+    CompositeExtractor(SignalExtractor(), SpanExtractor(), UsageExtractor()),
+)
+```
+
+Extraction creates a derived record with lineage; it never mutates the original record.
+
+## ABP And OpenTelemetry
+
+ABP is not an OpenTelemetry wrapper and has no OTel dependency. It is Autobench's evidence protocol
+for benchmark execution, semantic measurements, accounting scope, partial streams, replay, and
+optimization lineage. Native instrumentors use the same kinds of stable SDK hooks that mature OTel
+instrumentations validate, but emit ABP directly.
+
+A future bridge can export ABP spans to OTLP systems such as Logfire or Datadog. That bridge will be
+an adapter: ABP remains the source evidence model, and importing Autobench will not require an OTel
+SDK or collector.
+
+## Protocol Stability
+
+ABP protocol version `1` is the initial public serialized contract. Autobench `0.2.x` preserves the
+meaning of its signal, trace, scope, provenance, and accounting fields. Readers retain unknown
+additive data through extension maps, while a breaking wire-format change requires a new protocol
+version. Instrumentor patch points are compatibility-gated separately because provider SDK
+lifecycles can change independently of ABP.
+
+## Examples
+
+- `examples/abp_manual`: explicit workflow spans plus method instrumentation.
+- `examples/abp_concurrent`: concurrent sibling operations with task-local parentage.
+- `examples/pydantic_ai`: tool use, retry, streaming, and structured output; OpenAI models add
+  OpenAI and HTTPX layers.
+- `examples/abp_openai`: offline official OpenAI streaming over an HTTPX mock transport.
+- `examples/abp_openai_agents`: offline native OpenAI Agents trace-processor workflow.
+- `examples/abp_replay`: trace extraction from recorded evidence without importing provider SDKs.
+
+---
+
+## Compatibility Contract
+
+Canonical page: https://vcoderun.github.io/autobench/abp-compatibility/
+
+# ABP Compatibility Contract
+
+This page freezes the observable behavior preserved while the Autobench
+Instrumentation Protocol (ABP) replaces legacy span and instrumentation
+internals. Phases 1 through 8 now satisfy this contract. The complete public
+instrumentation guide is in [Instrumentation And Traces](instrumentation-and-traces.md).
+
+## Compatibility Boundary
+
+The following top-level imports remain available while ABP is introduced:
+
+```python
+from autobench import (
+    ArtifactRef,
+    AssetVersion,
+    DurationMetricSpec,
+    ErrorRecord,
+    InstrumentationHandle,
+    InstrumentCall,
+    InstrumentFactorSpec,
+    InstrumentMetricSpec,
+    Observation,
+    RunContext,
+    RunRecord,
+    Span,
+    SpanKind,
+    SpanRecord,
+    TraceEnvelope,
+    attach_trace,
+    get_active_run_context,
+    instrument_method,
+    trace_to_observations,
+)
+```
+
+ABP may move implementations into new packages, but these imports and their
+current behavior remain compatibility facades until a separately announced
+deprecation cycle.
+
+### Manual spans
+
+Existing manual spans preserve these guarantees:
+
+- `ctx.span(...)` is a synchronous context manager;
+- nested spans receive the active span as `parent_id`;
+- every completed span has UTC start/end timestamps and a non-negative
+  monotonic duration;
+- a configured duration metric is linked to the span;
+- metrics, factors, events, errors, and artifacts retain their span link;
+- exceptions are recorded and then propagated;
+- `Span.set_output`, `Span.set_attribute`, and `Span.set_usage` continue to
+  update the recorded span;
+- entering instrumentation without an active run context remains a no-op;
+- closing the final `InstrumentationHandle` restores the original descriptor.
+
+The tests in `tests/test_abp_compatibility.py` are the executable form of this
+contract.
+
+### Stored evidence
+
+Legacy model-shaped RunRecord and TraceEnvelope YAML remains loadable. ABP
+will add protocol data additively and preserve the existing `spans` input
+during migration. Replay must not require the task module or an optional
+instrumented SDK.
+
+The frozen legacy examples are:
+
+- `tests/fixtures/abp/legacy_run_record.yaml`
+- `tests/fixtures/abp/legacy_trace_envelope.yaml`
+
+## Concurrency Regression Contract
+
+`RunContext` now uses task-local ABP context. The concurrency migration is
+covered by passing regression tests for all of these cases:
+
+1. concurrent sibling spans under one parent both point to that parent;
+2. a nested task inherits the parent active at task creation;
+3. completing one sibling does not change the other sibling's active parent;
+4. out-of-order completion does not corrupt later parent selection;
+5. cancellation closes only the cancelled branch and restores its context;
+6. separate RunContexts never share active spans.
+
+The old mutable-stack reproduction is retained only in design history; it is
+not the current runtime behavior.
+
+## Canonical Trace Decision
+
+ABP will have one canonical immutable `Trace` model. `TraceEnvelope` does not
+have behavior that justifies a second trace representation, so it will become
+a compatibility name for `Trace` rather than a parallel model. Existing
+`TraceEnvelope(...)`, `attach_trace(...)`, and `trace_to_observations(...)`
+callers continue to work.
+
+This avoids conversion drift between manually attached traces and traces
+materialized from native ABP signals.
+
+## Package Shape
+
+ABP code is introduced only when its phase needs it. Empty placeholder modules
+are not created.
+
+```text
+autobench/
+  protocol/
+    ids.py
+    values.py
+    signals.py
+    traces.py
+    context.py
+    capture.py
+    collector.py
+  instrumentation/
+    models.py
+    manager.py
+    patching.py
+    streaming.py
+    pydantic_ai.py
+    openai.py
+    openai_agents.py
+    httpx.py
+```
+
+Small modules are combined when separation would only create navigation cost.
+Existing unrelated modules are not moved as part of ABP.
+
+## Optional Integration Targets
+
+The initial integration extras are reserved as follows:
+
+| Extra | Research baseline | First implementation phase |
+| --- | ---: | ---: |
+| `autobench[pydantic-ai]` | Pydantic AI 2.22.0 | 10 |
+| `autobench[openai]` | OpenAI Python 2.52.0 | 11 |
+| `autobench[openai-agents]` | OpenAI Agents 0.19.2 | 11 |
+| `autobench[httpx]` | HTTPX 0.28.1 | 12 |
+| `autobench[instrumentation]` | all integrations above | 13 |
+
+These versions are the public-API research baseline captured on 2026-08-03,
+not a compatibility claim. Dependency metadata is added only when each native
+instrumentor and its version matrix exist. Autobench core remains free of
+these dependencies.
+
+## Manual Span Performance Baseline
+
+The baseline measures a minimal completed manual span with no observations,
+artifacts, or errors. Each repeat creates one RunContext and records 10,000
+spans. Timing uses `timeit.repeat`; duration comes from the host monotonic
+clock. The benchmark does not enforce a CI latency threshold because shared CI
+timing is not stable.
+
+Reproduce it with:
+
+```bash
+uv run python scripts/benchmark_spans.py --iterations 10000 --repeats 7
+```
+
+Baseline captured before ABP runtime changes:
+
+| Field | Value |
+| --- | ---: |
+| Date | 2026-08-03 |
+| Python | 3.11.13 |
+| Platform | macOS 26.1 arm64 |
+| Minimum | 3,227.4 ns/span |
+| Median | 3,324.8 ns/span |
+
+The raw per-repeat values were `3467.0`, `3308.4`, `3299.3`, `3394.4`,
+`3394.3`, `3324.8`, and `3227.4` ns/span. Later phases compare using the same
+script and workload; they do not compare unrelated machine results.
+
+Release measurements captured after ABP materialization on the same host:
+
+| Workload | Measurement |
+| --- | ---: |
+| Manual ABP span | 28,836.7 ns/span median |
+| HTTPX baseline request | 35,346.2 ns/request median |
+| Instrumented HTTPX request | 224,263.6 ns/request median |
+| HTTPX instrumentation overhead | 188,917.4 ns/request median |
+| 10,000 x 32-byte HTTP stream | 2,618.0 ns/chunk median |
+| Long-stream peak allocation | 30,918 bytes |
+
+The long-stream result is about `3.1` peak allocated bytes per emitted chunk, which confirms the
+instrumentor does not retain chunk payloads as the stream grows. These numbers characterize this
+machine and are not release thresholds. Reproduce transport and stream measurements with:
+
+```bash
+uv run python scripts/benchmark_spans.py --httpx --iterations 1000 --repeats 7
+uv run python scripts/benchmark_spans.py --httpx-stream --chunks 10000 --chunk-size 32 --repeats 7
 ```
 
 ---
@@ -5441,7 +6391,7 @@ named benchmark:
 ## Complete Authoring Example
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.1.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.2.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
@@ -5615,6 +6565,45 @@ benchmark:
 - `score.<name>.span` can target component spans by kind, name, tag, path, or semantic type.
 - `expected_action` scores compare `case.expected.actions` or `case.expected.tool_calls` with observed spans.
 
+## Native Instrumentation
+
+The optional `instrumentation` section installs ABP SDK integrations for the complete benchmark
+matrix:
+
+```yaml
+benchmark:
+  support-agent:
+    instrumentation:
+      all:
+        exclude: [httpx]
+        strict: false
+      pydantic_ai: {}
+      openai: {}
+      openai_agents: false
+      httpx:
+        capture:
+          path: hash
+          request_headers: [x-request-id]
+          response_headers: [x-request-id]
+          request_body: false
+          response_body: false
+          max_body_bytes: 65536
+```
+
+`all` discovers every installed, compatible built-in integration. Missing integrations are skipped
+and recorded as run diagnostics unless `strict: true` is set. `exclude` accepts `pydantic_ai`,
+`openai`, `openai_agents`, and `httpx`. An explicit entry, including `false`, overrides discovery;
+the explicit HTTPX block above therefore remains enabled despite the discovery exclusion.
+
+`{}` selects privacy-safe defaults. `false` disables a known integration. Unknown integration
+names, settings, exclusions, or HTTP capture modes are validation errors. Optional SDKs are
+imported only when their enabled integration is resolved for execution. Replay never resolves this
+section.
+
+The versioned `benchmark_schema.json` describes this surface, so YAML language servers complete
+integration names and capture settings. See [Native Instrumentation](native-instrumentation.md) for
+the lifecycle and privacy contract.
+
 ## Safe Extensibility
 
 YAML is intended to be shareable and replayable. For that reason:
@@ -5625,12 +6614,19 @@ YAML is intended to be shareable and replayable. For that reason:
 
 ## Exported Run Record YAML
 
-Run records are the immutable per-case/per-variant evidence files used by replay:
+Run records are the immutable per-case/per-variant evidence files used by replay. The trace signal
+objects below are abridged; recorded files retain their timestamps, sequence IDs, execution
+references, scope provenance, and captured attributes:
 
 ```yaml
 record:
   type: run
-  version: 3
+  version: 4
+
+protocol:
+  name: abp
+  version: 1
+  semantic_registry: 1
 
 run:
   id: run_ticket_1_route_v1
@@ -5641,7 +6637,7 @@ run:
   status: passed
   outcome:
     evaluation: passed
-    task: completed
+    task: passed
 
 case:
   id: ticket_1
@@ -5665,8 +6661,11 @@ scores:
     role: objective
 
 metrics:
-  objectives:
+  measurements:
     routing_correctness:
+      id: observation_1
+      name: routing_correctness
+      kind: metric
       value: true
       semantic: quality.correctness
   diagnostics:
@@ -5674,6 +6673,53 @@ metrics:
       value: 12.4
       semantic: time.latency
       unit: ms
+
+trace:
+  protocol: abp
+  protocol_version: 1
+  trace_id: 70d8f4b6742d412a85cb7a198db07fe1
+  execution:
+    benchmark_id: support-routing
+    experiment_id: exp_support_routing_20260507T120000Z
+    run_id: run_ticket_1_route_v1
+    case_id: ticket_1
+    variant_id: route_v1
+  root_span_ids: [3f2f6c57b9f56a11]
+  spans:
+    - span_id: 3f2f6c57b9f56a11
+      operation: benchmark.run
+      kind: task
+      scope:
+        instrumentor_name: autobench.manual
+        instrumentor_version: 0.2.0
+        package_name: autobench
+        package_version: 0.2.0
+        mechanism: manual
+        layer: application
+      status: ok
+      end_reason: completed
+      measurements: []
+      events: []
+      links: []
+      references: []
+      partial: false
+  links: []
+  references: []
+  diagnostics: []
+  signals:
+    - type: span_start
+      protocol: abp
+      protocol_version: 1
+      span_id: 3f2f6c57b9f56a11
+      operation: benchmark.run
+      kind: task
+    - type: span_end
+      protocol: abp
+      protocol_version: 1
+      span_id: 3f2f6c57b9f56a11
+      status: ok
+      reason: completed
+  partial: false
 
 spans:
   call_router:
@@ -5692,9 +6738,9 @@ spans:
     duration: 0.004
 
 artifacts:
-  trace:
-    media_type: application/x-yaml
-    value: artifacts/run_ticket_1_route_v1/trace.yaml
+  generated_spec:
+    media: application/x-yaml
+    path: artifacts/run_ticket_1_route_v1/generated_spec.yaml
 
 assets:
   prompt.router:
@@ -5702,6 +6748,22 @@ assets:
 
 output:
   queue: billing
+```
+
+When the serialized ABP trace exceeds the inline limit, the same section becomes a compact summary
+and artifact reference:
+
+```yaml
+trace:
+  id: 70d8f4b6742d412a85cb7a198db07fe1
+  partial: false
+  spans: 7
+  signals: 31
+  artifact:
+    id: abp_trace
+    name: ABP trace
+    media: application/vnd.autobench.abp-trace+yaml
+    path: artifacts/run_ticket_1_route_v1/trace.yaml
 ```
 
 ## Exported Dataset YAML
@@ -5838,7 +6900,7 @@ Experiment records keep replay data structured, but the outer shape stays readab
 ```yaml
 record:
   type: experiment
-  version: 3
+  version: 4
 
 experiment:
   id: exp_support_routing_20260507T120000Z
@@ -6153,6 +7215,7 @@ External framework traces can be attached with `TraceEnvelope`, and Pydantic AI 
 | Data | `Case`, `CaseDefaults`, `DatasetSpec`, `Variant`, `FactorValue` |
 | Spec | `BenchmarkInfo`, `BenchmarkSpec`, `TaskSpec`, `load_benchmark_spec`, `build_benchmark_plan` |
 | Runtime | `RunContext`, `Span`, `run_benchmark_spec`, `run_benchmark_path`, `expand_matrix` |
+| Native instrumentation | typed integration settings, `InstrumentationManager`, registry status, compatibility diagnostics |
 | Evidence | `Observation`, `ObservationQuery`, `SemanticRegistry`, projection helpers |
 | Scoring | built-in scorer models, `ScoringCall`, `ScoreRecord`, `SpanSelector` |
 | Derivation | token cost, pricing models, paired-baseline derivation, policies, measurement |
@@ -6206,6 +7269,49 @@ export_runs_csv(replayed, Path("analysis/runs.csv"))
 
 Report builders can also be called independently: `build_leaderboard`, `build_case_matrix`,
 `compare_variants`, `build_metric_distribution`, and `build_run_metric_rows`.
+
+## Typed Native Instrumentation
+
+Activate every compatible built-in integration available in the current environment:
+
+```python
+from autobench import Benchmark
+
+benchmark = Benchmark("chat").instrument_all(
+    exclude={"httpx"},
+    strict=False,
+)
+```
+
+Discovery skips unavailable integrations and records why on each run. `strict=True` turns the
+first unavailable or unsupported selected integration into an `InstrumentationError`. Explicit
+typed settings and custom runtime instrumentors take precedence over their discovered equivalent.
+
+Configure individual integrations when capture settings must be controlled directly:
+
+```python
+from autobench import (
+    Benchmark,
+    HTTPXCaptureSettings,
+    HTTPXInstrumentation,
+    OpenAIInstrumentation,
+    instrumentor_statuses,
+)
+
+benchmark = Benchmark("chat").instrument(
+    OpenAIInstrumentation(),
+    HTTPXInstrumentation(
+        capture=HTTPXCaptureSettings(path="hash", response_headers=("x-request-id",))
+    ),
+)
+
+for status in instrumentor_statuses():
+    print(status.name, status.compatibility.status)
+```
+
+Settings are part of `BenchmarkSpec` and round-trip through the YAML DSL. Custom `Instrumentor`
+instances can use the same fluent method but remain runtime-only. See
+[Native Instrumentation](native-instrumentation.md).
 
 ## Extension Rules
 
@@ -6292,6 +7398,50 @@ make build
 The build produces a wheel and source distribution under `dist/`. Generated documentation,
 benchmark runs, internal planning files, references, and agent instructions are excluded from the
 published package.
+
+---
+
+## 0.2.0
+
+Canonical page: https://vcoderun.github.io/autobench/release-notes/0.2.0/
+
+# 0.2.0
+
+Autobench `0.2.0` introduces the Autobench Instrumentation Protocol (ABP) and native evidence
+collection for supported AI and HTTP SDKs.
+
+## Included
+
+- immutable ABP signals, traces, scopes, links, references, and protocol diagnostics
+- task-local trace context with correct concurrent parentage and partial-run preservation
+- privacy-first capture policy with redaction, truncation, hashing, and artifact references
+- versioned semantic source maps and accounting-safe trace extraction
+- native Pydantic AI, OpenAI Python, OpenAI Agents, and HTTPX instrumentors
+- sync, async, iterator, context-manager, and streaming lifecycle preservation
+- typed fluent and YAML instrumentation configuration with versioned schema completion
+- `autobench instrumentation doctor` compatibility diagnostics
+- `autobench instrumentation trace` replay-only trace summaries
+- real offline instrumentation, layering, and replay/extraction examples
+- Python 3.11, 3.12, 3.13, and 3.14 quality matrix
+- built-wheel/no-extras and target-library compatibility gates
+
+## Compatibility
+
+Existing `0.1.0` benchmark specs and RunRecords remain loadable. ABP evidence is additive: manual
+spans and method instrumentation now materialize through the same protocol used by native
+instrumentors. Replaying ABP records does not import optional provider SDKs.
+
+## Intentionally Deferred
+
+- OTLP and vendor exporters
+- distributed context propagation
+- import-hook auto-instrumentation
+- execution cassette replay
+- visualization
+
+ABP protocol version `1` is the initial public protocol. Autobench `0.2.x` will preserve its
+serialized meaning; additive fields remain forward-compatible through extension maps. A breaking
+wire-format change requires a new ABP protocol version.
 
 ---
 

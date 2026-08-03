@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from autobench import (
     DEFAULT_SEMANTIC_REGISTRY,
+    RECORD_VERSION,
     ArtifactRef,
     AssetVersion,
     BenchmarkInfo,
@@ -85,7 +86,7 @@ async def test_record_experiment_writes_successful_and_failed_run_records(
     assert record.run_count == 2
     assert record.file_hashes[0].path == str(source_file.resolve())
     raw_experiment = load_yaml(record_dir / "experiment.yaml")
-    assert raw_experiment["record"] == {"type": "experiment", "version": 3}
+    assert raw_experiment["record"] == {"type": "experiment", "version": RECORD_VERSION}
     assert raw_experiment["experiment"]["id"] == result.experiment_id
     assert raw_experiment["benchmark"]["id"] == "record-demo"
     assert raw_experiment["benchmark"]["counts"] == {"cases": 2, "variants": 1, "runs": 2}
@@ -98,7 +99,7 @@ async def test_record_experiment_writes_successful_and_failed_run_records(
     assert raw_experiment["environment"]["python"] == record.environment.python_version
     assert raw_experiment["files"] == {str(source_file.resolve()): record.file_hashes[0].sha256}
     raw_summary = load_yaml(record_dir / "summary.yaml")
-    assert raw_summary["record"] == {"type": "summary", "version": 3}
+    assert raw_summary["record"] == {"type": "summary", "version": RECORD_VERSION}
     assert raw_summary["runs"]["failed"] == 1
     assert (record_dir / "cases" / "case_ok" / "variant_1" / "run.yaml").exists()
     assert (record_dir / "cases" / "case_fail" / "variant_1" / "run.yaml").exists()
@@ -111,7 +112,7 @@ async def test_record_experiment_writes_successful_and_failed_run_records(
     assert failed.observations
     assert failed.spans[0].name == "task"
     raw_failed = load_yaml(record_dir / "cases" / "case_fail" / "variant_1" / "run.yaml")
-    assert raw_failed["record"] == {"type": "run", "version": 3}
+    assert raw_failed["record"] == {"type": "run", "version": RECORD_VERSION}
     assert raw_failed["run"]["outcome"]["task"] == "failed"
     assert raw_failed["variant"]["factors"]["model"]["value"] == "demo-model"
     assert raw_failed["metrics"]["factors"]["model"]["semantic"] == Semantic.LLM_MODEL_NAME

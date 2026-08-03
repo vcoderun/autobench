@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../schemas/0.1.0/benchmark_schema.json
+# yaml-language-server: $schema=../../schemas/0.2.0/benchmark_schema.json
 benchmark:
   codemode-spec-generation:
     description: Generate and replay Vowel evaluation specs for real Python functions.

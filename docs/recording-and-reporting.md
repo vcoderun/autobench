@@ -30,14 +30,22 @@ One `RunRecord` represents one case x variant execution:
 - final, task, and evaluation statuses
 - complete case snapshot and task output
 - observations and scores
-- span tree
+- canonical ABP trace, including signals, span graph, measurements, events, links, references,
+  diagnostics, and instrumentation scope provenance
+- ABP protocol and semantic registry versions
+- legacy span tree for records created before canonical trace storage
 - materialized artifacts
 - factors and tracked asset versions
-- parent run ID for lineage
+- extraction and source-map replay lineage
 - structured errors
 
 The YAML view groups the data for people rather than dumping internal Pydantic fields. A schema
 header points editors to the versioned Autobench JSON schema.
+
+Small traces remain inline in `run.yaml`. Larger traces are written to
+`artifacts/<run-id>/trace.yaml`; the RunRecord keeps a relative `ArtifactRef` and a compact trace
+summary. Trace artifacts have their own versioned JSON Schema header and load back into the same
+typed `Trace` model.
 
 ## ExperimentRecord
 
@@ -94,6 +102,29 @@ This enables:
 - baseline/candidate comparison after execution
 - future rescoring into a separate derived experiment
 - optimization systems consuming stable records
+
+Autobench distinguishes three replay modes:
+
+- **report replay** reads stored observations without re-extracting evidence
+- **extraction replay** runs a typed `TraceExtractor` against the immutable ABP trace and creates a
+  derived RunRecord
+- **canonicalization replay** applies newer source maps to retained source snapshots and creates a
+  separate derived RunRecord
+
+Derived records point to the original `run_id`, identify the extractor or source-map versions, and
+retain the source protocol and semantic registry versions. The original record and trace bytes are
+never rewritten. Replay resolves trace artifacts only inside the experiment directory and imports
+neither application task modules nor optional SDK integrations.
+
+The default `SignalExtractor` reconstructs canonical observations from stored ABP measurements and
+events. `SpanExtractor` derives generic topology and workflow evidence, while `UsageExtractor`
+owns LLM request/token/model accounting. `CompositeExtractor` can run them as one versioned replay
+processor. Custom extractors implement the typed `TraceExtractor` interface and return
+observations, diagnostics, and evidence references without mutating the trace.
+
+When a newer version of the same extractor is replayed, its observations replace the older
+version's observations in the new derived record. The previous derived record remains the lineage
+parent, so extractor evolution is auditable without mixing two versions of one derived metric.
 
 ## Rich Reports
 

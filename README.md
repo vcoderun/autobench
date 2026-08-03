@@ -42,7 +42,7 @@ uv run autobench report /tmp/autobench-basic
 uv run autobench export /tmp/autobench-basic --format yaml --path /tmp/basic-report.yaml
 ```
 
-## What 0.1.0 Includes
+## What Autobench Includes
 
 - YAML-first `BenchmarkSpec`
 - datasets, cases, case defaults, and file-backed dataset loading
@@ -59,6 +59,10 @@ uv run autobench export /tmp/autobench-basic --format yaml --path /tmp/basic-rep
 - portable source-file provenance for CLI-recorded evidence
 - offline minimal, basic, mid, and advanced end-to-end examples
 - a real, optional CodeMode integration example
+- ABP traces with privacy-aware capture and replayable semantic evidence
+- native Pydantic AI, OpenAI Python, OpenAI Agents, and HTTPX instrumentors
+- typed Python/YAML instrumentation settings, automatic compatible-integration discovery, and Rich
+  compatibility diagnostics
 
 ## Examples
 
@@ -67,9 +71,16 @@ uv run autobench export /tmp/autobench-basic --format yaml --path /tmp/basic-rep
 - `examples/mid/`: semantic token usage, pricing, cost derivation, policies, and distributions.
 - `examples/advanced/`: repeated measurement and paired-baseline speedup derivation.
 - `examples/codemode/`: live Vowel CodeMode generation and generated-spec replay.
+- `examples/pydantic_ai/`: provider-neutral and live OpenRouter Pydantic AI instrumentation.
+- `examples/abp_manual/`: manual spans and method instrumentation through ABP.
+- `examples/abp_concurrent/`: task-local concurrent trace parentage.
+- `examples/abp_openai/`: offline real OpenAI streaming over HTTPX.
+- `examples/abp_openai_agents/`: offline native OpenAI Agents trace processing.
+- `examples/abp_replay/`: provider-free trace replay and evidence extraction.
 
-The first four run offline and are enforced by `make examples`. CodeMode is a live integration that
-requires its external runtime, model credentials, and network access.
+The minimal, basic, mid, advanced, ABP manual, and ABP concurrent examples run offline and are
+enforced by `make examples`. CodeMode and the OpenRouter Pydantic AI program are live integrations
+that require their model credentials and network access.
 
 ## Development
 

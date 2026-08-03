@@ -1,5 +1,7 @@
 from __future__ import annotations as _annotations
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from textwrap import dedent
 
@@ -15,6 +17,7 @@ from autobench import (
     EvaluationStatus,
     PassFailScorer,
     PythonScorer,
+    RunContext,
     RunStatus,
     Semantic,
     TaskResult,
@@ -30,6 +33,27 @@ from autobench import (
 )
 from autobench.cli import cli
 from autobench.data.variants import FactorValue
+from autobench.evaluation.scoring import ScoreRecord, ScoringSpec
+from autobench.runtime.awaitables import run_sync
+
+
+def test_sync_runner_preserves_the_host_event_loop() -> None:
+    def exercise_sync_runner() -> None:
+        host_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(host_loop)
+
+        async def answer() -> int:
+            return 42
+
+        try:
+            assert run_sync(answer()) == 42
+            assert asyncio.get_event_loop() is host_loop
+        finally:
+            asyncio.set_event_loop(None)
+            host_loop.close()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(exercise_sync_runner).result()
 
 
 async def test_run_benchmark_spec_executes_full_matrix_in_deterministic_order(
@@ -198,6 +222,107 @@ async def test_pipeline_wraps_task_runner_crashes(
     assert {run.error.error_type for run in result.runs if run.error is not None} == {
         "RuntimeError"
     }
+
+
+async def test_pipeline_propagates_cancellation_after_finalizing_partial_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def cancel_runner(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", cancel_runner)
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="cancelled"),
+        dataset=DatasetSpec(cases=[Case(id="case_1")]),
+        task=TaskSpec(kind="python", target="unused:run"),
+        variants=[Variant(id="variant_1")],
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_benchmark_spec(spec, experiment_id="exp_fixed")
+
+
+async def test_pipeline_propagates_scoring_cancellation_after_task_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def cancel_scoring(
+        scoring: list[ScoringSpec],
+        *,
+        ctx: RunContext,
+        task_result: TaskResult,
+    ) -> list[ScoreRecord]:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(pipeline_module, "evaluate_scoring_specs", cancel_scoring)
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="cancelled-scoring"),
+        dataset=DatasetSpec(cases=[Case(id="case_1")]),
+        task=TaskSpec(kind="python", target="tests.test_benchmark_pipeline:_passing_task"),
+        variants=[Variant(id="variant_1")],
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_benchmark_spec(spec, experiment_id="exp_fixed")
+
+
+async def test_pipeline_converts_unexpected_scoring_runtime_failures_to_errored_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fail_scoring(
+        scoring: list[ScoringSpec],
+        *,
+        ctx: RunContext,
+        task_result: TaskResult,
+    ) -> list[ScoreRecord]:
+        raise RuntimeError("scoring runtime failed")
+
+    monkeypatch.setattr(pipeline_module, "evaluate_scoring_specs", fail_scoring)
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="failed-scoring"),
+        dataset=DatasetSpec(cases=[Case(id="case_1")]),
+        task=TaskSpec(kind="python", target="tests.test_benchmark_pipeline:_passing_task"),
+        variants=[Variant(id="variant_1")],
+    )
+
+    result = await run_benchmark_spec(spec, experiment_id="exp_fixed")
+
+    assert result.errored_count == 1
+    assert result.runs[0].task_result.output == {"ok": True}
+    assert result.runs[0].error is not None
+    assert result.runs[0].error.error_type == "RuntimeError"
+
+
+async def test_pipeline_marks_task_timeouts_failed_without_losing_error_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_module(
+        tmp_path,
+        "timeout_tasks.py",
+        """
+        def run(ctx, case):
+            raise TimeoutError("deadline")
+        """,
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="timeout"),
+        dataset=DatasetSpec(cases=[Case(id="case_1")]),
+        task=TaskSpec(kind="python", target="timeout_tasks:run"),
+        variants=[Variant(id="variant_1")],
+    )
+
+    result = await run_benchmark_spec(spec, experiment_id="exp_fixed")
+
+    assert result.failed_count == 1
+    assert result.runs[0].error is not None
+    assert result.runs[0].error.error_type == "TimeoutError"
 
 
 async def test_pipeline_marks_constraint_failures_as_failed(
@@ -443,6 +568,10 @@ def _matrix_spec(target: str) -> BenchmarkSpec:
             ),
         ],
     )
+
+
+def _passing_task(ctx: RunContext, case: Case) -> dict[str, bool]:
+    return {"ok": True}
 
 
 def _write_module(tmp_path: Path, filename: str, source: str) -> None:

@@ -1,9 +1,9 @@
 BLUE := \033[1;34m
 GREEN := \033[1;32m
 RESET := \033[0m
-PYTHON_VERSIONS := 3.11.13 3.12.10 3.13.9
+PYTHON_VERSIONS := 3.11.13 3.12.10 3.13.9 3.14.6
 
-.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs-llms docs docs-serve examples build release all prod pre-commit
+.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs-llms docs docs-serve examples build wheel-smoke release all prod pre-commit
 
 format:
 	@printf "$(BLUE)==>$(RESET) Formatting code with ruff...\n"
@@ -29,7 +29,7 @@ check-matrix:
 		short_version=$${version%.*}; \
 		printf "$(BLUE)==>$(RESET) Running validation matrix for Python $$version...\n"; \
 		uv run --isolated --extra dev --python $$version sh -c \
-			"ruff check src/autobench tests && ty check --python-version $$short_version && basedpyright --pythonversion $$short_version src tests" \
+			"ruff check src/autobench tests && ty check --python-version $$short_version && basedpyright --pythonversion $$short_version src tests && python -m pytest -q" \
 			|| exit $$?; \
 	done
 	@printf "$(GREEN)✔ Matrix checking complete.$(RESET)\n"
@@ -80,7 +80,7 @@ examples:
 	@printf "$(BLUE)==>$(RESET) Running offline examples end to end...\n"
 	@set -e; root=$$(mktemp -d "$${TMPDIR:-/tmp}/autobench-examples.XXXXXX"); \
 		trap 'rm -rf "$$root"' EXIT; \
-		for example in minimal basic mid advanced; do \
+		for example in minimal basic mid advanced abp_manual abp_concurrent; do \
 			uv run autobench validate "examples/$$example/autobench.yaml"; \
 			uv run autobench run "examples/$$example/autobench.yaml" --record "$$root/$$example"; \
 			uv run autobench replay "$$root/$$example"; \
@@ -92,14 +92,24 @@ examples:
 
 build:
 	@printf "$(BLUE)==>$(RESET) Building wheel and source distribution...\n"
-	@uv build
+	@uv build --clear
 	@printf "$(GREEN)✔ Build complete.$(RESET)\n"
+
+wheel-smoke: build
+	@printf "$(BLUE)==>$(RESET) Smoke testing the built wheel without optional SDKs...\n"
+	@set -e; root=$$(mktemp -d "$${TMPDIR:-/tmp}/autobench-wheel.XXXXXX"); \
+		trap 'rm -rf "$$root"' EXIT; \
+		uv venv "$$root/venv" --python 3.11.13; \
+		uv pip install --python "$$root/venv/bin/python" dist/*.whl; \
+		"$$root/venv/bin/python" scripts/smoke_wheel.py; \
+		"$$root/venv/bin/autobench" instrumentation doctor
+	@printf "$(GREEN)✔ Wheel smoke test complete.$(RESET)\n"
 
 all: format check
 
 prod: tests check-coverage check-formatted check docs check-matrix examples
 
-release: prod pre-commit build
+release: prod pre-commit wheel-smoke
 
 pre-commit:
 	@printf "$(BLUE)==>$(RESET) Running pre-commit checks...\n"

@@ -1,0 +1,35 @@
+trace_id: legacy_trace_1
+name: legacy workflow
+input:
+  prompt: hello
+output:
+  answer: world
+attributes:
+  provider: example
+spans:
+  - id: legacy_span_1
+    name: model call
+    kind: llm
+    started_at: 2026-01-02T03:04:05Z
+    ended_at: 2026-01-02T03:04:06Z
+    duration_seconds: 1.0
+    input:
+      prompt: hello
+    output:
+      answer: world
+    attributes:
+      model: example-model
+    usage:
+      input_tokens: 4
+      output_tokens: 2
+    observations: []
+    artifacts: []
+errors:
+  - error_type: LegacyWarning
+    message: retained diagnostic
+raw_artifact:
+  id: legacy_trace_artifact
+  name: raw trace
+  value:
+    source: legacy
+  media_type: application/json

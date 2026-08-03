@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,8 @@ EXAMPLES_ROOT = PROJECT_ROOT / "examples"
         ("basic", 6),
         ("mid", 6),
         ("advanced", 6),
+        ("abp_manual", 4),
+        ("abp_concurrent", 2),
     ],
 )
 def test_offline_examples_execute_record_replay_report_and_export(
@@ -151,3 +155,56 @@ def test_example_yaml_files_declare_portable_schemas() -> None:
         first_line = path.read_text(encoding="utf-8").splitlines()[0]
         assert first_line.startswith("# yaml-language-server: $schema=")
         assert "/Users/" not in first_line
+
+
+def test_offline_openai_agents_and_replay_examples_use_real_integrations(
+    tmp_path: Path,
+) -> None:
+    openai = subprocess.run(
+        [sys.executable, str(EXAMPLES_ROOT / "abp_openai" / "run_openai_streaming.py")],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    openai_dir = tmp_path / openai.stdout.strip().splitlines()[-1]
+    openai_result = replay_experiment(openai_dir)
+    openai_scopes = {
+        span.scope.instrumentor_name
+        for run in openai_result.runs
+        if run.trace is not None
+        for span in run.trace.spans
+    }
+
+    agents = subprocess.run(
+        [sys.executable, str(EXAMPLES_ROOT / "abp_openai_agents" / "run_openai_agents.py")],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    agents_dir = tmp_path / agents.stdout.strip().splitlines()[-1]
+    agents_result = replay_experiment(agents_dir)
+    agent_scopes = {
+        span.scope.instrumentor_name
+        for run in agents_result.runs
+        if run.trace is not None
+        for span in run.trace.spans
+    }
+
+    replay = subprocess.run(
+        [
+            sys.executable,
+            str(EXAMPLES_ROOT / "abp_replay" / "replay_and_extract.py"),
+            str(openai_dir),
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "autobench.openai" in openai_scopes
+    assert "autobench.httpx" in openai_scopes
+    assert "autobench.openai_agents" in agent_scopes
+    assert "__extraction_" in replay.stdout

@@ -34,13 +34,15 @@ framework whether those values share meaning.
 
 | Family | Examples |
 | --- | --- |
-| LLM | `llm.tokens.input`, `llm.tokens.output`, `llm.model.name`, `llm.provider`, `llm.temperature` |
+| LLM | `llm.tokens.input`, `llm.tokens.output`, `llm.request.count`, `llm.model.requested`, `llm.model.response`, `llm.provider.name` |
 | Cost | `money.cost`, `serving.cost`, `optimization.cost`, `lifetime.cost` |
-| Time | `time.latency` |
+| Time | `time.latency`, `time.first_chunk`, `time.critical_path` |
 | Result | `result.success` |
 | Quality | `quality.score`, `quality.correctness`, `coverage.ratio` |
 | Agent | task completion, plan quality/adherence, step efficiency, tool selection/arguments/sequence, output correctness |
 | Assets | `prompt.version`, `agent.tool.version`, `agent.version`, `dataset.version` |
+| Operations | count, maximum depth/fan-out, incomplete work, parallelism, retries, recovered retries, first-attempt success |
+| Workflow | validation failures, approval count/wait, tool-call success/failure, message growth, evidence-reference counts |
 
 `Semantic` exposes completion-friendly constants. `SemanticType` remains extensible so domain
 metrics can use names such as `retrieval.recall` or `business.conversion`.
@@ -80,7 +82,10 @@ optimization direction because they are not outcomes.
 
 The same semantic metric can be emitted by a task, scorer, deriver, policy, or adapter. Raw
 observations are never discarded. Projection chooses a canonical value using explicit source
-priority; equal-priority duplicates are marked ambiguous instead of silently picking one.
+priority and ABP accounting scope. A derived aggregate summary is preferred to same-source direct
+measurements for single-value reporting, while direct observations remain queryable. Logical
+operation IDs correlate equivalent framework/client evidence; equal-priority disagreements are
+marked ambiguous instead of silently picking one.
 
 Use `ObservationQuery` for raw or projected lookup and `filter_observations` for selectors such as
 semantic type, role, source, or span.

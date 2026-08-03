@@ -25,7 +25,7 @@ named benchmark:
 ## Complete Authoring Example
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.1.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.2.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
@@ -199,6 +199,45 @@ benchmark:
 - `score.<name>.span` can target component spans by kind, name, tag, path, or semantic type.
 - `expected_action` scores compare `case.expected.actions` or `case.expected.tool_calls` with observed spans.
 
+## Native Instrumentation
+
+The optional `instrumentation` section installs ABP SDK integrations for the complete benchmark
+matrix:
+
+```yaml
+benchmark:
+  support-agent:
+    instrumentation:
+      all:
+        exclude: [httpx]
+        strict: false
+      pydantic_ai: {}
+      openai: {}
+      openai_agents: false
+      httpx:
+        capture:
+          path: hash
+          request_headers: [x-request-id]
+          response_headers: [x-request-id]
+          request_body: false
+          response_body: false
+          max_body_bytes: 65536
+```
+
+`all` discovers every installed, compatible built-in integration. Missing integrations are skipped
+and recorded as run diagnostics unless `strict: true` is set. `exclude` accepts `pydantic_ai`,
+`openai`, `openai_agents`, and `httpx`. An explicit entry, including `false`, overrides discovery;
+the explicit HTTPX block above therefore remains enabled despite the discovery exclusion.
+
+`{}` selects privacy-safe defaults. `false` disables a known integration. Unknown integration
+names, settings, exclusions, or HTTP capture modes are validation errors. Optional SDKs are
+imported only when their enabled integration is resolved for execution. Replay never resolves this
+section.
+
+The versioned `benchmark_schema.json` describes this surface, so YAML language servers complete
+integration names and capture settings. See [Native Instrumentation](native-instrumentation.md) for
+the lifecycle and privacy contract.
+
 ## Safe Extensibility
 
 YAML is intended to be shareable and replayable. For that reason:
@@ -209,12 +248,19 @@ YAML is intended to be shareable and replayable. For that reason:
 
 ## Exported Run Record YAML
 
-Run records are the immutable per-case/per-variant evidence files used by replay:
+Run records are the immutable per-case/per-variant evidence files used by replay. The trace signal
+objects below are abridged; recorded files retain their timestamps, sequence IDs, execution
+references, scope provenance, and captured attributes:
 
 ```yaml
 record:
   type: run
-  version: 3
+  version: 4
+
+protocol:
+  name: abp
+  version: 1
+  semantic_registry: 1
 
 run:
   id: run_ticket_1_route_v1
@@ -225,7 +271,7 @@ run:
   status: passed
   outcome:
     evaluation: passed
-    task: completed
+    task: passed
 
 case:
   id: ticket_1
@@ -249,8 +295,11 @@ scores:
     role: objective
 
 metrics:
-  objectives:
+  measurements:
     routing_correctness:
+      id: observation_1
+      name: routing_correctness
+      kind: metric
       value: true
       semantic: quality.correctness
   diagnostics:
@@ -258,6 +307,53 @@ metrics:
       value: 12.4
       semantic: time.latency
       unit: ms
+
+trace:
+  protocol: abp
+  protocol_version: 1
+  trace_id: 70d8f4b6742d412a85cb7a198db07fe1
+  execution:
+    benchmark_id: support-routing
+    experiment_id: exp_support_routing_20260507T120000Z
+    run_id: run_ticket_1_route_v1
+    case_id: ticket_1
+    variant_id: route_v1
+  root_span_ids: [3f2f6c57b9f56a11]
+  spans:
+    - span_id: 3f2f6c57b9f56a11
+      operation: benchmark.run
+      kind: task
+      scope:
+        instrumentor_name: autobench.manual
+        instrumentor_version: 0.2.0
+        package_name: autobench
+        package_version: 0.2.0
+        mechanism: manual
+        layer: application
+      status: ok
+      end_reason: completed
+      measurements: []
+      events: []
+      links: []
+      references: []
+      partial: false
+  links: []
+  references: []
+  diagnostics: []
+  signals:
+    - type: span_start
+      protocol: abp
+      protocol_version: 1
+      span_id: 3f2f6c57b9f56a11
+      operation: benchmark.run
+      kind: task
+    - type: span_end
+      protocol: abp
+      protocol_version: 1
+      span_id: 3f2f6c57b9f56a11
+      status: ok
+      reason: completed
+  partial: false
 
 spans:
   call_router:
@@ -276,9 +372,9 @@ spans:
     duration: 0.004
 
 artifacts:
-  trace:
-    media_type: application/x-yaml
-    value: artifacts/run_ticket_1_route_v1/trace.yaml
+  generated_spec:
+    media: application/x-yaml
+    path: artifacts/run_ticket_1_route_v1/generated_spec.yaml
 
 assets:
   prompt.router:
@@ -286,6 +382,22 @@ assets:
 
 output:
   queue: billing
+```
+
+When the serialized ABP trace exceeds the inline limit, the same section becomes a compact summary
+and artifact reference:
+
+```yaml
+trace:
+  id: 70d8f4b6742d412a85cb7a198db07fe1
+  partial: false
+  spans: 7
+  signals: 31
+  artifact:
+    id: abp_trace
+    name: ABP trace
+    media: application/vnd.autobench.abp-trace+yaml
+    path: artifacts/run_ticket_1_route_v1/trace.yaml
 ```
 
 ## Exported Dataset YAML
@@ -422,7 +534,7 @@ Experiment records keep replay data structured, but the outer shape stays readab
 ```yaml
 record:
   type: experiment
-  version: 3
+  version: 4
 
 experiment:
   id: exp_support_routing_20260507T120000Z

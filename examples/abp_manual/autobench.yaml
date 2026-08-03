@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=../../schemas/0.2.0/benchmark_schema.json
+benchmark:
+  abp-manual-method:
+    description: Combine an explicit workflow span with automatic method instrumentation.
+    cases:
+      - id: billing
+        input: {message: "refund invoice"}
+        expected: {queue: billing}
+      - id: technical
+        input: {message: "service timeout"}
+        expected: {queue: technical}
+    run:
+      python: manual_benchmark:run
+    variants:
+      baseline:
+        factors:
+          routing_profile: baseline
+      keyword_router:
+        factors:
+          routing_profile: keyword
+    score:
+      correct_queue:
+        exact:
+          actual: output.queue
+          expected: case.expected.queue
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+    report:
+      leaderboard:
+        show:
+          accuracy:
+            metric: quality.correctness
+            aggregate: ratio_true
+      matrix:
+        metric: quality.correctness
+      compare:
+        baseline -> keyword_router:
+          show:
+            accuracy:
+              metric: quality.correctness
+              aggregate: ratio_true

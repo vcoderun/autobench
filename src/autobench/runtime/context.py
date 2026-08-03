@@ -1,19 +1,24 @@
 from __future__ import annotations as _annotations
 
+import asyncio
+import json
 from collections.abc import Iterator
 from contextlib import AbstractContextManager
-from datetime import UTC, datetime
+from contextvars import Token
+from datetime import datetime
 from enum import StrEnum
-from time import perf_counter
 from types import TracebackType
 from typing import Any
+from weakref import WeakValueDictionary
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from autobench._version import __version__
 from autobench.data.datasets import Case
 from autobench.data.variants import Variant
 from autobench.errors import ErrorRecord
 from autobench.evaluation.measurement import Measurement
+from autobench.metrics.mappings import SourceSnapshot
 from autobench.metrics.observations import (
     Direction,
     Observation,
@@ -22,8 +27,26 @@ from autobench.metrics.observations import (
     ObservationSource,
 )
 from autobench.metrics.semantics import Semantic, SemanticType
+from autobench.protocol.capture import CapturePolicy, CaptureResult, CaptureSession
+from autobench.protocol.collector import Emitter, LocalCollector
+from autobench.protocol.context import ActiveContext, attach_context, get_context, reset_context
+from autobench.protocol.ids import SpanId
+from autobench.protocol.signals import (
+    AbstractionLayer,
+    CaptureLevel,
+    CaptureMechanism,
+    EndReason,
+    ExecutionRef,
+    InstrumentationScope,
+    KnownSpanKind,
+    SpanStatus,
+)
+from autobench.protocol.traces import Trace
+from autobench.protocol.values import EvidenceRef, ReferenceKind, ReferenceStore, SerializedValue
 from autobench.records.artifacts import ArtifactRef
 from autobench.tracking import AssetVersion, TrackingRegistry, track
+
+_RUN_CONTEXTS: WeakValueDictionary[str, RunContext] = WeakValueDictionary()
 
 
 class DurationMetricSpec(BaseModel):
@@ -94,6 +117,7 @@ class RunContext:
         variant: Variant,
         run_id: str = "run_1",
         experiment_id: str = "experiment_1",
+        capture_policy: CapturePolicy | None = None,
     ) -> None:
         self.benchmark_id = benchmark_id
         self.case = case
@@ -105,17 +129,92 @@ class RunContext:
         self.artifacts: list[ArtifactRef] = []
         self.errors: list[ErrorRecord] = []
         self.asset_versions: list[AssetVersion] = []
-        self._span_stack: list[str] = []
+        self.source_snapshots: list[SourceSnapshot] = []
+        self._collector = LocalCollector()
+        self._capture = CaptureSession(capture_policy)
+        self._execution = ExecutionRef(
+            benchmark_id=benchmark_id,
+            experiment_id=experiment_id,
+            run_id=run_id,
+            case_id=case.id,
+            variant_id=variant.id,
+        )
+        self._emitter = Emitter(
+            self._collector,
+            InstrumentationScope(
+                instrumentor_name="autobench.manual",
+                instrumentor_version=__version__,
+                package_name="autobench",
+                package_version=__version__,
+                mechanism=CaptureMechanism.MANUAL,
+                layer=AbstractionLayer.APPLICATION,
+            ),
+            execution=self._execution,
+        )
+        root = self._emitter.start_span(
+            "benchmark.run",
+            kind=KnownSpanKind.TASK,
+            attributes={
+                "benchmark_id": benchmark_id,
+                "experiment_id": experiment_id,
+                "run_id": run_id,
+                "case_id": case.id,
+                "variant_id": variant.id,
+            },
+            capture=CaptureLevel.METADATA,
+        )
+        self._root_span_id = root.span_id
+        self._legacy_to_abp: dict[str, SpanId] = {}
+        self._abp_to_legacy: dict[SpanId, str] = {}
+        self._span_emitters: dict[str, Emitter] = {}
+        self._span_started_monotonic: dict[str, int] = {}
+        self._ended_spans: set[str] = set()
+        self._span_error_refs: dict[str, list[EvidenceRef]] = {}
+        self._error_refs: list[EvidenceRef] = []
+        self._trace: Trace | None = None
         self._observation_index = 0
         self._span_index = 0
         self._artifact_index = 0
         self._asset_version_keys: set[tuple[str, str]] = set()
+        _RUN_CONTEXTS[self._emitter.trace_id] = self
+
+    @property
+    def trace(self) -> Trace:
+        if self._trace is not None:
+            return self._trace
+        return self._collector.snapshot(self._emitter.trace_id)
+
+    @property
+    def finalized(self) -> bool:
+        return self._trace is not None
+
+    @property
+    def reference_store(self) -> ReferenceStore:
+        return self._capture.store
+
+    @property
+    def capture_policy(self) -> CapturePolicy:
+        return self._capture.policy
+
+    @property
+    def active_context(self) -> ActiveContext:
+        return ActiveContext(
+            collector=self._collector,
+            trace_id=self._emitter.trace_id,
+            current_span_id=self._root_span_id,
+            execution=self._execution,
+            capture_policy=self._capture.policy,
+        )
 
     def factor(self, name: str) -> Any:
         for factor in self.variant.factors:
             if factor.name == name:
                 return factor.value
         raise KeyError(f"Unknown variant factor: {name}")
+
+    def retain_source_snapshot(self, snapshot: SourceSnapshot) -> SourceSnapshot:
+        self.source_snapshots.append(snapshot)
+        return snapshot
 
     def span(
         self,
@@ -127,6 +226,7 @@ class RunContext:
         usage: dict[str, Any] | None = None,
         duration_metric: DurationMetricSpec | dict[str, Any] | None = None,
         tags: dict[str, Any] | None = None,
+        instrumentation_scope: InstrumentationScope | None = None,
     ) -> Span:
         metric_spec = None
         if duration_metric is not None:
@@ -144,6 +244,7 @@ class RunContext:
             usage=usage or {},
             duration_metric=metric_spec,
             tags=tags or {},
+            instrumentation_scope=instrumentation_scope,
         )
 
     def metric(
@@ -157,6 +258,7 @@ class RunContext:
         role: ObservationRole | None = None,
         span_id: str | None = None,
         tags: dict[str, Any] | None = None,
+        source: ObservationSource = ObservationSource.TASK_OBSERVATION,
     ) -> Observation:
         return self._append_observation(
             name=name,
@@ -168,6 +270,7 @@ class RunContext:
             role=role,
             span_id=span_id,
             tags=tags,
+            source=source,
         )
 
     def factor_observation(
@@ -178,6 +281,7 @@ class RunContext:
         semantic_type: SemanticType | None = None,
         span_id: str | None = None,
         tags: dict[str, Any] | None = None,
+        source: ObservationSource = ObservationSource.TASK_OBSERVATION,
     ) -> Observation:
         return self._append_observation(
             name=name,
@@ -186,6 +290,7 @@ class RunContext:
             semantic_type=semantic_type,
             span_id=span_id,
             tags=tags,
+            source=source,
         )
 
     def event(
@@ -214,6 +319,7 @@ class RunContext:
         semantic_type: SemanticType | None = None,
         span_id: str | None = None,
         tags: dict[str, Any] | None = None,
+        source: ObservationSource = ObservationSource.TASK_OBSERVATION,
     ) -> Observation:
         return self._append_observation(
             name=name,
@@ -223,6 +329,7 @@ class RunContext:
             role=ObservationRole.DIAGNOSTIC,
             span_id=span_id,
             tags=tags,
+            source=source,
         )
 
     def outcome(
@@ -380,10 +487,40 @@ class RunContext:
             record = ErrorRecord(error_type="Error", message=error, span_id=span_id)
 
         self.errors.append(record)
+        error_reference = EvidenceRef(
+            kind=ReferenceKind.ERROR,
+            id=f"error_{len(self.errors)}",
+            media_type="application/x.autobench.error+json",
+        )
+        self._error_refs.append(error_reference)
+        abp_span_id = self._abp_span_id(span_id)
+        emitter = self._emitter_for_legacy_span(span_id)
+        captured = self._capture_value(
+            record.model_dump(mode="json"),
+            semantic_type=Semantic.ERROR_EXCEPTION,
+            path=f"errors.{error_reference.id}",
+            span_id=abp_span_id,
+            level=CaptureLevel.REDACTED,
+        )
+        emitter.event(
+            abp_span_id,
+            record.error_type,
+            Semantic.ERROR_EXCEPTION,
+            body=None if captured.reference is not None else captured.value,
+            reference=captured.reference,
+            attributes={"error_id": error_reference.id},
+        )
+        emitter.reference(
+            error_reference,
+            span_id=abp_span_id,
+            semantic_type=Semantic.ERROR_EXCEPTION,
+            name=record.error_type,
+        )
         if span_id is not None:
             span_record = self._span_by_id(span_id)
             if span_record is not None:
                 span_record.error = record
+                self._span_error_refs.setdefault(span_id, []).append(error_reference)
         return record
 
     def artifact(
@@ -408,6 +545,38 @@ class RunContext:
             span_record = self._span_by_id(span_id)
             if span_record is not None:
                 span_record.artifacts.append(artifact.id)
+        abp_span_id = self._abp_span_id(span_id)
+        emitter = self._emitter_for_legacy_span(span_id)
+        captured = self._capture_value(
+            value,
+            semantic_type=Semantic.ARTIFACT_CONTENT,
+            path=f"artifacts.{name}",
+            span_id=abp_span_id,
+            level=CaptureLevel.FULL,
+            media_type=media_type,
+        )
+        reference = captured.reference
+        if reference is None and not captured.omitted:
+            if isinstance(captured.value, str):
+                content = captured.value.encode()
+                active_media_type = media_type or "text/plain"
+            else:
+                content = json.dumps(
+                    captured.value,
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
+                active_media_type = media_type or "application/json"
+            reference = self._capture.store.add_artifact(content, media_type=active_media_type)
+        if reference is not None:
+            emitter.reference(
+                reference,
+                span_id=abp_span_id,
+                semantic_type=Semantic.ARTIFACT_CONTENT,
+                name=name,
+                attributes={"artifact_id": artifact.id},
+            )
         self._append_observation(
             name=name,
             kind=ObservationKind.ARTIFACT,
@@ -422,6 +591,7 @@ class RunContext:
         target: Any,
         *,
         registry: TrackingRegistry | None = None,
+        span_id: str | None = None,
     ) -> AssetVersion:
         active_registry = registry or track
         asset_version = active_registry.asset_version_of(target)
@@ -429,6 +599,32 @@ class RunContext:
         if asset_key not in self._asset_version_keys:
             self.asset_versions.append(asset_version)
             self._asset_version_keys.add(asset_key)
+            asset = active_registry.asset_of(target)
+            reference_kind = ReferenceKind.ASSET
+            if asset.kind == "prompt":
+                reference_kind = ReferenceKind.PROMPT
+            elif asset.kind == "tool":
+                reference_kind = ReferenceKind.TOOL
+            elif asset.kind in {"pydantic_model", "dataclass", "typed_class", "type"}:
+                reference_kind = ReferenceKind.OUTPUT_SCHEMA
+            abp_span_id = self._abp_span_id(span_id)
+            emitter = self._emitter_for_legacy_span(span_id)
+            captured = self._capture_value(
+                asset_version,
+                semantic_type=asset.semantic_type,
+                path=f"assets.{asset.id}",
+                span_id=abp_span_id,
+                asset_version=asset_version,
+                reference_kind=reference_kind,
+            )
+            if captured.reference is not None:
+                emitter.reference(
+                    captured.reference,
+                    span_id=abp_span_id,
+                    semantic_type=asset.semantic_type,
+                    name=asset.name,
+                    attributes={"kind": asset.kind},
+                )
         return asset_version
 
     def _append_observation(
@@ -443,6 +639,7 @@ class RunContext:
         role: ObservationRole | None = None,
         span_id: str | None = None,
         tags: dict[str, Any] | None = None,
+        source: ObservationSource = ObservationSource.TASK_OBSERVATION,
     ) -> Observation:
         observation = Observation(
             id=self._next_observation_id(),
@@ -454,16 +651,20 @@ class RunContext:
             direction=direction,
             role=role,
             span_id=span_id,
-            source=ObservationSource.TASK_OBSERVATION,
+            source=source,
             tags=tags or {},
             case_id=self.case.id,
             variant_id=self.variant.id,
         )
+        return self.record_observation(observation)
+
+    def record_observation(self, observation: Observation) -> Observation:
         self.observations.append(observation)
-        if span_id is not None:
-            span_record = self._span_by_id(span_id)
+        if observation.span_id is not None:
+            span_record = self._span_by_id(observation.span_id)
             if span_record is not None:
                 span_record.observations.append(observation.id)
+        self._emit_observation(observation)
         return observation
 
     def _start_span(
@@ -475,37 +676,136 @@ class RunContext:
         attributes: dict[str, Any] | None = None,
         usage: dict[str, Any] | None = None,
         tags: dict[str, Any],
-    ) -> tuple[SpanRecord, float]:
-        parent_id = self._span_stack[-1] if self._span_stack else None
+        instrumentation_scope: InstrumentationScope | None = None,
+    ) -> tuple[SpanRecord, int]:
+        if self.finalized:
+            raise RuntimeError("RunContext is finalized.")
+        active = get_context()
+        parent_abp_id = self._root_span_id
+        if (
+            active is not None
+            and active.collector is self._collector
+            and active.trace_id == self._emitter.trace_id
+            and active.current_span_id is not None
+        ):
+            parent_abp_id = active.current_span_id
+        parent_id = self._abp_to_legacy.get(parent_abp_id)
+        captured_attributes = self._capture_mapping(
+            attributes or {},
+            path=f"spans.{name}.attributes",
+            span_id=parent_abp_id,
+        )
+        captured_tags = self._capture_mapping(
+            tags,
+            path=f"spans.{name}.tags",
+            span_id=parent_abp_id,
+        )
+        if captured_tags:
+            captured_attributes["tags"] = captured_tags
+        emitter = self._emitter
+        if instrumentation_scope is not None:
+            emitter = Emitter(
+                self._collector,
+                instrumentation_scope,
+                trace_id=self._emitter.trace_id,
+                execution=self._execution,
+            )
+        start = emitter.start_span(
+            name,
+            parent_span_id=parent_abp_id,
+            kind=str(kind),
+            attributes=captured_attributes,
+            capture=self._capture.policy.default_level,
+        )
         span_record = SpanRecord(
             id=self._next_span_id(),
             name=name,
             kind=kind,
             parent_id=parent_id,
-            started_at=datetime.now(UTC),
+            started_at=start.emitted_at,
             input=input,
             attributes=attributes or {},
             usage=usage or {},
             tags=tags,
         )
         self.spans.append(span_record)
-        self._span_stack.append(span_record.id)
-        return span_record, perf_counter()
+        self._legacy_to_abp[span_record.id] = start.span_id
+        self._abp_to_legacy[start.span_id] = span_record.id
+        self._span_emitters[span_record.id] = emitter
+        self._span_started_monotonic[span_record.id] = start.monotonic_ns
+        if input is not None:
+            captured_input = self._capture_value(
+                input,
+                semantic_type=Semantic.OPERATION_INPUT,
+                path=f"spans.{name}.input",
+                span_id=start.span_id,
+            )
+            emitter.event(
+                start.span_id,
+                "input",
+                Semantic.OPERATION_INPUT,
+                body=None if captured_input.reference is not None else captured_input.value,
+                reference=captured_input.reference,
+            )
+        return span_record, start.monotonic_ns
 
     def _finish_span(
         self,
         span_record: SpanRecord,
         *,
-        started_at: float,
+        started_at: int,
         duration_metric: DurationMetricSpec | None,
+        error: BaseException | None = None,
+        reason: EndReason | None = None,
+        partial: bool | None = None,
     ) -> None:
-        duration_seconds = perf_counter() - started_at
-        span_record.ended_at = datetime.now(UTC)
+        if span_record.id in self._ended_spans:
+            return
+        emitter = self._span_emitters[span_record.id]
+        abp_span_id = self._legacy_to_abp[span_record.id]
+        error_refs = tuple(self._span_error_refs.get(span_record.id, ()))
+        status = SpanStatus.OK
+        end_reason = EndReason.COMPLETED if reason is None else reason
+        is_partial = False if partial is None else partial
+        if error is not None or error_refs:
+            status = SpanStatus.ERROR
+            if reason is None or reason is EndReason.COMPLETED:
+                end_reason = EndReason.FAILED
+        if isinstance(error, asyncio.CancelledError):
+            end_reason = EndReason.CANCELLED
+            is_partial = True
+        elif isinstance(error, TimeoutError):
+            end_reason = EndReason.TIMEOUT
+            is_partial = True
+        captured_output = self._capture_value(
+            span_record.output,
+            semantic_type=Semantic.OPERATION_OUTPUT,
+            path=f"spans.{span_record.name}.output",
+            span_id=abp_span_id,
+        )
+        end = emitter.end_span(
+            abp_span_id,
+            attributes=self._capture_mapping(
+                span_record.attributes,
+                path=f"spans.{span_record.name}.attributes",
+                span_id=abp_span_id,
+            ),
+            output=None if captured_output.reference is not None else captured_output.value,
+            output_reference=captured_output.reference,
+            status=status,
+            reason=end_reason,
+            errors=error_refs,
+            partial=is_partial,
+            usage=self._capture_mapping(
+                span_record.usage,
+                path=f"spans.{span_record.name}.usage",
+                span_id=abp_span_id,
+            ),
+        )
+        self._ended_spans.add(span_record.id)
+        duration_seconds = max(0, end.monotonic_ns - started_at) / 1_000_000_000
+        span_record.ended_at = end.emitted_at
         span_record.duration_seconds = duration_seconds
-        if self._span_stack and self._span_stack[-1] == span_record.id:
-            self._span_stack.pop()
-        elif span_record.id in self._span_stack:
-            self._span_stack.remove(span_record.id)
 
         if duration_metric is not None:
             self.metric(
@@ -519,11 +819,193 @@ class RunContext:
                 tags=duration_metric.tags,
             )
 
+    def finalize(
+        self,
+        *,
+        status: SpanStatus = SpanStatus.OK,
+        reason: EndReason = EndReason.COMPLETED,
+        partial: bool = False,
+        output: Any = None,
+    ) -> Trace:
+        if self._trace is not None:
+            return self._trace
+        for span_record in self.spans:
+            if span_record.id in self._ended_spans:
+                continue
+            self._finish_span(
+                span_record,
+                started_at=self._span_started_monotonic[span_record.id],
+                duration_metric=None,
+                reason=EndReason.ABANDONED,
+                partial=True,
+            )
+        if self._error_refs and status is SpanStatus.OK:
+            status = SpanStatus.ERROR
+            reason = EndReason.FAILED
+        captured_output = self._capture_value(
+            output,
+            semantic_type=Semantic.OPERATION_OUTPUT,
+            path="benchmark.run.output",
+            span_id=self._root_span_id,
+        )
+        self._emitter.end_span(
+            self._root_span_id,
+            output=None if captured_output.reference is not None else captured_output.value,
+            output_reference=captured_output.reference,
+            status=status,
+            reason=reason,
+            errors=tuple(self._error_refs),
+            partial=partial,
+        )
+        self._trace = self._collector.finish(
+            self._emitter.trace_id,
+            error=status is SpanStatus.ERROR,
+        )
+        return self._trace
+
+    def _emit_observation(self, observation: Observation) -> None:
+        emitter = self._emitter_for_legacy_span(observation.span_id)
+        abp_span_id = self._abp_span_id(observation.span_id)
+        semantic_type = observation.semantic_type
+        if semantic_type is None:
+            if observation.kind is ObservationKind.FACTOR:
+                semantic_type = Semantic.FACTOR_VALUE
+            elif observation.role is ObservationRole.DIAGNOSTIC:
+                semantic_type = Semantic.DIAGNOSTIC_EVENT
+            else:
+                semantic_type = Semantic.EVENT_OCCURRENCE
+        captured = self._capture_value(
+            observation.value,
+            semantic_type=semantic_type,
+            path=f"observations.{observation.name}",
+            span_id=abp_span_id,
+        )
+        attributes: dict[str, SerializedValue] = {
+            "observation_id": observation.id,
+            "kind": observation.kind.value,
+            "source": ("unspecified" if observation.source is None else str(observation.source)),
+        }
+        if observation.span_id is not None:
+            attributes["legacy_span_id"] = observation.span_id
+        if observation.tags:
+            attributes["tags"] = self._capture_mapping(
+                observation.tags,
+                path=f"observations.{observation.name}.tags",
+                span_id=abp_span_id,
+            )
+        if (
+            observation.kind is ObservationKind.METRIC
+            and not captured.omitted
+            and isinstance(captured.value, (bool, int, float))
+        ):
+            emitter.measurement(
+                abp_span_id,
+                observation.name,
+                semantic_type,
+                captured.value,
+                unit=observation.unit,
+                direction=observation.direction,
+                role=observation.role,
+                attributes=attributes,
+            )
+            return
+        if captured.omitted:
+            attributes["capture_omitted"] = True
+        emitter.event(
+            abp_span_id,
+            observation.name,
+            semantic_type,
+            body=None if captured.reference is not None else captured.value,
+            reference=captured.reference,
+            attributes=attributes,
+        )
+
+    def _capture_value(
+        self,
+        value: Any,
+        *,
+        semantic_type: SemanticType | None,
+        path: str,
+        span_id: SpanId,
+        level: CaptureLevel | None = None,
+        asset_version: AssetVersion | None = None,
+        reference_kind: ReferenceKind | None = None,
+        media_type: str | None = None,
+    ) -> CaptureResult:
+        captured = self._capture.capture(
+            value,
+            semantic_type=semantic_type,
+            path=path,
+            level=level,
+            asset_version=asset_version,
+            reference_kind=reference_kind,
+            media_type=media_type,
+        )
+        for diagnostic in captured.diagnostics:
+            self._emitter_for_abp_span(span_id).diagnostic(
+                diagnostic.code,
+                diagnostic.message,
+                severity=diagnostic.severity,
+                span_id=span_id,
+                path=diagnostic.path,
+                semantic_type=diagnostic.semantic_type,
+                details=diagnostic.details,
+            )
+        return captured
+
+    def _capture_mapping(
+        self,
+        values: dict[str, Any],
+        *,
+        path: str,
+        span_id: SpanId,
+    ) -> dict[str, SerializedValue]:
+        captured_values: dict[str, SerializedValue] = {}
+        for name, value in values.items():
+            captured = self._capture_value(
+                value,
+                semantic_type=name,
+                path=f"{path}.{name}",
+                span_id=span_id,
+            )
+            if captured.omitted:
+                continue
+            if captured.reference is None:
+                captured_values[name] = captured.value
+            else:
+                captured_values[name] = captured.reference.model_dump(mode="json")
+        return captured_values
+
+    def _abp_span_id(self, legacy_span_id: str | None) -> SpanId:
+        if legacy_span_id is not None:
+            mapped = self._legacy_to_abp.get(legacy_span_id)
+            if mapped is not None:
+                return mapped
+            return self._root_span_id
+        active = get_context()
+        if (
+            active is not None
+            and active.collector is self._collector
+            and active.trace_id == self._emitter.trace_id
+            and active.current_span_id is not None
+        ):
+            return active.current_span_id
+        return self._root_span_id
+
     def _span_by_id(self, span_id: str) -> SpanRecord | None:
         for span in self.spans:
             if span.id == span_id:
                 return span
         return None
+
+    def _emitter_for_legacy_span(self, span_id: str | None) -> Emitter:
+        if span_id is None:
+            return self._emitter
+        return self._span_emitters.get(span_id, self._emitter)
+
+    def _emitter_for_abp_span(self, span_id: SpanId) -> Emitter:
+        legacy_span_id = self._abp_to_legacy.get(span_id)
+        return self._emitter_for_legacy_span(legacy_span_id)
 
     def _next_observation_id(self) -> str:
         self._observation_index += 1
@@ -550,6 +1032,7 @@ class Span(AbstractContextManager["Span"]):
         usage: dict[str, Any],
         duration_metric: DurationMetricSpec | None,
         tags: dict[str, Any],
+        instrumentation_scope: InstrumentationScope | None,
     ) -> None:
         self._context = context
         self._name = name
@@ -559,8 +1042,10 @@ class Span(AbstractContextManager["Span"]):
         self._usage = usage
         self._duration_metric = duration_metric
         self._tags = tags
+        self._instrumentation_scope = instrumentation_scope
         self._record: SpanRecord | None = None
-        self._started_at: float | None = None
+        self._started_at: int | None = None
+        self._active_token: Token[ActiveContext | None] | None = None
 
     @property
     def id(self) -> str:
@@ -582,8 +1067,55 @@ class Span(AbstractContextManager["Span"]):
             attributes=self._attributes,
             usage=self._usage,
             tags=self._tags,
+            instrumentation_scope=self._instrumentation_scope,
         )
+        self.resume()
         return self
+
+    def resume(self) -> None:
+        if self._record is None:
+            raise RuntimeError("Span has not started.")
+        if self._active_token is not None:
+            return
+        active = get_context()
+        abp_span_id = self._context._legacy_to_abp[self._record.id]
+        if (
+            active is not None
+            and active.collector is self._context._collector
+            and active.trace_id == self._context._emitter.trace_id
+        ):
+            protocol_context = active.with_span(abp_span_id)
+        else:
+            protocol_context = self._context.active_context.with_span(abp_span_id)
+        self._active_token = attach_context(protocol_context)
+
+    def suspend(self) -> None:
+        if self._active_token is None:
+            return
+        reset_context(self._active_token)
+        self._active_token = None
+
+    def finish(
+        self,
+        *,
+        error: BaseException | None = None,
+        reason: EndReason | None = None,
+        partial: bool | None = None,
+    ) -> None:
+        if error is not None:
+            self._context.error(error, span_id=self.id)
+        try:
+            if self._started_at is not None:
+                self._context._finish_span(
+                    self.record,
+                    started_at=self._started_at,
+                    duration_metric=self._duration_metric,
+                    error=error,
+                    reason=reason,
+                    partial=partial,
+                )
+        finally:
+            self.suspend()
 
     def __exit__(
         self,
@@ -591,14 +1123,7 @@ class Span(AbstractContextManager["Span"]):
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool | None:
-        if exc_value is not None:
-            self._context.error(exc_value, span_id=self.id)
-        if self._started_at is not None:
-            self._context._finish_span(
-                self.record,
-                started_at=self._started_at,
-                duration_metric=self._duration_metric,
-            )
+        self.finish(error=exc_value)
         return None
 
     def __iter__(self) -> Iterator[SpanRecord]:
@@ -790,6 +1315,13 @@ class Span(AbstractContextManager["Span"]):
             span_id=self.id,
             tags=tags,
         )
+
+
+def active_run_context() -> RunContext | None:
+    active = get_context()
+    if active is None:
+        return None
+    return _RUN_CONTEXTS.get(active.trace_id)
 
 
 __all__ = (

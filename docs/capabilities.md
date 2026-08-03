@@ -65,6 +65,11 @@ See [Tasks And Runtime](tasks-and-runtime.md).
 See [Observations And Semantics](observations-and-semantics.md) and
 [Instrumentation And Traces](instrumentation-and-traces.md).
 
+Native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX integrations can be selected through typed
+Python settings or the YAML `instrumentation` section. They emit ABP directly, compose across
+framework/client/transport layers, preserve streaming lifecycle, and remain optional for replay.
+See [Native Instrumentation](native-instrumentation.md).
+
 ## Scoring And Constraints
 
 | Scorer | Purpose |

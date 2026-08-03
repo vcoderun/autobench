@@ -10,6 +10,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from autobench.instrumentation.registry import InstrumentorStatus
+from autobench.protocol.traces import Trace
 from autobench.reports.exporting import CSV_METRICS
 from autobench.reports.reporting import (
     BenchmarkReport,
@@ -68,6 +70,8 @@ def render_experiment_result(
         table.add_row("Recorded to", str(record_path))
     console.print(table)
     _render_report_tables(console, build_report(result))
+    if any(run.trace is not None for run in result.runs):
+        render_trace_summary(console, result)
 
 
 def render_report(console: Console, report: BenchmarkReport) -> None:
@@ -167,6 +171,121 @@ def render_model_configurations(
             _model_short(exploration_model),
         )
     console.print(table)
+
+
+def render_instrumentor_statuses(
+    console: Console,
+    statuses: Sequence[InstrumentorStatus],
+) -> None:
+    """Render native integration availability, compatibility, and capture defaults."""
+
+    table = _data_table("ABP Instrumentation Doctor")
+    table.add_column("Integration", style="bold", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Target", no_wrap=True)
+    table.add_column("Layer", no_wrap=True)
+    table.add_column("Mechanism", no_wrap=True)
+    for status in statuses:
+        compatibility = status.compatibility
+        info = status.info
+        target_version = compatibility.target_version or "not installed"
+        target = f"{info.target_distribution or '-'} {target_version}"
+        table.add_row(
+            status.name,
+            compatibility.status.value,
+            target,
+            info.layer.value,
+            info.mechanism.value,
+        )
+    console.print(table)
+
+    capture_table = _data_table("Capture Defaults")
+    capture_table.add_column("Integration", style="bold", no_wrap=True)
+    capture_table.add_column("Policy")
+    for status in statuses:
+        capture_table.add_row(status.name, status.capture_mode)
+    console.print(capture_table)
+
+    capabilities_table = _data_table("Instrumentation Capabilities")
+    capabilities_table.add_column("Integration", style="bold", no_wrap=True)
+    capabilities_table.add_column("Runtime", no_wrap=True)
+    capabilities_table.add_column("Span kinds")
+    capabilities_table.add_column("Semantic families")
+    for status in statuses:
+        info = status.info
+        capabilities = ["sync"]
+        if info.capabilities.async_:
+            capabilities.append("async")
+        if info.capabilities.streaming:
+            capabilities.append("stream")
+        if info.capabilities.native_hooks:
+            capabilities.append("native hook")
+        capabilities_table.add_row(
+            status.name,
+            ", ".join(capabilities),
+            ", ".join(info.span_kinds),
+            ", ".join(info.semantic_families),
+        )
+    console.print(capabilities_table)
+
+    diagnostics = _data_table("Compatibility Diagnostics")
+    diagnostics.add_column("Integration", style="bold", no_wrap=True)
+    diagnostics.add_column("Extra", no_wrap=True)
+    diagnostics.add_column("Details")
+    for status in statuses:
+        messages = (
+            *status.compatibility.diagnostics,
+            *status.compatibility.conflicts,
+        )
+        diagnostics.add_row(
+            status.name,
+            Text(f"autobench[{status.extra}]"),
+            "\n".join(messages) or "No compatibility issues detected.",
+        )
+    console.print(diagnostics)
+
+
+def render_trace_summary(console: Console, result: ExperimentResult) -> None:
+    """Render recorded ABP trace shape, lifecycle state, and diagnostics."""
+
+    table = _data_table("ABP Trace Summary")
+    table.add_column("Case", style="bold", no_wrap=True)
+    table.add_column("Variant", style="bold", no_wrap=True)
+    table.add_column("Spans", justify="right", no_wrap=True)
+    table.add_column("Roots", justify="right", no_wrap=True)
+    table.add_column("Partial", no_wrap=True)
+    table.add_column("Diagnostics", justify="right", no_wrap=True)
+    traces: list[Trace] = []
+    for run in result.runs:
+        if run.trace is None:
+            continue
+        traces.append(run.trace)
+        table.add_row(
+            run.case_id,
+            run.variant_id,
+            str(len(run.trace.spans)),
+            str(len(run.trace.root_span_ids)),
+            "yes" if run.trace.partial else "no",
+            str(len(run.trace.diagnostics)),
+        )
+    console.print(table)
+
+    kinds: dict[str, int] = {}
+    scopes: dict[str, int] = {}
+    for trace in traces:
+        for span in trace.spans:
+            kinds[span.kind] = kinds.get(span.kind, 0) + 1
+            name = span.scope.instrumentor_name
+            scopes[name] = scopes.get(name, 0) + 1
+    shape = _data_table("Trace Composition")
+    shape.add_column("Dimension", style="bold", no_wrap=True)
+    shape.add_column("Value")
+    shape.add_column("Spans", justify="right", no_wrap=True)
+    for kind, count in sorted(kinds.items()):
+        shape.add_row("kind", kind, str(count))
+    for scope, count in sorted(scopes.items()):
+        shape.add_row("instrumentor", scope, str(count))
+    console.print(shape)
 
 
 def render_recorded_runs(console: Console, runs: Sequence[RunResult]) -> None:

@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from autobench.metrics.observations import Observation, ObservationKind, ObservationSource
-from autobench.metrics.projection import project_observations
+from autobench.metrics.projection import observation_priority, project_observations
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
 
 
@@ -76,7 +76,7 @@ class ObservationQuery(BaseModel):
             source=source,
             projected=projected,
         )
-        return matches[0] if matches else None
+        return _preferred(matches)
 
     def first_related(
         self,
@@ -92,7 +92,7 @@ class ObservationQuery(BaseModel):
             source=source,
             projected=projected,
         )
-        return matches[0] if matches else None
+        return _preferred(matches)
 
     def values(
         self,
@@ -136,6 +136,15 @@ def _source_matches(
     if source is None:
         return True
     return observation.source == source
+
+
+def _preferred(observations: list[Observation]) -> Observation | None:
+    if not observations:
+        return None
+    return min(
+        enumerate(observations),
+        key=lambda item: (*observation_priority(item[1]), item[0]),
+    )[1]
 
 
 __all__ = ("ObservationQuery",)

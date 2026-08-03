@@ -1,12 +1,13 @@
 from __future__ import annotations as _annotations
 
-import asyncio
 from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 
 from autobench.errors import SpecLoadError, SpecValidationError
+from autobench.instrumentation import InstrumentationError, instrumentor_statuses
 from autobench.records.recording import RecordingError, record_experiment
 from autobench.records.replay import replay_experiment
 from autobench.reports.exporting import (
@@ -19,9 +20,12 @@ from autobench.reports.rich import (
     render_comparison,
     render_experiment_result,
     render_export_preview,
+    render_instrumentor_statuses,
     render_report,
+    render_trace_summary,
     render_validation_summary,
 )
+from autobench.runtime.awaitables import run_sync
 from autobench.runtime.pipeline import run_benchmark_spec
 from autobench.spec import collect_benchmark_source_files, load_benchmark_spec
 from autobench.spec import render_validation_summary as build_validation_summary
@@ -47,7 +51,6 @@ def validate(spec_path: Path) -> None:
     except SpecValidationError as exc:
         _console.print(f"[red]Spec validation failed:[/red] {exc}")
         raise SystemExit(1) from exc
-
     summary = build_validation_summary(spec_path, spec)
     render_validation_summary(_console, summary)
 
@@ -83,12 +86,15 @@ def run(
     """Run a YAML Autobench spec."""
     try:
         spec = load_benchmark_spec(spec_path)
-        result = asyncio.run(run_benchmark_spec(spec, concurrency_limit=concurrency))
+        result = run_sync(run_benchmark_spec(spec, concurrency_limit=concurrency))
     except SpecLoadError as exc:
         _print_spec_error(exc)
         raise SystemExit(1) from exc
     except SpecValidationError as exc:
         _console.print(f"[red]Spec validation failed:[/red] {exc}")
+        raise SystemExit(1) from exc
+    except InstrumentationError as exc:
+        _console.print(f"[red]Instrumentation failed:[/red] {escape(str(exc))}")
         raise SystemExit(1) from exc
 
     active_record_path = (
@@ -179,6 +185,26 @@ def compare(
     result = replay_experiment(run_dir)
     comparison = compare_variants(result, baseline=baseline, candidate=candidate)
     render_comparison(_console, comparison)
+
+
+@cli.group("instrumentation")
+def instrumentation() -> None:
+    """Inspect native ABP instrumentation and recorded traces."""
+
+
+@instrumentation.command("doctor")
+def instrumentation_doctor() -> None:
+    """Report installed integrations, compatibility, and capture defaults."""
+
+    render_instrumentor_statuses(_console, instrumentor_statuses())
+
+
+@instrumentation.command("trace")
+@click.argument("run_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def instrumentation_trace(run_dir: Path) -> None:
+    """Summarize ABP traces from recorded evidence without optional SDK imports."""
+
+    render_trace_summary(_console, replay_experiment(run_dir))
 
 
 def _print_spec_error(exc: SpecLoadError) -> None:

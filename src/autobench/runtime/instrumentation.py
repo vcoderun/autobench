@@ -1,137 +1,176 @@
 from __future__ import annotations as _annotations
 
 from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager
-from contextvars import ContextVar, Token
+from contextvars import Token
 from dataclasses import dataclass
-from functools import wraps
-from inspect import getattr_static, iscoroutinefunction
-from types import TracebackType
+from itertools import count
 from typing import Any
-from weakref import WeakKeyDictionary
 
-from pydantic import BaseModel, Field, model_validator
-
-from autobench.metrics.observations import Direction, ObservationRole, ObservationSource
-from autobench.metrics.semantics import SemanticType
-from autobench.runtime.context import RunContext
-
-_ACTIVE_RUN_CONTEXT: ContextVar[RunContext | None] = ContextVar(
-    "autobench_active_run_context",
-    default=None,
+from autobench._version import __version__
+from autobench.instrumentation.manager import InstrumentationRuntime
+from autobench.instrumentation.models import (
+    InstrumentationHandle,
+    InstrumentCall,
+    InstrumentFactorSpec,
+    InstrumentMetricSpec,
+    InstrumentorCapabilities,
+    InstrumentorInfo,
 )
-
-
-class InstrumentMetricSpec(BaseModel):
-    name: str = Field(min_length=1)
-    semantic_type: SemanticType | None = None
-    unit: str | None = None
-    direction: Direction | None = None
-    role: ObservationRole | None = None
-    tags: dict[str, Any] = Field(default_factory=dict)
-    value_path: str | None = None
-    value_factory: Callable[[InstrumentCall], Any] | None = None
-
-    @model_validator(mode="after")
-    def _validate_extractor(self) -> InstrumentMetricSpec:
-        if self.value_path is None and self.value_factory is None:
-            raise ValueError("instrument metrics require value_path or value_factory")
-        return self
-
-
-class InstrumentFactorSpec(BaseModel):
-    name: str = Field(min_length=1)
-    semantic_type: SemanticType | None = None
-    tags: dict[str, Any] = Field(default_factory=dict)
-    value_path: str | None = None
-    value_factory: Callable[[InstrumentCall], Any] | None = None
-
-    @model_validator(mode="after")
-    def _validate_extractor(self) -> InstrumentFactorSpec:
-        if self.value_path is None and self.value_factory is None:
-            raise ValueError("instrument factors require value_path or value_factory")
-        return self
-
-
-@dataclass(slots=True)
-class InstrumentCall:
-    instance: Any | None
-    args: tuple[Any, ...]
-    kwargs: dict[str, Any]
-    result: Any = None
-    error: BaseException | None = None
+from autobench.instrumentation.patching import CallLifecycle, PatchManager
+from autobench.metrics.observations import ObservationSource
+from autobench.protocol.context import ActiveContext, attach_context, reset_context
+from autobench.protocol.signals import (
+    AbstractionLayer,
+    CaptureMechanism,
+    EndReason,
+    InstrumentationScope,
+)
+from autobench.runtime.context import RunContext, Span, SpanKind, active_run_context
 
 
 @dataclass(slots=True)
 class _MethodInstrumentation:
     span: str | None
-    metrics: list[InstrumentMetricSpec]
-    factors: list[InstrumentFactorSpec]
+    span_kind: SpanKind | str
+    metrics: tuple[InstrumentMetricSpec, ...]
+    factors: tuple[InstrumentFactorSpec, ...]
+    scope: InstrumentationScope
+    operation_family: str
 
 
-@dataclass(slots=True)
-class _WrappedMethodState:
-    original_descriptor: Any
-    instrumentations: list[_MethodInstrumentation]
-
-
-@dataclass(slots=True)
-class _MethodTarget:
-    owner: type[Any]
-    method_name: str
-    descriptor_kind: str
-    original_descriptor: Any
-    wrapped: Callable[..., Any]
-
-
-_WRAPPED_METHODS: WeakKeyDictionary[Callable[..., Any], _WrappedMethodState] = WeakKeyDictionary()
-
-
-class InstrumentationHandle(AbstractContextManager["InstrumentationHandle"]):
+class _MethodCall:
     def __init__(
         self,
-        *,
-        method_target: _MethodTarget,
+        handler: _MethodHandler,
         instrumentation: _MethodInstrumentation,
+        ctx: RunContext,
+        call: InstrumentCall,
+        span: Span | None,
     ) -> None:
-        self._method_target = method_target
+        self._handler = handler
         self._instrumentation = instrumentation
-        self._closed = False
+        self._ctx = ctx
+        self._call = call
+        self._span = span
+        self._finished = False
+
+    def resume(self) -> None:
+        if self._finished:
+            return
+        if self._span is not None:
+            self._span.resume()
+
+    def suspend(self) -> None:
+        if self._finished:
+            return
+        if self._span is not None:
+            self._span.suspend()
+
+    def observe(self, item: Any) -> None:
+        if self._finished:
+            return
+        self._call.stream_item_count += 1
+        self._call.last_stream_item = item
+
+    def finish(
+        self,
+        *,
+        result: Any = None,
+        error: BaseException | None = None,
+        reason: EndReason = EndReason.COMPLETED,
+        partial: bool = False,
+    ) -> None:
+        if self._finished:
+            return
+        self._call.result = result
+        self._call.error = error
+        try:
+            span_id = None if self._span is None else self._span.id
+            _emit_records(self._ctx, span_id, self._instrumentation, self._call)
+            if self._span is not None:
+                self._span.set_output(result)
+                if self._call.stream_item_count:
+                    self._span.set_attribute("stream_item_count", self._call.stream_item_count)
+                self._span.finish(error=error, reason=reason, partial=partial)
+        finally:
+            if self._span is not None:
+                self._span.suspend()
+            self._finished = True
+            self._handler.discard(self)
+
+
+class _MethodHandler:
+    def __init__(
+        self,
+        instrumentation: _MethodInstrumentation,
+        runtime: InstrumentationRuntime,
+        info: InstrumentorInfo,
+    ) -> None:
+        self._instrumentation = instrumentation
+        self._runtime = runtime
+        self._info = info
+        self._active: set[_MethodCall] = set()
+
+    @property
+    def suppression_keys(self) -> tuple[str, ...]:
+        return self._info.id, self._instrumentation.operation_family
+
+    def begin(self, call: InstrumentCall) -> CallLifecycle | None:
+        ctx = get_active_run_context()
+        if ctx is None:
+            return None
+        span = None
+        if self._instrumentation.span is not None:
+            span = ctx.span(
+                self._instrumentation.span,
+                kind=self._instrumentation.span_kind,
+                instrumentation_scope=self._instrumentation.scope,
+            )
+            span.__enter__()
+        active_call = _MethodCall(self, self._instrumentation, ctx, call, span)
+        self._active.add(active_call)
+        return active_call
+
+    def diagnose(self, stage: str, error: Exception) -> None:
+        self._runtime.diagnose(
+            self._info,
+            "instrumentation_callback_error",
+            f"{stage}: {type(error).__name__}: {error}",
+        )
+
+    def discard(self, call: _MethodCall) -> None:
+        self._active.discard(call)
 
     def close(self) -> None:
-        if self._closed:
-            return
-        instrumentations = _instrumentations_for(self._method_target.wrapped)
-        if self._instrumentation in instrumentations:
-            instrumentations.remove(self._instrumentation)
-        if not instrumentations:
-            setattr(
-                self._method_target.owner,
-                self._method_target.method_name,
-                self._method_target.original_descriptor,
-            )
-        self._closed = True
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool | None:
-        self.close()
-        return None
+        for call in tuple(self._active):
+            try:
+                call.finish(reason=EndReason.ABANDONED, partial=True)
+            except Exception as exc:
+                self.diagnose("close", exc)
 
 
-def set_active_run_context(ctx: RunContext | None) -> Token[RunContext | None]:
-    return _ACTIVE_RUN_CONTEXT.set(ctx)
+_METHOD_INFO = InstrumentorInfo(
+    id="autobench.instrument_method",
+    version=__version__,
+    mechanism=CaptureMechanism.PATCH,
+    layer=AbstractionLayer.APPLICATION,
+    capabilities=InstrumentorCapabilities(sync=True, async_=True, streaming=True),
+)
+_METHOD_PATCHES = PatchManager()
+_METHOD_RUNTIME = InstrumentationRuntime(_METHOD_PATCHES)
+_METHOD_OWNER_INDEX = count(1)
 
 
-def reset_active_run_context(token: Token[RunContext | None]) -> None:
-    _ACTIVE_RUN_CONTEXT.reset(token)
+def set_active_run_context(ctx: RunContext | None) -> Token[ActiveContext | None]:
+    return attach_context(None if ctx is None else ctx.active_context)
+
+
+def reset_active_run_context(token: Token[ActiveContext | None]) -> None:
+    reset_context(token)
 
 
 def get_active_run_context() -> RunContext | None:
-    return _ACTIVE_RUN_CONTEXT.get()
+    return active_run_context()
 
 
 def instrument_method(
@@ -139,41 +178,29 @@ def instrument_method(
     method_name: str,
     *,
     span: str | None = None,
+    span_kind: SpanKind | str = SpanKind.CUSTOM,
     metrics: list[InstrumentMetricSpec] | None = None,
     factors: list[InstrumentFactorSpec] | None = None,
+    operation_family: str | None = None,
 ) -> InstrumentationHandle:
-    method_target = _resolve_method_target(target, method_name)
-    entry = _MethodInstrumentation(
+    family = operation_family or f"{target.__module__}.{target.__qualname__}.{method_name}"
+    instrumentation = _MethodInstrumentation(
         span=span,
-        metrics=list(metrics or []),
-        factors=list(factors or []),
+        span_kind=span_kind,
+        metrics=tuple(metrics or ()),
+        factors=tuple(factors or ()),
+        scope=_METHOD_RUNTIME.scope(_METHOD_INFO),
+        operation_family=family,
     )
-    instrumentations = _instrumentations_for(method_target.wrapped)
-    instrumentations.append(entry)
-    return InstrumentationHandle(method_target=method_target, instrumentation=entry)
-
-
-def _instrumentations_for(wrapped: Callable[..., Any]) -> list[_MethodInstrumentation]:
-    try:
-        return _WRAPPED_METHODS[wrapped].instrumentations
-    except KeyError as exc:
-        raise RuntimeError("method is not instrumented by Autobench") from exc
-
-
-def _emit_instrumentation(
-    instrumentations: list[_MethodInstrumentation],
-    call: InstrumentCall,
-) -> None:
-    ctx = get_active_run_context()
-    if ctx is None:
-        return
-
-    for instrumentation in instrumentations:
-        if instrumentation.span is None:
-            _emit_records(ctx, None, instrumentation, call)
-            continue
-        with ctx.span(instrumentation.span) as span:
-            _emit_records(ctx, span.id, instrumentation, call)
+    handler = _MethodHandler(instrumentation, _METHOD_RUNTIME, _METHOD_INFO)
+    owner = f"{_METHOD_INFO.id}:{next(_METHOD_OWNER_INDEX)}"
+    patch_handle = _METHOD_PATCHES.patch_method(
+        target,
+        method_name,
+        owner=owner,
+        handler=handler,
+    )
+    return InstrumentationHandle(patch_handle.close, info=_METHOD_INFO)
 
 
 def _emit_records(
@@ -184,7 +211,7 @@ def _emit_records(
 ) -> None:
     for metric in instrumentation.metrics:
         try:
-            observation = ctx.metric(
+            ctx.metric(
                 metric.name,
                 _extract_value(metric.value_path, metric.value_factory, call),
                 semantic_type=metric.semantic_type,
@@ -193,25 +220,23 @@ def _emit_records(
                 role=metric.role,
                 span_id=span_id,
                 tags=metric.tags,
+                source=ObservationSource.INSTRUMENTATION,
             )
         except Exception as exc:
             ctx.error(exc, span_id=span_id)
-            continue
-        observation.source = ObservationSource.INSTRUMENTATION
 
     for factor in instrumentation.factors:
         try:
-            observation = ctx.factor_observation(
+            ctx.factor_observation(
                 factor.name,
                 _extract_value(factor.value_path, factor.value_factory, call),
                 semantic_type=factor.semantic_type,
                 span_id=span_id,
                 tags=factor.tags,
+                source=ObservationSource.INSTRUMENTATION,
             )
         except Exception as exc:
             ctx.error(exc, span_id=span_id)
-            continue
-        observation.source = ObservationSource.INSTRUMENTATION
 
 
 def _extract_value(
@@ -236,107 +261,13 @@ def _extract_value(
             else:
                 raise KeyError(f"Instrumentation path segment '{part}' not found.")
         else:
-            if not hasattr(current, part):
-                raise KeyError(f"Instrumentation path segment '{part}' not found.")
-            current = getattr(current, part)
+            try:
+                current = getattr(current, part)
+            except AttributeError as exc:
+                raise KeyError(f"Instrumentation path segment '{part}' not found.") from exc
         if callable(current) and index < len(parts) - 1:
             current = current()
     return current
-
-
-def _resolve_method_target(target: type[Any], method_name: str) -> _MethodTarget:
-    descriptor = getattr_static(target, method_name)
-    if isinstance(descriptor, property):
-        raise TypeError("property instrumentation is not supported")
-
-    descriptor_kind = "instance"
-    original_descriptor = descriptor
-    original_callable = descriptor
-    if isinstance(descriptor, staticmethod):
-        descriptor_kind = "staticmethod"
-        original_callable = descriptor.__func__
-    elif isinstance(descriptor, classmethod):
-        descriptor_kind = "classmethod"
-        original_callable = descriptor.__func__
-
-    if not isinstance(original_callable, Callable):
-        raise TypeError(f"{target.__name__}.{method_name} is not callable")
-
-    wrapped = original_callable
-    wrapped_state = _WRAPPED_METHODS.get(wrapped)
-    if wrapped_state is None:
-        wrapped = _wrap_callable(wrapped, descriptor_kind)
-        _WRAPPED_METHODS[wrapped] = _WrappedMethodState(
-            original_descriptor=original_descriptor,
-            instrumentations=[],
-        )
-        setattr(target, method_name, _bind_descriptor(wrapped, descriptor_kind))
-        original_for_restore = original_descriptor
-    else:
-        original_for_restore = wrapped_state.original_descriptor
-    return _MethodTarget(
-        owner=target,
-        method_name=method_name,
-        descriptor_kind=descriptor_kind,
-        original_descriptor=original_for_restore,
-        wrapped=wrapped,
-    )
-
-
-def _wrap_callable(original: Callable[..., Any], descriptor_kind: str) -> Callable[..., Any]:
-    if iscoroutinefunction(original):
-
-        @wraps(original)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            instance = _bound_instance(descriptor_kind, args)
-            call_args = _call_args(descriptor_kind, args)
-            call = InstrumentCall(instance=instance, args=call_args, kwargs=kwargs)
-            try:
-                call.result = await original(*args, **kwargs)
-            except BaseException as exc:
-                call.error = exc
-                _emit_instrumentation(_instrumentations_for(async_wrapper), call)
-                raise
-            _emit_instrumentation(_instrumentations_for(async_wrapper), call)
-            return call.result
-
-        return async_wrapper
-
-    @wraps(original)
-    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-        instance = _bound_instance(descriptor_kind, args)
-        call_args = _call_args(descriptor_kind, args)
-        call = InstrumentCall(instance=instance, args=call_args, kwargs=kwargs)
-        try:
-            call.result = original(*args, **kwargs)
-        except BaseException as exc:
-            call.error = exc
-            _emit_instrumentation(_instrumentations_for(sync_wrapper), call)
-            raise
-        _emit_instrumentation(_instrumentations_for(sync_wrapper), call)
-        return call.result
-
-    return sync_wrapper
-
-
-def _bind_descriptor(wrapped: Callable[..., Any], descriptor_kind: str) -> Any:
-    if descriptor_kind == "staticmethod":
-        return staticmethod(wrapped)
-    if descriptor_kind == "classmethod":
-        return classmethod(wrapped)
-    return wrapped
-
-
-def _bound_instance(descriptor_kind: str, args: tuple[Any, ...]) -> Any | None:
-    if descriptor_kind in {"instance", "classmethod"} and args:
-        return args[0]
-    return None
-
-
-def _call_args(descriptor_kind: str, args: tuple[Any, ...]) -> tuple[Any, ...]:
-    if descriptor_kind in {"instance", "classmethod"} and args:
-        return args[1:]
-    return args
 
 
 __all__ = (

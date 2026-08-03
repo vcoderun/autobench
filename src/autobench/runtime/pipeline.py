@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -21,6 +22,10 @@ from autobench.evaluation.scoring import (
     has_score_errors,
     score_records_to_observations,
 )
+from autobench.instrumentation.manager import InstrumentationManager
+from autobench.instrumentation.models import InstrumentationError, Instrumentor
+from autobench.instrumentation.registry import InstrumentorStatus, resolve_instrumentors
+from autobench.metrics.mappings import SourceSnapshot
 from autobench.metrics.observations import (
     Observation,
     ObservationKind,
@@ -28,7 +33,10 @@ from autobench.metrics.observations import (
     ObservationSource,
 )
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, Semantic, SemanticRegistry
+from autobench.protocol import EndReason, SpanStatus
+from autobench.protocol.traces import Trace
 from autobench.records.storage import EnvironmentMetadata, capture_environment
+from autobench.runtime.awaitables import run_sync
 from autobench.runtime.context import RunContext
 from autobench.runtime.tasks import TaskResult, TaskStatus, run_python_task
 from autobench.tracking import AssetVersion, track
@@ -89,6 +97,8 @@ class RunResult(BaseModel):
     asset_versions: list[AssetVersion] = Field(default_factory=list)
     parent_run_id: str | None = None
     error: ErrorRecord | None = None
+    trace: Trace | None = None
+    source_snapshots: tuple[SourceSnapshot, ...] = ()
 
 
 class ExperimentResult(BaseModel):
@@ -172,6 +182,7 @@ async def run_benchmark_spec(
     *,
     experiment_id: str | None = None,
     concurrency_limit: int | None = 1,
+    instrumentors: Sequence[Instrumentor] = (),
 ) -> ExperimentResult:
     from autobench.spec import build_benchmark_plan
 
@@ -180,13 +191,48 @@ async def run_benchmark_spec(
     run_specs = expand_matrix(spec, experiment_id=active_experiment_id)
     environment = capture_environment()
 
-    if concurrency_limit is None or concurrency_limit <= 1:
-        runs = [await _run_matrix_item(spec, run_spec) for run_spec in run_specs]
-    else:
-        semaphore = asyncio.Semaphore(concurrency_limit)
-        runs = await asyncio.gather(
-            *[_run_matrix_item_limited(spec, run_spec, semaphore) for run_spec in run_specs]
+    configured, instrumentation_diagnostics = resolve_instrumentors(
+        spec.instrumentation,
+        reserved_ids={instrumentor.info.id for instrumentor in instrumentors},
+    )
+    active_instrumentors = [*configured, *instrumentors]
+    instrumentor_ids = [instrumentor.info.id for instrumentor in active_instrumentors]
+    duplicate_ids = sorted(
+        instrumentor_id
+        for instrumentor_id in set(instrumentor_ids)
+        if instrumentor_ids.count(instrumentor_id) > 1
+    )
+    if duplicate_ids:
+        raise InstrumentationError(
+            f"duplicate instrumentors configured: {', '.join(duplicate_ids)}"
         )
+
+    with InstrumentationManager() as instrumentation:
+        for instrumentor in active_instrumentors:
+            instrumentation.install(instrumentor)
+
+        if concurrency_limit is None or concurrency_limit <= 1:
+            runs = [
+                await _run_matrix_item(
+                    spec,
+                    run_spec,
+                    instrumentation_diagnostics=instrumentation_diagnostics,
+                )
+                for run_spec in run_specs
+            ]
+        else:
+            semaphore = asyncio.Semaphore(concurrency_limit)
+            runs = await asyncio.gather(
+                *[
+                    _run_matrix_item_limited(
+                        spec,
+                        run_spec,
+                        semaphore,
+                        instrumentation_diagnostics=instrumentation_diagnostics,
+                    )
+                    for run_spec in run_specs
+                ]
+            )
 
     result = ExperimentResult(
         experiment_id=active_experiment_id,
@@ -223,15 +269,17 @@ def run_benchmark_path(
     *,
     experiment_id: str | None = None,
     concurrency_limit: int | None = 1,
+    instrumentors: Sequence[Instrumentor] = (),
 ) -> ExperimentResult:
     from autobench.spec import load_benchmark_spec
 
     spec = load_benchmark_spec(path)
-    return asyncio.run(
+    return run_sync(
         run_benchmark_spec(
             spec,
             experiment_id=experiment_id,
             concurrency_limit=concurrency_limit,
+            instrumentors=instrumentors,
         )
     )
 
@@ -240,12 +288,23 @@ async def _run_matrix_item_limited(
     spec: BenchmarkSpec,
     run_spec: MatrixRunSpec,
     semaphore: asyncio.Semaphore,
+    *,
+    instrumentation_diagnostics: Sequence[InstrumentorStatus] = (),
 ) -> RunResult:
     async with semaphore:
-        return await _run_matrix_item(spec, run_spec)
+        return await _run_matrix_item(
+            spec,
+            run_spec,
+            instrumentation_diagnostics=instrumentation_diagnostics,
+        )
 
 
-async def _run_matrix_item(spec: BenchmarkSpec, run_spec: MatrixRunSpec) -> RunResult:
+async def _run_matrix_item(
+    spec: BenchmarkSpec,
+    run_spec: MatrixRunSpec,
+    *,
+    instrumentation_diagnostics: Sequence[InstrumentorStatus] = (),
+) -> RunResult:
     ctx = RunContext(
         benchmark_id=run_spec.benchmark_id,
         case=run_spec.case,
@@ -254,6 +313,20 @@ async def _run_matrix_item(spec: BenchmarkSpec, run_spec: MatrixRunSpec) -> RunR
         experiment_id=run_spec.experiment_id,
     )
     _seed_variant_evidence(ctx)
+    for status in instrumentation_diagnostics:
+        ctx.diagnostic(
+            "instrumentation.skipped",
+            status.compatibility.status.value,
+            semantic_type=Semantic.DIAGNOSTIC_EVENT,
+            tags={
+                "instrumentor": status.name,
+                "extra": status.extra,
+                "diagnostics": list(
+                    status.compatibility.conflicts + status.compatibility.diagnostics
+                ),
+            },
+            source=ObservationSource.INSTRUMENTATION,
+        )
 
     if spec.task is None:
         error = ErrorRecord(
@@ -261,9 +334,11 @@ async def _run_matrix_item(spec: BenchmarkSpec, run_spec: MatrixRunSpec) -> RunR
             message="No task is defined for this benchmark.",
         )
         task_result = TaskResult(status=TaskStatus.SKIPPED, error=error)
+        ctx.finalize(status=SpanStatus.UNSET, reason=EndReason.DEFERRED)
         return _build_run_result(
             run_spec,
             task_result,
+            ctx=ctx,
             asset_versions=list(ctx.asset_versions),
             error=error,
             registry=spec.semantic_registry,
@@ -274,10 +349,17 @@ async def _run_matrix_item(spec: BenchmarkSpec, run_spec: MatrixRunSpec) -> RunR
             error_type="UnsupportedTaskKind",
             message=f"Unsupported task kind: {spec.task.kind}",
         )
-        task_result = TaskResult(status=TaskStatus.ERRORED, error=error)
+        ctx.error(error)
+        task_result = TaskResult(
+            status=TaskStatus.ERRORED,
+            error=error,
+            errors=list(ctx.errors),
+        )
+        ctx.finalize(status=SpanStatus.ERROR, reason=EndReason.FAILED)
         return _build_run_result(
             run_spec,
             task_result,
+            ctx=ctx,
             asset_versions=list(ctx.asset_versions),
             error=error,
             registry=spec.semantic_registry,
@@ -290,8 +372,16 @@ async def _run_matrix_item(spec: BenchmarkSpec, run_spec: MatrixRunSpec) -> RunR
             case=run_spec.case,
             search_paths=spec.task.module_search_paths,
         )
+    except asyncio.CancelledError as exc:
+        ctx.error(exc)
+        ctx.finalize(
+            status=SpanStatus.ERROR,
+            reason=EndReason.CANCELLED,
+            partial=True,
+        )
+        raise
     except Exception as exc:
-        error = ErrorRecord.from_exception(exc)
+        error = ctx.error(exc)
         task_result = TaskResult(
             status=TaskStatus.ERRORED,
             error=error,
@@ -300,31 +390,90 @@ async def _run_matrix_item(spec: BenchmarkSpec, run_spec: MatrixRunSpec) -> RunR
             spans=list(ctx.spans),
             artifacts=list(ctx.artifacts),
         )
+        ctx.finalize(
+            status=SpanStatus.ERROR,
+            reason=EndReason.FAILED,
+            output=task_result.output,
+        )
         return _build_run_result(
             run_spec,
             task_result,
+            ctx=ctx,
             asset_versions=list(ctx.asset_versions),
             error=error,
             registry=spec.semantic_registry,
         )
 
-    scores = await evaluate_scoring_specs(spec.scoring, ctx=ctx, task_result=task_result)
-    task_result.observations.extend(score_records_to_observations(scores, ctx=ctx))
-    task_result.observations.extend(
-        derive_observations(
+    try:
+        scores = await evaluate_scoring_specs(spec.scoring, ctx=ctx, task_result=task_result)
+        for observation in score_records_to_observations(scores, ctx=ctx):
+            ctx.record_observation(observation)
+        for observation in derive_observations(
             spec.derive,
             ctx=ctx,
-            observations=task_result.observations,
+            observations=ctx.observations,
+            registry=spec.semantic_registry,
+        ):
+            ctx.record_observation(observation)
+    except asyncio.CancelledError as exc:
+        ctx.error(exc)
+        ctx.finalize(
+            status=SpanStatus.ERROR,
+            reason=EndReason.CANCELLED,
+            partial=True,
+            output=task_result.output,
+        )
+        raise
+    except Exception as exc:
+        error = ctx.error(exc)
+        task_result.status = TaskStatus.ERRORED
+        task_result.error = error
+        task_result.errors = list(ctx.errors)
+        task_result.observations = list(ctx.observations)
+        task_result.spans = list(ctx.spans)
+        task_result.artifacts = list(ctx.artifacts)
+        ctx.finalize(
+            status=SpanStatus.ERROR,
+            reason=EndReason.FAILED,
+            output=task_result.output,
+        )
+        return _build_run_result(
+            run_spec,
+            task_result,
+            ctx=ctx,
+            asset_versions=list(ctx.asset_versions),
+            error=error,
             registry=spec.semantic_registry,
         )
-    )
     error = task_result.error
     if error is None and has_score_errors(scores):
         error = next(score.error for score in scores if score.error is not None)
+        ctx.error(error)
+
+    status = SpanStatus.OK
+    reason = EndReason.COMPLETED
+    partial = False
+    if task_result.status in {TaskStatus.FAILED, TaskStatus.ERRORED} or error is not None:
+        status = SpanStatus.ERROR
+        reason = EndReason.FAILED
+    if task_result.error is not None and task_result.error.error_type == "TimeoutError":
+        reason = EndReason.TIMEOUT
+        partial = True
+    ctx.finalize(
+        status=status,
+        reason=reason,
+        partial=partial,
+        output=task_result.output,
+    )
+    task_result.errors = list(ctx.errors)
+    task_result.observations = list(ctx.observations)
+    task_result.spans = list(ctx.spans)
+    task_result.artifacts = list(ctx.artifacts)
 
     return _build_run_result(
         run_spec,
         task_result,
+        ctx=ctx,
         scores=scores,
         asset_versions=list(ctx.asset_versions),
         error=error,
@@ -336,6 +485,7 @@ def _build_run_result(
     run_spec: MatrixRunSpec,
     task_result: TaskResult,
     *,
+    ctx: RunContext,
     scores: list[ScoreRecord] | None = None,
     asset_versions: list[AssetVersion] | None = None,
     error: ErrorRecord | None,
@@ -364,6 +514,8 @@ def _build_run_result(
         factors=list(run_spec.variant.factors),
         asset_versions=asset_versions or [],
         error=error,
+        trace=ctx.trace,
+        source_snapshots=tuple(ctx.source_snapshots),
     )
 
 
@@ -438,13 +590,13 @@ def _seed_variant_evidence(ctx: RunContext) -> None:
             observation_value = asset_version.version
             observation_tags["asset_id"] = asset_version.asset_id
             observation_tags["asset_version"] = asset_version.version
-        observation = ctx.factor_observation(
+        ctx.factor_observation(
             factor.name,
             observation_value,
             semantic_type=factor.semantic_type,
             tags=observation_tags,
+            source=ObservationSource.VARIANT,
         )
-        observation.source = ObservationSource.VARIANT
 
 
 def _refresh_run_statuses(

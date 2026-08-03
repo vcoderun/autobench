@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from autobench.metrics.observations import Observation, ObservationKind
-from autobench.metrics.projection import source_priority
+from autobench.metrics.projection import observation_priority, source_priority
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, Semantic, SemanticRegistry
 from autobench.runtime.pipeline import ExperimentResult, RunResult
 
@@ -455,7 +455,7 @@ def metric_observation(
         return None
     ordered = sorted(
         enumerate(candidates),
-        key=lambda item: (source_priority(item[1].source), item[0]),
+        key=lambda item: (*observation_priority(item[1]), item[0]),
     )
     return ordered[0][1]
 

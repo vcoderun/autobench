@@ -12,10 +12,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 keywords = ["benchmarks", "evals", "agents", "experiments", "yaml"]
 dependencies = [
     "click>=8.1.8",
+    "packaging>=24",
     "pydantic>=2.7",
     "PyYAML>=6.0.2",
     "rich>=13.9.4",
@@ -24,7 +26,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "basedpyright",
+    "httpx==0.28.1",
     "mkdocstrings-python",
+    "openai==2.52.0",
+    "openai-agents==0.19.2",
     "pre-commit",
     "pydantic>=2.7",
     "pytest",
@@ -33,6 +38,24 @@ dev = [
     "ruff",
     "ty",
     "zensical",
+]
+httpx = [
+    "httpx>=0.28,<0.29",
+]
+instrumentation = [
+    "httpx>=0.28,<0.29",
+    "openai>=2.52,<2.53",
+    "openai-agents>=0.19.2,<0.20",
+    "pydantic-ai-slim>=2.22,<2.23",
+]
+openai = [
+    "openai>=2.52,<2.53",
+]
+openai-agents = [
+    "openai-agents>=0.19.2,<0.20",
+]
+pydantic-ai = [
+    "pydantic-ai-slim>=2.22,<2.23",
 ]
 
 [project.scripts]
@@ -125,6 +148,7 @@ addopts = [
     "--tb=short",
     "--color=yes",
 ]
+filterwarnings = ["error"]
 markers = []
 
 [tool.coverage.run]
@@ -139,3 +163,11 @@ show_missing = true
 skip_covered = false
 precision = 2
 fail_under = 100
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "openai==2.52.0",
+    "openai-agents==0.19.2",
+    "pydantic-ai-slim==2.22.0",
+]

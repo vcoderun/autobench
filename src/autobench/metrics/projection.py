@@ -24,6 +24,9 @@ class ProjectionKey(BaseModel):
     role: str | None
     case_id: str | None
     variant_id: str | None
+    span_id: str | None = None
+    measurement_scope: str | None = None
+    logical_operation_id: str | None = None
 
 
 class ProjectedObservation(BaseModel):
@@ -38,6 +41,12 @@ def source_priority(source: ObservationSource | str | None) -> int:
     return SOURCE_PRIORITY.get(normalized, SOURCE_PRIORITY[None])
 
 
+def observation_priority(observation: Observation) -> tuple[int, int]:
+    scope = observation.tags.get("abp.measurement_scope")
+    scope_priority = 0 if scope == "aggregate" else 2 if scope == "direct" else 1
+    return source_priority(observation.source), scope_priority
+
+
 def observation_projection_key(
     observation: Observation,
     *,
@@ -45,12 +54,21 @@ def observation_projection_key(
 ) -> ProjectionKey:
     active_registry = registry or DEFAULT_SEMANTIC_REGISTRY
     role = observation.role.value if observation.role is not None else None
+    logical_operation_id = observation.tags.get("abp.logical_operation_id")
+    normalized_operation_id = (
+        logical_operation_id if isinstance(logical_operation_id, str) else None
+    )
+    measurement_scope = observation.tags.get("abp.measurement_scope")
+    normalized_scope = measurement_scope if isinstance(measurement_scope, str) else None
     return ProjectionKey(
         semantic_type=observation.normalized_semantic_type(active_registry),
         name=observation.name,
         role=role,
         case_id=observation.case_id,
         variant_id=observation.variant_id,
+        span_id=None if normalized_operation_id is not None else observation.span_id,
+        measurement_scope=normalized_scope,
+        logical_operation_id=normalized_operation_id,
     )
 
 
@@ -61,9 +79,30 @@ def project_observations(
 ) -> list[ProjectedObservation]:
     active_registry = registry or DEFAULT_SEMANTIC_REGISTRY
     grouped: dict[
-        tuple[str | None, str, str | None, str | None, str | None], list[Observation]
+        tuple[
+            str | None,
+            str,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+        ],
+        list[Observation],
     ] = {}
-    order: list[tuple[str | None, str, str | None, str | None, str | None]] = []
+    order: list[
+        tuple[
+            str | None,
+            str,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+        ]
+    ] = []
 
     for observation in observations:
         key = observation_projection_key(observation, registry=active_registry)
@@ -73,6 +112,9 @@ def project_observations(
             key.role,
             key.case_id,
             key.variant_id,
+            key.span_id,
+            key.measurement_scope,
+            key.logical_operation_id,
         )
         if key_tuple not in grouped:
             grouped[key_tuple] = []
@@ -84,13 +126,13 @@ def project_observations(
         candidates = grouped[key_tuple]
         ordered_candidates = sorted(
             enumerate(candidates),
-            key=lambda item: (source_priority(item[1].source), item[0]),
+            key=lambda item: (*observation_priority(item[1]), item[0]),
         )
-        best_priority = source_priority(ordered_candidates[0][1].source)
+        best_priority = observation_priority(ordered_candidates[0][1])
         best_candidates = [
             observation
             for _, observation in ordered_candidates
-            if source_priority(observation.source) == best_priority
+            if observation_priority(observation) == best_priority
         ]
         projected.append(
             ProjectedObservation(
@@ -100,6 +142,9 @@ def project_observations(
                     role=key_tuple[2],
                     case_id=key_tuple[3],
                     variant_id=key_tuple[4],
+                    span_id=key_tuple[5],
+                    measurement_scope=key_tuple[6],
+                    logical_operation_id=key_tuple[7],
                 ),
                 observation=ordered_candidates[0][1],
                 candidates=candidates,
@@ -115,6 +160,7 @@ __all__ = (
     "ProjectionKey",
     "SOURCE_PRIORITY",
     "observation_projection_key",
+    "observation_priority",
     "project_observations",
     "source_priority",
 )

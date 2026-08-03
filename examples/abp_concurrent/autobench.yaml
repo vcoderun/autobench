@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=../../schemas/0.2.0/benchmark_schema.json
+benchmark:
+  abp-concurrent:
+    description: Capture concurrent sibling operations under one workflow span.
+    cases:
+      - id: small-batch
+        input: {units: [2, 3, 5]}
+        expected: {total: 10}
+      - id: large-batch
+        input: {units: [8, 13, 21]}
+        expected: {total: 42}
+    run:
+      python: concurrent_benchmark:run
+    variants:
+      local:
+        factors:
+          worker_pool: local
+    score:
+      total:
+        exact:
+          actual: output.total
+          expected: case.expected.total
+        semantic: quality.correctness
+        role: constraint
+    report:
+      leaderboard:
+        show:
+          correctness:
+            metric: quality.correctness
+            aggregate: ratio_true

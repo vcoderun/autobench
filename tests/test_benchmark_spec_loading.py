@@ -25,7 +25,11 @@ from autobench import (
     ReportSpec,
     SchemaScorer,
     Semantic,
+    SemanticAggregation,
+    SemanticCardinality,
+    SemanticPrivacy,
     SemanticRegistry,
+    SemanticStability,
     SemanticTypeInfo,
     TaskSpec,
     TokenCostDeriverSpec,
@@ -356,10 +360,15 @@ def test_benchmark_spec_yaml_view_covers_exporter_optional_branches() -> None:
                 "custom.metric": SemanticTypeInfo(
                     id="custom.metric",
                     parent="quality.score",
+                    description="Custom benchmark quality metric.",
                     unit="ms",
                     value_shape="number",
                     aliases=["custom.metric.v1"],
                     deprecated=True,
+                    stability=SemanticStability.EXPERIMENTAL,
+                    privacy=SemanticPrivacy.SECRET,
+                    cardinality=SemanticCardinality.HIGH,
+                    aggregation=SemanticAggregation.ANY,
                     tags={"owner": "bench"},
                 ),
                 "custom.unit_only": SemanticTypeInfo(
@@ -560,10 +569,15 @@ def test_benchmark_spec_yaml_view_covers_exporter_optional_branches() -> None:
         "types": {
             "custom.metric": {
                 "parent": "quality.score",
+                "description": "Custom benchmark quality metric.",
                 "unit": "ms",
                 "shape": "number",
                 "aliases": ["custom.metric.v1"],
                 "deprecated": True,
+                "stability": "experimental",
+                "privacy": "secret",
+                "cardinality": "high",
+                "aggregation": "any",
                 "tags": {"owner": "bench"},
             },
             "custom.unit_only": {

@@ -6,7 +6,6 @@ from textwrap import dedent
 
 import pytest
 
-import autobench.runtime.instrumentation as instrumentation_module
 from autobench import (
     BenchmarkInfo,
     BenchmarkSpec,
@@ -498,44 +497,6 @@ def test_instrumentation_handle_restores_original_method_and_supports_context_ma
     second.close()
     assert Worker.execute is original
     assert Worker().execute() == {"count": 1}
-
-
-def test_instrumentation_handle_tolerates_missing_registration_on_close() -> None:
-    class Worker:
-        def execute(self) -> dict[str, int]:
-            return {"count": 1}
-
-    original = Worker.execute
-    handle = instrument_method(
-        Worker,
-        "execute",
-        metrics=[InstrumentMetricSpec(name="count", value_path="result.count")],
-    )
-    wrapped = Worker.execute
-    instrumentations = instrumentation_module._instrumentations_for(wrapped)
-    instrumentations.remove(handle._instrumentation)
-
-    handle.close()
-
-    assert Worker.execute.__name__ == "execute"
-
-    with instrument_method(
-        Worker,
-        "execute",
-        metrics=[InstrumentMetricSpec(name="count", value_path="result.count")],
-    ):
-        assert Worker().execute() == {"count": 1}
-        assert Worker.execute is not original
-
-    assert Worker.execute is original
-
-
-def test_instrumentation_metadata_lookup_rejects_untracked_callables() -> None:
-    def untracked() -> None:
-        return None
-
-    with pytest.raises(RuntimeError, match="method is not instrumented by Autobench"):
-        instrumentation_module._instrumentations_for(untracked)
 
 
 def test_instrumentation_supports_static_and_class_methods_and_rejects_invalid_targets() -> None:

@@ -21,6 +21,7 @@ from autobench.evaluation.scoring import (
     PythonScorer,
     ScoringSpec,
 )
+from autobench.instrumentation.config import InstrumentationConfig
 from autobench.io import load_yaml, resolve_file_ref
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
 from autobench.reports.reporting import ReportSpec
@@ -53,6 +54,7 @@ class BenchmarkSpec(BaseModel):
     post_derive: list[PostDeriverSpec] = Field(default_factory=list)
     policies: list[PolicySpec] = Field(default_factory=list)
     reports: ReportSpec = Field(default_factory=ReportSpec)
+    instrumentation: list[InstrumentationConfig] = Field(default_factory=list)
     semantic_registry: SemanticRegistry = Field(
         default_factory=lambda: DEFAULT_SEMANTIC_REGISTRY.model_copy(deep=True)
     )
@@ -61,6 +63,10 @@ class BenchmarkSpec(BaseModel):
     def _validate_unique_ids(self) -> BenchmarkSpec:
         _validate_unique_ids([case.id for case in self.dataset.cases], kind="case")
         _validate_unique_ids([variant.id for variant in self.variants], kind="variant")
+        _validate_unique_ids(
+            [config.kind for config in self.instrumentation],
+            kind="instrumentation",
+        )
         if self.task is None and self.dataset.cases and self.variants:
             raise ValueError(
                 "task is required when cases and variants are defined for a runnable benchmark"

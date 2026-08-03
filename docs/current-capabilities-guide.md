@@ -520,7 +520,7 @@ Autobench tarafindan yazilan YAML'lar schema header alir. Schema cache path'i
 Autobench versiyonuna baglidir:
 
 ```yaml
-# yaml-language-server: $schema=/Users/you/.autobench/0.1.0/schemas/benchmark_schema.json
+# yaml-language-server: $schema=/Users/you/.autobench/0.2.0/schemas/benchmark_schema.json
 ```
 
 Bu sayede editor tarafinda auto-completion hedeflenir.
@@ -2411,24 +2411,24 @@ handle = instrument_method(
         InstrumentMetricSpec(
             name="input_tokens",
             semantic_type=Semantic.LLM_TOKENS_INPUT,
-            extractor=lambda call: call.result["usage"]["input_tokens"],
+            value_path="result.usage.input_tokens",
         ),
         InstrumentMetricSpec(
             name="output_tokens",
             semantic_type=Semantic.LLM_TOKENS_OUTPUT,
-            extractor=lambda call: call.result["usage"]["output_tokens"],
+            value_factory=lambda call: call.result["usage"]["output_tokens"],
         ),
     ],
     factors=[
         InstrumentFactorSpec(
             name="model",
             semantic_type=Semantic.LLM_MODEL_NAME,
-            extractor=lambda call: call.result["usage"]["model"],
+            value_path="result.usage.model",
         ),
         InstrumentFactorSpec(
             name="provider",
             semantic_type=Semantic.LLM_PROVIDER,
-            extractor=lambda call: call.result["usage"]["provider"],
+            value_path="result.usage.provider",
         ),
     ],
 )
@@ -2446,6 +2446,15 @@ Autobench pipeline calisirken active `RunContext` contextvar olarak set edilir.
 Instrumented method cagrildiginda metric/factor observation'lari aktif ctx'e
 yazilir.
 
+`value_factory` Python API'deki typed callback seam'idir. `value_path` ise
+mapping key, attribute ve sifir argumanli accessor zincirlerini declarative
+olarak cozer. YAML tarafinda arbitrary expression calistirilmaz.
+
+Method wrapper instance/static/class/inherited method'lari, sync/async call'lari,
+generator ve async generator stream'lerini ve sync/async context manager'lari
+destekler. Stream span'i iterator olusturulunca degil gercekten bittiginde,
+hata verdiginde veya erken kapandiginda kapanir.
+
 Handle kapatma:
 
 ```python
@@ -2461,6 +2470,94 @@ with instrument_method(LLMClient, "complete", metrics=[...]):
 
 Not: Bu OTel degildir. Autobench'in kendi lightweight instrumentation
 yuzeyidir. OTel/Logfire bridge future plan olarak dusunulur.
+
+Reusable entegrasyonlar `InstrumentorInfo`, `Compatibility`, `Instrumentor`,
+`InstrumentationRuntime` ve `InstrumentationManager` kontratini kullanir.
+Manager package version'ini hook/patch kurmadan once denetler, duplicate
+install'lari reference count ile birlestirir ve son handle kapandiginda native
+callback'i veya exact descriptor'u restore eder. Task-local
+`suppress_instrumentation("family")` sadece eslesen instrumentor/family'yi
+gecici olarak susturur.
+
+### 20.1 Native instrumentor DSL ve doctor
+
+Pydantic AI, OpenAI client, OpenAI Agents ve HTTPX instrumentor'lari typed
+Python ayarlariyla veya benchmark YAML icinden secilebilir:
+
+```yaml
+instrumentation:
+  all:
+    exclude: [httpx]
+    strict: false
+  pydantic_ai: {}
+  openai: {}
+  httpx:
+    capture:
+      path: hash
+      response_headers: [x-request-id]
+```
+
+Python builder'da ortamdaki tum kurulu ve uyumlu built-in entegrasyonlar
+`Benchmark.instrument_all()` ile acilir. `exclude` discovery alanini daraltir;
+`strict=True` kurulamayan ilk entegrasyonda hata verir. Default mod kurulamayan
+entegrasyonu atlar ve nedenini her run'a diagnostic evidence olarak yazar.
+Explicit config, `false` dahil, discovery sonucunu override eder; ayni ID'ye
+sahip custom runtime instrumentor da otomatik kurulumu engeller.
+
+Tekil config `Benchmark.instrument(...)` ile verilir. Ayarlar
+`BenchmarkSpec` icinde serialize edilir; custom `Instrumentor` instance'lari
+ayni method'dan gecse de runtime-only kalir. Pipeline instrumentor'lari tum
+matrix'ten once kurar ve hata halinde de kapatir.
+
+`autobench instrumentation doctor` kurulu/eksik extra'lari, version
+uyumlulugunu, layer/mechanism'i, sync/async/streaming capability'lerini,
+semantic aileleri ve capture default'larini Rich tablolarla gosterir. Eksik
+SDK import edilmez. `autobench instrumentation trace RUN_DIR` ise provider SDK
+ve task import etmeden recorded ABP trace composition ve partial state'i
+gosterir.
+
+HTTPX default'u body ve header toplamaz; path hash'lenir. Secret header/body
+alanlari explicit capture'da bile redact edilir ve body capture bounded'dir.
+Pydantic AI -> OpenAI -> HTTPX layer'lari parent-child olarak compose edilir;
+transport token/cost uretmez ve aggregate/direct accounting double count'i
+engeller.
+
+Detayli kontrat: [Native Instrumentation](native-instrumentation.md).
+
+### 20.2 ABP trace extraction ve accounting
+
+Instrumentor ham ABP fact'lerini toplar; extractor tamamlanmis immutable
+trace'ten tekrar kullanilabilir semantic evidence uretir:
+
+```python
+from autobench import CompositeExtractor, SignalExtractor, SpanExtractor, UsageExtractor
+
+extractor = CompositeExtractor(
+    SignalExtractor(),
+    SpanExtractor(),
+    UsageExtractor(),
+)
+```
+
+- `SignalExtractor`: measurement/event observation'larini scope, layer,
+  instrumentor ve logical operation provenance'i ile geri kurar.
+- `SpanExtractor`: direct span latency, operation count, max depth/fan-out,
+  critical path, parallelism, incomplete work, retry/recovery, validation,
+  approval, tool ve reference metric'lerini uretir.
+- `UsageExtractor`: LLM request/token accounting'i ile requested model,
+  response model ve provider factor'lerini uretir. Cost uretmez; cost mevcut
+  pricing deriver'inin sorumlulugudur.
+
+Parent aggregate ile child direct usage toplanmaz. Her semantic icin tek
+abstraction boundary secilir; logical operation ID'si ayni olan direct
+olcumler deduplicate edilir. Esdeger direct degerler cakisiyor ve unique bir
+authority yoksa total uydurulmaz, `ambiguous_direct_measurement` diagnostic'i
+uretilir. Aggregate deger direct toplamla uyusmazsa
+`aggregate_measurement_mismatch` kaydedilir.
+
+Extractor isim ve version'a sahiptir. `replay_extraction()` yeni bir derived
+RunRecord yazar; ayni extractor'in yeni version'i onceki observation'lari yeni
+derived record'da degistirir ve parent lineage'i korur.
 
 ---
 
@@ -2869,7 +2966,12 @@ Bir run record kabaca soyle gorunur:
 ```yaml
 record:
   type: run
-  version: 3
+  version: 4
+
+protocol:
+  name: abp
+  version: 1
+  semantic_registry: 1
 
 run:
   id: run_refund_request_route_v2

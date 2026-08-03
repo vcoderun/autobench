@@ -2,10 +2,24 @@
 
 ## Unreleased
 
+## 0.2.0
+
 - Migrated the documentation build and GitHub Pages deployment to Zensical.
 - Expanded the documentation to cover Autobench's complete public feature set.
 - Replaced top-level navigation tabs with a persistent vertical documentation menu.
 - Added `llms.txt`, `llms-full.txt`, and a Copy as Markdown action to every documentation page.
+- Added the Autobench Instrumentation Protocol (ABP), immutable traces, capture policy, semantic
+  source mapping, accounting-safe extraction, and partial-trace replay.
+- Added native Pydantic AI, OpenAI Python, OpenAI Agents, and HTTPX instrumentors with typed Python
+  and YAML configuration, compatibility diagnostics, privacy-first capture, and streaming lifecycle.
+- Added benchmark-scoped `instrument_all()` discovery with exclusions, strict mode, explicit
+  override precedence, duplicate prevention, and persisted skip diagnostics.
+- Added `autobench instrumentation doctor` and `autobench instrumentation trace` Rich diagnostics.
+- Added real offline ABP concurrency, OpenAI streaming, OpenAI Agents, and extraction examples.
+- Added a live Pydantic AI/OpenRouter example that uses `instrument_all()` to collect layered
+  framework, client, and HTTPX transport evidence without manual task telemetry.
+- Extended the supported quality matrix through Python 3.14 and added built-wheel/no-extras smoke
+  tests plus target-library compatibility CI.
 
 ## 0.1.0
 

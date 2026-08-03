@@ -16,6 +16,7 @@ from autobench.evaluation.scoring import (
     SchemaScorer,
     ScoringSpec,
 )
+from autobench.instrumentation.config import InstrumentationConfig
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
 from autobench.reports.reporting import MetricAggregation, ReportSpec
 
@@ -42,6 +43,8 @@ def benchmark_spec_to_yaml_view(spec: BenchmarkSpec) -> dict[str, Any]:
         body["post_derive"] = [_compact_model_dump(item) for item in spec.post_derive]
     if spec.policies:
         body["policies"] = [_compact_model_dump(item) for item in spec.policies]
+    if spec.instrumentation:
+        body["instrumentation"] = _instrumentation_to_yaml_view(spec.instrumentation)
 
     report_view = _report_to_yaml_view(spec.reports)
     if report_view:
@@ -73,6 +76,8 @@ def _normalize_benchmark_dsl(raw: dict[str, Any]) -> dict[str, Any]:
         normalized["scoring"] = _normalize_score_section(body["score"])
     if "report" in body:
         normalized["reports"] = _normalize_report_section(body["report"])
+    if "instrumentation" in body:
+        normalized["instrumentation"] = _normalize_instrumentation_section(body["instrumentation"])
 
     for section in (
         "dataset",
@@ -82,10 +87,56 @@ def _normalize_benchmark_dsl(raw: dict[str, Any]) -> dict[str, Any]:
         "policies",
         "reports",
         "semantic_registry",
+        "instrumentation",
     ):
         if section in body and section not in normalized:
             normalized[section] = body[section]
     return normalized
+
+
+def _normalize_instrumentation_section(raw: Any) -> list[dict[str, Any]]:
+    if isinstance(raw, list):
+        normalized_list: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                raise SpecValidationError("instrumentation list entries must be mappings")
+            normalized_list.append(dict(item))
+        return normalized_list
+    if not isinstance(raw, dict):
+        raise SpecValidationError("benchmark.<id>.instrumentation must be a mapping")
+
+    normalized: list[dict[str, Any]] = []
+    for kind, settings in raw.items():
+        if not isinstance(kind, str):
+            raise SpecValidationError("instrumentation names must be strings")
+        if isinstance(settings, bool):
+            normalized.append({"kind": kind, "enabled": settings})
+            continue
+        if settings is None:
+            settings = {}
+        if not isinstance(settings, dict):
+            raise SpecValidationError(f"instrumentation.{kind} must be a mapping or boolean")
+        normalized.append({"kind": kind, **settings})
+    return normalized
+
+
+def _instrumentation_to_yaml_view(
+    instrumentation: list[InstrumentationConfig],
+) -> dict[str, Any]:
+    view: dict[str, Any] = {}
+    for config in instrumentation:
+        payload = config.model_dump(
+            mode="json",
+            exclude={"kind"},
+            exclude_defaults=True,
+        )
+        if not config.enabled and payload == {"enabled": False}:
+            view[config.kind] = False
+        elif payload:
+            view[config.kind] = payload
+        else:
+            view[config.kind] = {}
+    return view
 
 
 def _benchmark_dsl_entry(raw_benchmark: Any) -> tuple[str, dict[str, Any]] | None:
@@ -492,6 +543,10 @@ def _semantic_registry_delta_to_yaml_view(registry: SemanticRegistry) -> dict[st
         payload: dict[str, Any] = {}
         if info.parent is not None and (default_info is None or default_info.parent != info.parent):
             payload["parent"] = info.parent
+        if info.description is not None and (
+            default_info is None or default_info.description != info.description
+        ):
+            payload["description"] = info.description
         if info.unit is not None and (default_info is None or default_info.unit != info.unit):
             payload["unit"] = info.unit
         if info.value_shape is not None and (
@@ -502,6 +557,22 @@ def _semantic_registry_delta_to_yaml_view(registry: SemanticRegistry) -> dict[st
             payload["aliases"] = list(info.aliases)
         if info.deprecated and (default_info is None or default_info.deprecated != info.deprecated):
             payload["deprecated"] = True
+        if info.stability is not None and (
+            default_info is None or default_info.stability != info.stability
+        ):
+            payload["stability"] = info.stability.value
+        if info.privacy is not None and (
+            default_info is None or default_info.privacy != info.privacy
+        ):
+            payload["privacy"] = info.privacy.value
+        if info.cardinality is not None and (
+            default_info is None or default_info.cardinality != info.cardinality
+        ):
+            payload["cardinality"] = info.cardinality.value
+        if info.aggregation is not None and (
+            default_info is None or default_info.aggregation != info.aggregation
+        ):
+            payload["aggregation"] = info.aggregation.value
         if info.tags and (default_info is None or default_info.tags != info.tags):
             payload["tags"] = dict(info.tags)
         types[semantic_type] = payload

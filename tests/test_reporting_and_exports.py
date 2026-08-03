@@ -14,6 +14,9 @@ from autobench import (
     BenchmarkSpec,
     Case,
     DatasetSpec,
+    Observation,
+    ObservationKind,
+    ObservationSource,
     OutputMetricScorer,
     PassFailScorer,
     Semantic,
@@ -130,6 +133,37 @@ async def test_leaderboard_case_matrix_and_comparison_use_semantic_metrics(
     assert metric_value(first_run, Semantic.MONEY_COST) == 0.1
     assert metric_observation(first_run, Semantic.MONEY_COST) is not None
     assert metric_value(first_run, "unknown.metric") is None
+    direct = Observation(
+        id="direct_tokens",
+        name="tokens.direct",
+        kind=ObservationKind.METRIC,
+        semantic_type=Semantic.LLM_TOKENS_INPUT,
+        value=10,
+        source=ObservationSource.DERIVED,
+        tags={"abp.measurement_scope": "direct"},
+    )
+    aggregate = direct.model_copy(
+        update={
+            "id": "aggregate_tokens",
+            "name": "tokens.total",
+            "value": 30,
+            "tags": {"abp.measurement_scope": "aggregate", "abp.summary": True},
+        }
+    )
+    accounted_run = first_run.model_copy(
+        update={
+            "task_result": first_run.task_result.model_copy(
+                update={
+                    "observations": [
+                        *first_run.task_result.observations,
+                        direct,
+                        aggregate,
+                    ]
+                }
+            )
+        }
+    )
+    assert metric_value(accounted_run, Semantic.LLM_TOKENS_INPUT) == 30
 
 
 async def test_report_variant_labels_support_nested_spec_snapshots_and_bad_entries(

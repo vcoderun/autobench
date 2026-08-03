@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from textwrap import dedent
@@ -19,11 +20,13 @@ from autobench import (
     Semantic,
     TaskResolutionError,
     TaskStatus,
+    TrackingRegistry,
     Variant,
     resolve_python_callable,
     run_python_task,
 )
 from autobench.data.variants import FactorValue
+from autobench.protocol import CapturePolicy, EndReason, ReferenceKind, SpanStatus, get_context
 
 
 async def test_sync_task_returns_output_and_can_read_case_and_factor(
@@ -350,8 +353,12 @@ def test_run_context_reports_unknown_factors_and_unstarted_span_access() -> None
         _ = span.id
     with pytest.raises(RuntimeError, match="Span has not started"):
         _ = span.record
+    with pytest.raises(RuntimeError, match="Span has not started"):
+        span.resume()
 
     assert span.__exit__(None, None, None) is None
+    with ctx.span("started") as started:
+        started.resume()
 
 
 def test_context_can_attach_errors_and_orphan_span_ids_do_not_crash() -> None:
@@ -396,14 +403,242 @@ def test_span_iteration_duration_spec_and_out_of_order_finish_are_supported() ->
     ctx._finish_span(outer, started_at=outer_started_at, duration_metric=None)
     ctx._finish_span(inner, started_at=inner_started_at, duration_metric=None)
     detached, detached_started_at = ctx._start_span("detached", tags={})
-    ctx._span_stack.clear()
     ctx._finish_span(detached, started_at=detached_started_at, duration_metric=None)
 
     assert outer.ended_at is not None
     assert inner.ended_at is not None
     assert detached.ended_at is not None
-    assert ctx._span_stack == []
+    assert get_context() is None
     assert any(observation.name == "elapsed" for observation in ctx.observations)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_legacy_spans_keep_the_inherited_root_parent() -> None:
+    case = Case(id="case_1")
+    variant = Variant(id="variant_1")
+    ctx = RunContext(benchmark_id="demo", case=case, variant=variant)
+    entered = asyncio.Event()
+
+    with ctx.span("root") as root:
+
+        async def child(name: str) -> None:
+            with ctx.span(name):
+                entered.set()
+                await asyncio.sleep(0)
+
+        await asyncio.gather(child("first"), child("second"))
+
+    assert entered.is_set()
+    assert [span.parent_id for span in ctx.spans[1:]] == [root.id, root.id]
+
+
+def test_manual_context_materializes_one_abp_graph_without_exposing_hidden_root() -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        experiment_id="experiment",
+        run_id="run",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+    )
+
+    assert ctx.trace.partial is True
+    assert ctx.reference_store.artifacts == ()
+
+    with ctx.span(
+        "workflow",
+        kind="workflow",
+        input={"prompt": "hello"},
+        attributes={"llm.model.name": "demo-model"},
+        usage={"requests": 1},
+    ) as span:
+        span.set_output({"answer": "world"})
+        span.metric("coverage", 0.75, semantic_type=Semantic.COVERAGE_RATIO)
+        span.event("generated")
+        span.artifact("result", "world", media_type="text/plain")
+        span.artifact("binary", b"world", media_type="image/png")
+
+    trace = ctx.finalize()
+
+    assert [record.name for record in ctx.spans] == ["workflow"]
+    assert [record.operation for record in trace.spans] == ["benchmark.run", "workflow"]
+    root, workflow = trace.spans
+    assert workflow.parent_span_id == root.span_id
+    assert workflow.execution is not None
+    assert workflow.execution.run_id == "run"
+    assert workflow.status is SpanStatus.OK
+    assert workflow.end_reason is EndReason.COMPLETED
+    assert workflow.duration_seconds == ctx.spans[0].duration_seconds
+    assert [measurement.name for measurement in workflow.measurements] == ["coverage"]
+    assert workflow.measurements[0].attributes["source"] == "task_observation"
+    assert sum(event.name == "generated" for event in workflow.events) == 1
+    assert any(event.semantic_type == Semantic.OPERATION_INPUT for event in workflow.events)
+    assert any(
+        reference.name == "result" and reference.reference.kind is ReferenceKind.ARTIFACT
+        for reference in workflow.references
+    )
+    assert any(
+        reference.name == "binary" and reference.reference.media_type == "image/png"
+        for reference in workflow.references
+    )
+    assert trace.partial is False
+    assert ctx.trace is trace
+    assert len(ctx.reference_store.artifacts) == 2
+    assert ctx.finalize() is trace
+
+
+def test_capture_policy_diagnostics_are_retained_on_manual_trace() -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+        capture_policy=CapturePolicy.none(),
+    )
+
+    with ctx.span("task", input="secret", attributes={"secret": "value"}) as span:
+        span.event("custom", {"secret": "value"})
+
+    trace = ctx.finalize()
+    task = trace.spans[1]
+
+    assert {diagnostic.code for diagnostic in trace.diagnostics} == {"capture_omitted"}
+    custom = next(event for event in task.events if event.name == "custom")
+    assert custom.body is None
+    assert custom.attributes["capture_omitted"] is True
+
+
+@pytest.mark.parametrize(
+    ("exception", "reason"),
+    [
+        (TimeoutError("deadline"), EndReason.TIMEOUT),
+        (asyncio.CancelledError(), EndReason.CANCELLED),
+    ],
+)
+def test_manual_span_preserves_timeout_and_cancellation_identity(
+    exception: BaseException,
+    reason: EndReason,
+) -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+    )
+
+    with pytest.raises(type(exception)), ctx.span("task"):
+        raise exception
+
+    trace = ctx.finalize()
+    task = trace.spans[1]
+    assert task.status is SpanStatus.ERROR
+    assert task.end_reason is reason
+    assert task.partial is True
+    assert trace.spans[0].status is SpanStatus.ERROR
+
+
+def test_finalize_marks_unclosed_manual_spans_abandoned_and_keeps_partial_evidence() -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+    )
+    span, _ = ctx._start_span("unfinished", tags={})
+    ctx.metric("partial", 1, span_id=span.id)
+    ctx.error("partial failure", span_id=span.id)
+
+    trace = ctx.finalize(partial=True)
+    unfinished = trace.spans[1]
+
+    assert unfinished.end_reason is EndReason.ABANDONED
+    assert unfinished.partial is True
+    assert unfinished.measurements[0].name == "partial"
+    assert trace.partial is True
+
+
+def test_manual_context_rejects_new_spans_and_ignores_duplicate_finish_after_finalize() -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+    )
+    span, started_at = ctx._start_span("task", tags={})
+    ctx._finish_span(span, started_at=started_at, duration_metric=None)
+    ended_at = span.ended_at
+    ctx._finish_span(span, started_at=started_at, duration_metric=None)
+    ctx.finalize()
+
+    assert span.ended_at == ended_at
+    with pytest.raises(RuntimeError, match="finalized"):
+        ctx._start_span("late", tags={})
+
+
+def test_manual_context_tracks_all_asset_reference_kinds_and_deduplicates_versions() -> None:
+    registry = TrackingRegistry()
+    prompt = registry.prompt(name="prompt", text="hello")
+
+    @registry.tool
+    def lookup(value: str) -> str:
+        return value
+
+    @registry.type
+    class Output:
+        value: str
+
+    class Settings:
+        pass
+
+    settings = registry.asset(kind="config", name="settings")(Settings())
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+    )
+
+    for asset in (prompt, lookup, Output, settings, prompt):
+        ctx.attach_tracked_asset(asset, registry=registry)
+
+    trace = ctx.finalize()
+    kinds = {reference.reference.kind for reference in trace.spans[0].references}
+    assert kinds == {
+        ReferenceKind.ASSET,
+        ReferenceKind.PROMPT,
+        ReferenceKind.TOOL,
+        ReferenceKind.OUTPUT_SCHEMA,
+    }
+    assert len(ctx.asset_versions) == 4
+
+    omitted = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+        capture_policy=CapturePolicy.none(),
+    )
+    omitted.attach_tracked_asset(prompt, registry=registry)
+    assert omitted.finalize().spans[0].references == ()
+
+
+def test_artifact_and_attribute_capture_cover_omitted_and_referenced_values() -> None:
+    referenced = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+        capture_policy=CapturePolicy.full(max_inline_bytes=1),
+    )
+    with referenced.span("task", attributes={"payload": "large"}):
+        pass
+    referenced_trace = referenced.finalize()
+    payload = referenced_trace.spans[1].attributes["payload"]
+    assert isinstance(payload, dict)
+    assert payload["kind"] == "artifact"
+
+    omitted = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+        capture_policy=CapturePolicy.full(max_inline_bytes=1, max_artifact_bytes=1),
+    )
+    omitted.artifact("too_large", "large")
+    omitted_trace = omitted.finalize()
+    assert omitted_trace.spans[0].references == ()
+    assert any(diagnostic.code == "artifact_too_large" for diagnostic in omitted_trace.diagnostics)
 
 
 def _write_module(tmp_path: Path, filename: str, source: str) -> None:

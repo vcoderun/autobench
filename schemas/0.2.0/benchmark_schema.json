@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "benchmark": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "cases": {
+            "oneOf": [
+              {
+                "type": "array"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "dataset": {
+            "type": "object"
+          },
+          "derive": {
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "instrumentation": {
+            "additionalProperties": false,
+            "description": "Native ABP instrumentors installed for benchmark execution.",
+            "properties": {
+              "all": {
+                "description": "Every installed and compatible built-in instrumentor.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      },
+                      "exclude": {
+                        "items": {
+                          "enum": [
+                            "pydantic_ai",
+                            "openai",
+                            "openai_agents",
+                            "httpx"
+                          ],
+                          "type": "string"
+                        },
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "strict": {
+                        "default": false,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "httpx": {
+                "description": "HTTPX public transport capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "capture": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "max_body_bytes": {
+                            "default": 65536,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "path": {
+                            "default": "hash",
+                            "enum": [
+                              "omit",
+                              "hash",
+                              "full"
+                            ],
+                            "type": "string"
+                          },
+                          "request_body": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "request_headers": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "response_body": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "response_headers": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "openai": {
+                "description": "Official OpenAI Python client and streaming capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "openai_agents": {
+                "description": "OpenAI Agents native trace-processor capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "pydantic_ai": {
+                "description": "Pydantic AI agent, model, tool, and validation capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "policies": {
+            "type": "array"
+          },
+          "post_derive": {
+            "type": "array"
+          },
+          "report": {
+            "type": "object"
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "score": {
+            "type": "object"
+          },
+          "semantic_registry": {
+            "type": "object"
+          },
+          "variants": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "maxProperties": 1,
+      "minProperties": 1,
+      "type": "object"
+    }
+  },
+  "required": [
+    "benchmark"
+  ],
+  "title": "Autobench 0.2.0 Benchmark DSL",
+  "type": "object"
+}

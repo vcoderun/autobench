@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@v6
-      - run: uv build
+      - run: make wheel-smoke
       - name: Verify distributions
         run: |
           python -m venv /tmp/autobench-wheel
@@ -45,3 +45,37 @@ jobs:
             echo "Source distribution contains internal project artifacts."
             exit 1
           fi
+
+  instrumentation-compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pydantic-ai-2.22.0
+            package: pydantic-ai-slim==2.22.0
+            tests: tests/test_pydantic_ai_instrumentation.py
+          - name: openai-2.52.0
+            package: openai==2.52.0
+            tests: tests/test_openai_instrumentation.py
+          - name: openai-agents-0.19.2
+            package: openai-agents==0.19.2
+            tests: tests/test_openai_agents_instrumentation.py
+          - name: httpx-0.28.0
+            package: httpx==0.28.0
+            tests: tests/test_httpx_instrumentation.py
+          - name: httpx-0.28.1
+            package: httpx==0.28.1
+            tests: tests/test_httpx_instrumentation.py
+    name: Instrumentation ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev --frozen
+      - run: uv pip install --python .venv/bin/python --reinstall "${{ matrix.package }}"
+      - run: .venv/bin/python -m pytest "${{ matrix.tests }}"

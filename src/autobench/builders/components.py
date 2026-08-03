@@ -1,6 +1,6 @@
 from __future__ import annotations as _annotations
 
-import asyncio
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -10,6 +10,17 @@ from autobench.data.datasets import Case, CaseDefaults, DatasetSpec
 from autobench.data.variants import Variant, normalize_variant_factors
 from autobench.evaluation.derivation import DeriverSpec
 from autobench.evaluation.scoring import ScoringSpec
+from autobench.instrumentation.config import (
+    AutoInstrumentation,
+    HTTPXInstrumentation,
+    InstrumentationConfig,
+    InstrumentorName,
+    OpenAIAgentsInstrumentation,
+    OpenAIInstrumentation,
+    PydanticAIInstrumentation,
+)
+from autobench.instrumentation.models import Instrumentor
+from autobench.runtime.awaitables import run_sync
 from autobench.runtime.pipeline import ExperimentResult
 from autobench.spec import BenchmarkInfo, BenchmarkSpec, TaskSpec
 
@@ -45,6 +56,8 @@ class Benchmark:
         self._variants: list[Variant] = []
         self._scoring: list[ScoringSpec] = []
         self._derive: list[DeriverSpec] = []
+        self._instrumentation: list[InstrumentationConfig] = []
+        self._instrumentors: list[Instrumentor] = []
 
     def description(self, value: str) -> Benchmark:
         self._benchmark = self._benchmark.model_copy(update={"description": value})
@@ -94,6 +107,47 @@ class Benchmark:
         self._derive = list(derive)
         return self
 
+    def instrument(
+        self,
+        *instrumentation: InstrumentationConfig | Instrumentor,
+    ) -> Benchmark:
+        """Add serializable settings or a custom runtime instrumentor."""
+
+        for item in instrumentation:
+            if isinstance(
+                item,
+                (
+                    AutoInstrumentation,
+                    PydanticAIInstrumentation,
+                    OpenAIInstrumentation,
+                    OpenAIAgentsInstrumentation,
+                    HTTPXInstrumentation,
+                ),
+            ):
+                self._instrumentation.append(item)
+            else:
+                self._instrumentors.append(item)
+        return self
+
+    def instrument_all(
+        self,
+        *,
+        exclude: Collection[InstrumentorName] = (),
+        strict: bool = False,
+    ) -> Benchmark:
+        """Enable every compatible built-in instrumentor available at runtime."""
+
+        automatic = AutoInstrumentation(exclude=tuple(exclude), strict=strict)
+        self._instrumentation = [
+            automatic,
+            *(
+                config
+                for config in self._instrumentation
+                if not isinstance(config, AutoInstrumentation)
+            ),
+        ]
+        return self
+
     def to_spec(self) -> BenchmarkSpec:
         return BenchmarkSpec(
             benchmark=self._benchmark,
@@ -102,6 +156,7 @@ class Benchmark:
             variants=self._variants,
             scoring=self._scoring,
             derive=self._derive,
+            instrumentation=self._instrumentation,
         )
 
     async def run_async(
@@ -116,6 +171,7 @@ class Benchmark:
             self.to_spec(),
             experiment_id=experiment_id,
             concurrency_limit=concurrency_limit,
+            instrumentors=self._instrumentors,
         )
 
     def run(
@@ -124,7 +180,7 @@ class Benchmark:
         experiment_id: str | None = None,
         concurrency_limit: int | None = 1,
     ) -> ExperimentResult:
-        return asyncio.run(
+        return run_sync(
             self.run_async(
                 experiment_id=experiment_id,
                 concurrency_limit=concurrency_limit,

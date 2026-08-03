@@ -13,6 +13,8 @@ tables. YAML, CSV, and Markdown are explicit file exports rather than raw termin
 | `report` | No | Yes | Render configured analysis views from records |
 | `export` | No | Yes | Write YAML, CSV, or Markdown and preview it |
 | `compare` | No | Yes | Compare two recorded variants without claiming causality |
+| `instrumentation doctor` | No | No | Inspect integration compatibility, capabilities, and capture defaults |
+| `instrumentation trace` | No | Yes | Summarize ABP trace composition and partial state |
 
 References inside a benchmark spec resolve relative to the spec file.
 
@@ -78,10 +80,27 @@ uv run autobench compare runs/example --baseline baseline --candidate optimized
 Both IDs must exist in the recorded experiment. The command shows paired-run count, changed
 factors, aggregate metric deltas, and a confounding flag.
 
+### Instrumentation Diagnostics
+
+```bash
+uv run autobench instrumentation doctor
+uv run autobench instrumentation trace runs/example
+```
+
+`doctor` inspects every built-in integration without importing unavailable SDKs. Its Rich tables
+show target versions, supported status, abstraction layer, hook/patch mechanism,
+sync/async/streaming support, span and semantic families, capture defaults, extras, and degradation
+details.
+
+`trace` operates only on recorded evidence. It reports case/variant span counts, roots, partial
+state, diagnostics, span kinds, and instrumentor composition without importing the benchmark task
+or provider SDKs.
+
 ## CLI Behavior
 
 - `run` executes the benchmark matrix, optionally records it, and renders Rich summary tables.
 - `replay`, `report`, `export`, and `compare` operate on recorded evidence.
+- `instrumentation trace` has the same replay-only dependency boundary.
 - `report` and `compare` render Rich terminal views instead of dumping Markdown or YAML.
 - `export` always writes a file and then shows a Rich preview of the exported projection.
 - default recording paths are placed under `.autobench/<spec-name>/<experiment-id>/`.

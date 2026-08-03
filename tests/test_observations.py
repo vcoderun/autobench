@@ -256,3 +256,61 @@ def test_projection_marks_equal_priority_duplicates_ambiguous() -> None:
     assert len(projected) == 1
     assert projected[0].ambiguous
     assert projected[0].observation.id == "obs-10"
+
+
+def test_projection_keeps_direct_spans_separate_and_correlates_logical_operations() -> None:
+    first = _make_observation(
+        observation_id="direct-1",
+        name="tokens",
+        semantic_type=Semantic.LLM_TOKENS_INPUT,
+        value=10,
+        source=ObservationSource.DERIVED,
+        span_id="span-1",
+    ).model_copy(update={"tags": {"abp.measurement_scope": "direct"}})
+    second = first.model_copy(update={"id": "direct-2", "span_id": "span-2", "value": 20})
+
+    separate = project_observations([first, second])
+
+    assert len(separate) == 2
+    assert {item.key.span_id for item in separate} == {"span-1", "span-2"}
+
+    correlated = project_observations(
+        [
+            first.model_copy(
+                update={"tags": first.tags | {"abp.logical_operation_id": "request-1"}}
+            ),
+            second.model_copy(
+                update={"tags": second.tags | {"abp.logical_operation_id": "request-1"}}
+            ),
+        ]
+    )
+
+    assert len(correlated) == 1
+    assert correlated[0].key.span_id is None
+    assert correlated[0].key.logical_operation_id == "request-1"
+    assert correlated[0].ambiguous
+
+
+def test_query_prefers_accounting_summary_over_direct_evidence_at_same_source() -> None:
+    direct = _make_observation(
+        observation_id="direct",
+        name="tokens.direct",
+        semantic_type=Semantic.LLM_TOKENS_INPUT,
+        value=10,
+        source=ObservationSource.DERIVED,
+        span_id="span-1",
+    ).model_copy(update={"tags": {"abp.measurement_scope": "direct"}})
+    aggregate = direct.model_copy(
+        update={
+            "id": "aggregate",
+            "name": "tokens.total",
+            "value": 30,
+            "span_id": None,
+            "tags": {"abp.measurement_scope": "aggregate", "abp.summary": True},
+        }
+    )
+
+    query = ObservationQuery(observations=[direct, aggregate])
+
+    assert query.first_exact(Semantic.LLM_TOKENS_INPUT) == aggregate
+    assert query.values(Semantic.LLM_TOKENS_INPUT) == [10, 30]

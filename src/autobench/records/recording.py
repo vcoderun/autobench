@@ -1,16 +1,20 @@
 from __future__ import annotations as _annotations
 
+import json
+from enum import StrEnum
 from os.path import relpath
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from autobench.data.datasets import Case, case_to_yaml_view
 from autobench.data.variants import FactorValue
 from autobench.errors import AutobenchError, ErrorRecord
+from autobench.evaluation.extraction import ExtractionEvidence
 from autobench.evaluation.scoring import ScoreRecord
 from autobench.io import dump_yaml
+from autobench.metrics.mappings import CanonicalizationResult, SourceSnapshot
 from autobench.metrics.observations import Observation
 from autobench.metrics.semantics import (
     DEFAULT_SEMANTIC_REGISTRY,
@@ -18,6 +22,8 @@ from autobench.metrics.semantics import (
     semantic_registry_payload_from_yaml_view,
     semantic_registry_to_yaml_view,
 )
+from autobench.protocol.signals import PROTOCOL_VERSION
+from autobench.protocol.traces import Trace
 from autobench.records.artifacts import ArtifactRef
 from autobench.records.storage import EnvironmentMetadata, ResolvedFileHash, hash_file
 from autobench.runtime.context import SpanRecord
@@ -29,6 +35,11 @@ from autobench.runtime.pipeline import (
     RunStatus,
 )
 from autobench.runtime.tasks import TaskStatus
+from autobench.runtime.traces import (
+    trace_payload_from_yaml_view,
+    trace_to_yaml_view,
+    trace_yaml_schema,
+)
 from autobench.spec import (
     BenchmarkSpec,
     benchmark_spec_payload_from_yaml_view,
@@ -36,17 +47,39 @@ from autobench.spec import (
 )
 from autobench.tracking import AssetVersion
 
-RECORD_VERSION = 3
+RECORD_VERSION = 4
+TRACE_ARTIFACT_MEDIA_TYPE = "application/vnd.autobench.abp-trace+yaml"
+TRACE_INLINE_LIMIT_BYTES = 128 * 1024
 
 
 class RecordingError(AutobenchError):
     """Raised when an experiment cannot be recorded safely."""
 
 
+class ReplayKind(StrEnum):
+    EXTRACTION = "extraction"
+    CANONICALIZATION = "canonicalization"
+
+
+class RecordLineage(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: ReplayKind
+    parent_run_id: str
+    processor: str
+    processor_version: str
+    source_record_version: int
+    source_protocol_version: int | None = None
+    source_semantic_registry_version: int | None = None
+    source_maps: tuple[str, ...] = ()
+
+
 class RunRecord(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    record_version: int = RECORD_VERSION
+    record_version: int = Field(default=RECORD_VERSION, ge=1, le=RECORD_VERSION)
+    protocol_version: Literal[1] | None = None
+    semantic_registry_version: int | None = Field(default=None, ge=1)
     run_id: str
     experiment_id: str
     benchmark_id: str
@@ -60,10 +93,18 @@ class RunRecord(BaseModel):
     observations: tuple[Observation, ...] = ()
     scores: tuple[ScoreRecord, ...] = ()
     spans: tuple[SpanRecord, ...] = ()
+    trace: Trace | None = None
+    trace_artifact: ArtifactRef | None = None
+    trace_extensions: dict[str, Any] = Field(default_factory=dict)
     artifacts: tuple[ArtifactRef, ...] = ()
     factors: tuple[FactorValue, ...] = ()
     asset_versions: tuple[AssetVersion, ...] = ()
     parent_run_id: str | None = None
+    lineage: RecordLineage | None = None
+    source_snapshots: tuple[SourceSnapshot, ...] = ()
+    canonicalizations: tuple[CanonicalizationResult, ...] = ()
+    extractions: tuple[ExtractionEvidence, ...] = ()
+    extensions: dict[str, Any] = Field(default_factory=dict)
     errors: tuple[ErrorRecord, ...] = ()
     error: ErrorRecord | None = None
 
@@ -79,13 +120,21 @@ class RunRecord(BaseModel):
             payload["evaluation_status"] = payload["status"]
         if "case" not in payload and "case_id" in payload:
             payload["case"] = {"id": payload["case_id"]}
+        trace = payload.get("trace")
+        if payload.get("protocol_version") is None and isinstance(trace, dict):
+            payload["protocol_version"] = trace.get("protocol_version", PROTOCOL_VERSION)
+        if payload.get("semantic_registry_version") is None and trace is not None:
+            payload["semantic_registry_version"] = DEFAULT_SEMANTIC_REGISTRY.version
+        lineage = payload.get("lineage")
+        if payload.get("parent_run_id") is None and isinstance(lineage, dict):
+            payload["parent_run_id"] = lineage.get("parent_run_id")
         return payload
 
 
 class ExperimentRecord(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    record_version: int = RECORD_VERSION
+    record_version: int = Field(default=RECORD_VERSION, ge=1, le=RECORD_VERSION)
     experiment_id: str
     benchmark_id: str
     plan: BenchmarkPlan
@@ -111,20 +160,34 @@ def record_experiment(
     *,
     source_files: list[Path] | None = None,
     path_root: Path | None = None,
+    trace_inline_limit_bytes: int = TRACE_INLINE_LIMIT_BYTES,
 ) -> ExperimentRecord:
+    if trace_inline_limit_bytes < 1:
+        raise ValueError("trace_inline_limit_bytes must be at least 1")
     if (output_dir / "experiment.yaml").exists():
         raise RecordingError(f"Experiment record already exists: {output_dir}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     artifacts_dir = output_dir / "artifacts"
     cases_dir = output_dir / "cases"
-    _ensure_record_targets_available(result, output_dir=output_dir, artifacts_dir=artifacts_dir)
+    _ensure_record_targets_available(
+        result,
+        output_dir=output_dir,
+        artifacts_dir=artifacts_dir,
+        trace_inline_limit_bytes=trace_inline_limit_bytes,
+    )
     artifacts_dir.mkdir(exist_ok=True)
     cases_dir.mkdir(exist_ok=True)
 
     run_paths: list[str] = []
     for run in result.runs:
-        run_record = run_record_from_result(run, artifacts_dir=artifacts_dir, root_dir=output_dir)
+        run_record = run_record_from_result(
+            run,
+            artifacts_dir=artifacts_dir,
+            root_dir=output_dir,
+            semantic_registry_version=result.semantic_registry.version,
+            trace_inline_limit_bytes=trace_inline_limit_bytes,
+        )
         run_path = _run_record_path(output_dir, run)
         run_path.parent.mkdir(parents=True, exist_ok=True)
         dump_yaml(run_record_to_yaml_view(run_record), run_path, schema_name="run_record")
@@ -177,7 +240,11 @@ def run_record_from_result(
     *,
     artifacts_dir: Path,
     root_dir: Path,
+    semantic_registry_version: int = DEFAULT_SEMANTIC_REGISTRY.version,
+    trace_inline_limit_bytes: int = TRACE_INLINE_LIMIT_BYTES,
 ) -> RunRecord:
+    if trace_inline_limit_bytes < 1:
+        raise ValueError("trace_inline_limit_bytes must be at least 1")
     recorded_artifacts = [
         _record_artifact(
             artifact, artifacts_dir=artifacts_dir, root_dir=root_dir, run_id=run.run_id
@@ -188,7 +255,16 @@ def run_record_from_result(
     for error in [run.error, run.task_result.error, *run.task_result.errors]:
         if error is not None and error not in errors:
             errors.append(error)
+    trace, trace_artifact = _record_trace(
+        run.trace,
+        artifacts_dir=artifacts_dir,
+        root_dir=root_dir,
+        run_id=run.run_id,
+        inline_limit_bytes=trace_inline_limit_bytes,
+    )
     return RunRecord(
+        protocol_version=None if run.trace is None else run.trace.protocol_version,
+        semantic_registry_version=None if run.trace is None else semantic_registry_version,
         run_id=run.run_id,
         experiment_id=run.experiment_id,
         benchmark_id=run.benchmark_id,
@@ -202,10 +278,13 @@ def run_record_from_result(
         observations=tuple(run.task_result.observations),
         scores=tuple(run.scores),
         spans=tuple(run.task_result.spans),
+        trace=trace,
+        trace_artifact=trace_artifact,
         artifacts=tuple(recorded_artifacts),
         factors=tuple(run.factors),
         asset_versions=tuple(run.asset_versions),
         parent_run_id=run.parent_run_id,
+        source_snapshots=run.source_snapshots,
         errors=tuple(errors),
         error=run.error,
     )
@@ -334,6 +413,13 @@ def run_record_to_yaml_view(record: RunRecord) -> dict[str, Any]:
             "type": "run",
             "version": record.record_version,
         },
+        "protocol": _compact(
+            {
+                "name": "abp" if record.protocol_version is not None else None,
+                "version": record.protocol_version,
+                "semantic_registry": record.semantic_registry_version,
+            }
+        ),
         "run": _compact(
             {
                 "id": record.run_id,
@@ -353,10 +439,26 @@ def run_record_to_yaml_view(record: RunRecord) -> dict[str, Any]:
         "variant": _variant_view(record),
         "scores": _scores_view(record.scores),
         "metrics": _observations_view(record.observations),
+        "trace": _trace_view(record),
         "spans": _spans_view(record.spans),
         "artifacts": _artifacts_view(record.artifacts),
         "assets": _asset_versions_view(record.asset_versions),
         "errors": _errors_view(record),
+        "canonicalization": _compact(
+            {
+                "source_snapshots": [
+                    snapshot.model_dump(mode="json") for snapshot in record.source_snapshots
+                ],
+                "results": [result.model_dump(mode="json") for result in record.canonicalizations],
+            }
+        ),
+        "extraction": _compact(
+            {
+                "results": [result.model_dump(mode="json") for result in record.extractions],
+            }
+        ),
+        "lineage": None if record.lineage is None else record.lineage.model_dump(mode="json"),
+        "extensions": _to_serializable(record.extensions),
     }
     compacted = _compact(payload)
     if record.task_output is not None:
@@ -479,8 +581,29 @@ def run_record_payload_from_yaml_view(raw: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(outcome, dict):
         raise RecordingError("run.outcome must be a mapping")
 
+    protocol = raw.get("protocol", {})
+    if protocol is None:
+        protocol = {}
+    if not isinstance(protocol, dict):
+        raise RecordingError("protocol must be a mapping")
+    if protocol.get("name") not in (None, "abp"):
+        raise RecordingError("protocol.name must be 'abp'")
+    trace, trace_artifact, trace_extensions = _trace_payload(raw.get("trace"), protocol)
+    canonicalization = raw.get("canonicalization", {})
+    if canonicalization is None:
+        canonicalization = {}
+    if not isinstance(canonicalization, dict):
+        raise RecordingError("canonicalization must be a mapping")
+    extraction = raw.get("extraction", {})
+    if extraction is None:
+        extraction = {}
+    if not isinstance(extraction, dict):
+        raise RecordingError("extraction must be a mapping")
+
     payload: dict[str, Any] = {
         "record_version": record_header.get("version", RECORD_VERSION),
+        "protocol_version": protocol.get("version"),
+        "semantic_registry_version": protocol.get("semantic_registry"),
         "run_id": run.get("id"),
         "experiment_id": run.get("experiment"),
         "benchmark_id": run.get("benchmark"),
@@ -494,10 +617,18 @@ def run_record_payload_from_yaml_view(raw: dict[str, Any]) -> dict[str, Any]:
         "scores": _scores_payload(raw.get("scores")),
         "observations": _observations_payload(raw.get("metrics")),
         "spans": _spans_payload(raw.get("spans")),
+        "trace": trace,
+        "trace_artifact": trace_artifact,
+        "trace_extensions": trace_extensions,
         "artifacts": _artifacts_payload(raw.get("artifacts")),
         "factors": _factors_payload(raw.get("variant")),
         "asset_versions": _asset_versions_payload(raw.get("assets")),
         "parent_run_id": run.get("parent"),
+        "lineage": raw.get("lineage"),
+        "source_snapshots": canonicalization.get("source_snapshots", []),
+        "canonicalizations": canonicalization.get("results", []),
+        "extractions": extraction.get("results", []),
+        "extensions": _record_extensions(raw),
     }
     errors = _errors_payload(raw.get("errors"))
     if errors:
@@ -563,10 +694,11 @@ def _observations_view(observations: tuple[Observation, ...]) -> dict[str, Any]:
         "diagnostics": {},
         "events": {},
     }
-    for observation in observations:
+    for sequence, observation in enumerate(observations, start=1):
         group = _observation_group(observation)
         groups[group][_unique_key(groups[group], observation.name)] = _compact(
             {
+                "sequence": sequence,
                 "id": observation.id,
                 "name": observation.name,
                 "kind": observation.kind.value,
@@ -617,6 +749,95 @@ def _spans_view(spans: tuple[SpanRecord, ...]) -> dict[str, Any]:
             }
         )
     return mapped
+
+
+def _trace_view(record: RunRecord) -> dict[str, Any]:
+    if record.trace_artifact is not None:
+        tags = record.trace_artifact.tags
+        return _compact(
+            {
+                "id": tags.get("trace_id"),
+                "partial": tags.get("partial"),
+                "spans": tags.get("span_count"),
+                "signals": tags.get("signal_count"),
+                "artifact": {
+                    "id": record.trace_artifact.id,
+                    "name": record.trace_artifact.name,
+                    "media": record.trace_artifact.media_type,
+                    "path": record.trace_artifact.value,
+                },
+                "extensions": _to_serializable(record.trace_extensions),
+            }
+        )
+    if record.trace is None:
+        return {}
+    return trace_to_yaml_view(record.trace, extensions=record.trace_extensions)["trace"]
+
+
+def _trace_payload(
+    raw_trace: Any,
+    protocol: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
+    if raw_trace is None:
+        return None, None, {}
+    trace = _require_mapping(raw_trace, "trace")
+    raw_artifact = trace.get("artifact")
+    if raw_artifact is not None:
+        artifact = _require_mapping(raw_artifact, "trace.artifact")
+        extensions = trace.get("extensions", {})
+        if not isinstance(extensions, dict):
+            raise RecordingError("trace.extensions must be a mapping")
+        return (
+            None,
+            _compact(
+                {
+                    "id": artifact.get("id", "abp_trace"),
+                    "name": artifact.get("name", "ABP trace"),
+                    "media_type": artifact.get("media", artifact.get("media_type")),
+                    "value": artifact.get("path", artifact.get("value")),
+                    "tags": {
+                        "trace_id": trace.get("id"),
+                        "partial": trace.get("partial", False),
+                        "span_count": trace.get("spans", 0),
+                        "signal_count": trace.get("signals", 0),
+                    },
+                }
+            ),
+            dict(extensions),
+        )
+    payload, extensions = trace_payload_from_yaml_view(trace)
+    payload.setdefault("protocol", protocol.get("name", "abp"))
+    payload.setdefault("protocol_version", protocol.get("version", PROTOCOL_VERSION))
+    return payload, None, extensions
+
+
+def _record_extensions(raw: dict[str, Any]) -> dict[str, Any]:
+    extensions = raw.get("extensions", {})
+    if not isinstance(extensions, dict):
+        raise RecordingError("extensions must be a mapping")
+    known = {
+        "record",
+        "protocol",
+        "run",
+        "case",
+        "variant",
+        "scores",
+        "metrics",
+        "trace",
+        "spans",
+        "artifacts",
+        "assets",
+        "errors",
+        "error",
+        "canonicalization",
+        "extraction",
+        "lineage",
+        "extensions",
+        "output",
+    }
+    preserved = dict(extensions)
+    preserved.update({key: value for key, value in raw.items() if key not in known})
+    return preserved
 
 
 def _artifacts_view(artifacts: tuple[ArtifactRef, ...]) -> dict[str, Any]:
@@ -707,7 +928,7 @@ def _observations_payload(raw_metrics: Any) -> list[dict[str, Any]]:
     if not isinstance(raw_metrics, dict):
         raise RecordingError("metrics must be a mapping or list")
 
-    observations: list[dict[str, Any]] = []
+    observations: list[tuple[int, bool, dict[str, Any]]] = []
     for group, default_kind in (
         ("factors", "factor"),
         ("measurements", "metric"),
@@ -721,28 +942,39 @@ def _observations_payload(raw_metrics: Any) -> list[dict[str, Any]]:
             raise RecordingError(f"metrics.{group} must be a mapping")
         for name, raw_observation in raw_group.items():
             observation = _require_mapping(raw_observation, f"metrics.{group}.{name}")
+            sequence = observation.get("sequence")
+            if sequence is not None and (
+                not isinstance(sequence, int) or isinstance(sequence, bool)
+            ):
+                raise RecordingError(f"metrics.{group}.{name}.sequence must be an integer")
             observations.append(
-                _compact(
-                    {
-                        "id": observation.get("id", name),
-                        "name": observation.get("name", name),
-                        "kind": observation.get("kind", default_kind),
-                        "semantic_type": observation.get(
-                            "semantic", observation.get("semantic_type")
-                        ),
-                        "value": observation.get("value"),
-                        "unit": observation.get("unit"),
-                        "direction": observation.get("goal", observation.get("direction")),
-                        "role": observation.get("role"),
-                        "span_id": observation.get("span", observation.get("span_id")),
-                        "source": observation.get("source"),
-                        "tags": observation.get("tags", {}),
-                        "case_id": observation.get("case", observation.get("case_id")),
-                        "variant_id": observation.get("variant", observation.get("variant_id")),
-                    }
+                (
+                    0 if sequence is None else sequence,
+                    sequence is not None,
+                    _compact(
+                        {
+                            "id": observation.get("id", name),
+                            "name": observation.get("name", name),
+                            "kind": observation.get("kind", default_kind),
+                            "semantic_type": observation.get(
+                                "semantic", observation.get("semantic_type")
+                            ),
+                            "value": observation.get("value"),
+                            "unit": observation.get("unit"),
+                            "direction": observation.get("goal", observation.get("direction")),
+                            "role": observation.get("role"),
+                            "span_id": observation.get("span", observation.get("span_id")),
+                            "source": observation.get("source"),
+                            "tags": observation.get("tags", {}),
+                            "case_id": observation.get("case", observation.get("case_id")),
+                            "variant_id": observation.get("variant", observation.get("variant_id")),
+                        }
+                    ),
                 )
             )
-    return observations
+    if all(has_sequence for _, has_sequence, _ in observations):
+        observations.sort(key=lambda item: item[0])
+    return [observation for _, _, observation in observations]
 
 
 def _spans_payload(raw_spans: Any) -> list[dict[str, Any]]:
@@ -899,6 +1131,54 @@ def _compact(value: Any) -> Any:
     return value
 
 
+def _record_trace(
+    trace: Trace | None,
+    *,
+    artifacts_dir: Path,
+    root_dir: Path,
+    run_id: str,
+    inline_limit_bytes: int,
+) -> tuple[Trace | None, ArtifactRef | None]:
+    if trace is None or _trace_size(trace) <= inline_limit_bytes:
+        return trace, None
+
+    path = _trace_artifact_path(artifacts_dir, run_id=run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        raise RecordingError(f"Trace artifact already exists: {path}")
+    dump_yaml(
+        trace_to_yaml_view(trace),
+        path,
+        schema_name="trace",
+        schema=trace_yaml_schema(),
+    )
+    return (
+        None,
+        ArtifactRef(
+            id="abp_trace",
+            name="ABP trace",
+            media_type=TRACE_ARTIFACT_MEDIA_TYPE,
+            value=path.relative_to(root_dir).as_posix(),
+            tags={
+                "trace_id": trace.trace_id,
+                "partial": trace.partial,
+                "span_count": len(trace.spans),
+                "signal_count": len(trace.signals),
+            },
+        ),
+    )
+
+
+def _trace_size(trace: Trace) -> int:
+    return len(
+        json.dumps(
+            trace.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+
+
 def _record_artifact(
     artifact: ArtifactRef,
     *,
@@ -963,6 +1243,7 @@ def _ensure_record_targets_available(
     *,
     output_dir: Path,
     artifacts_dir: Path,
+    trace_inline_limit_bytes: int,
 ) -> None:
     reserved_paths = [output_dir / "experiment.yaml", output_dir / "summary.yaml"]
     for run in result.runs:
@@ -971,6 +1252,8 @@ def _ensure_record_targets_available(
             _artifact_record_path(artifacts_dir, run_id=run.run_id, artifact=artifact)
             for artifact in run.task_result.artifacts
         )
+        if run.trace is not None and _trace_size(run.trace) > trace_inline_limit_bytes:
+            reserved_paths.append(_trace_artifact_path(artifacts_dir, run_id=run.run_id))
         reserved_paths.extend(
             _artifact_payload_path(artifacts_dir, run_id=run.run_id, artifact=artifact)
             for artifact in run.task_result.artifacts
@@ -993,6 +1276,10 @@ def _artifact_payload_path(artifacts_dir: Path, *, run_id: str, artifact: Artifa
         if artifact.media_type is not None and artifact.media_type.startswith("text/"):
             return base.with_suffix(".txt")
     return base.with_suffix(".yaml")
+
+
+def _trace_artifact_path(artifacts_dir: Path, *, run_id: str) -> Path:
+    return artifacts_dir / _path_part(run_id) / "trace.yaml"
 
 
 def _run_record_path(root_dir: Path, run: RunResult) -> Path:
@@ -1025,7 +1312,11 @@ def _to_serializable(value: Any) -> Any:
 __all__ = (
     "ExperimentRecord",
     "RECORD_VERSION",
+    "TRACE_ARTIFACT_MEDIA_TYPE",
+    "TRACE_INLINE_LIMIT_BYTES",
+    "RecordLineage",
     "RecordingError",
+    "ReplayKind",
     "RunRecord",
     "experiment_record_payload_from_yaml_view",
     "experiment_record_to_yaml_view",

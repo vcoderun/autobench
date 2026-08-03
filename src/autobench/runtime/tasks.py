@@ -120,9 +120,7 @@ def _error_for_exception(ctx: RunContext, exc: Exception) -> ErrorRecord:
     for error in reversed(ctx.errors):
         if error.error_type == type(exc).__name__ and error.message == str(exc):
             return error
-    error = ErrorRecord.from_exception(exc)
-    ctx.errors.append(error)
-    return error
+    return ctx.error(exc)
 
 
 @contextmanager

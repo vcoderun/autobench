@@ -83,12 +83,15 @@ nav:
       - Tasks And Runtime: tasks-and-runtime.md
       - Observations And Semantics: observations-and-semantics.md
   - Workflows:
-      - Instrumentation And Traces: instrumentation-and-traces.md
       - Asset Tracking: asset-tracking.md
       - Agentic Evaluation: agentic-evaluation.md
       - Scoring And Derivation: scoring-and-derivation.md
       - Recording And Reporting: recording-and-reporting.md
       - CLI: cli.md
+  - Autobench Protocol (ABP):
+      - Protocol And Traces: instrumentation-and-traces.md
+      - Native Instrumentation: native-instrumentation.md
+      - Compatibility Contract: abp-compatibility.md
   - Reference:
       - YAML Spec: yaml-spec.md
       - Python API: python-api.md
@@ -96,4 +99,5 @@ nav:
   - Project:
       - Development: development.md
       - Release Notes:
+          - 0.2.0: release-notes/0.2.0.md
           - 0.1.0: release-notes/0.1.0.md

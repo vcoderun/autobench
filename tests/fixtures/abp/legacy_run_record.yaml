@@ -1,0 +1,24 @@
+record_version: 1
+run_id: legacy_run_1
+experiment_id: legacy_experiment_1
+benchmark_id: legacy_benchmark
+case_id: legacy_case
+variant_id: legacy_variant
+status: passed
+task_output:
+  answer: 42
+observations: []
+scores: []
+spans:
+  - id: legacy_span_1
+    name: legacy task
+    kind: custom
+    started_at: 2026-01-02T03:04:05Z
+    ended_at: 2026-01-02T03:04:06Z
+    duration_seconds: 1.0
+    observations: []
+    artifacts: []
+artifacts: []
+factors: []
+asset_versions: []
+errors: []
