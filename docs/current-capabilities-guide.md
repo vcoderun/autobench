@@ -180,7 +180,7 @@ variant = Variant(
         ),
         FactorValue(
             name="model",
-            value="openai/gpt-4.1-mini",
+            value="openrouter:openai/gpt-5.6-luna",
             semantic_type=Semantic.LLM_MODEL_NAME,
             optimize=True,
         ),
@@ -501,7 +501,7 @@ benchmark:
       baseline:
         factors:
           model:
-            value: openai/gpt-4.1-mini
+            value: openrouter:openai/gpt-5.6-luna
             semantic: llm.model.name
             optimize: true
     score:
@@ -595,14 +595,14 @@ Variant, "hangi deney kosulu" sorusunun cevabidir:
 
 ```yaml
 variants:
-  gpt_4_1_mini:
-    label: OpenAI mini model
+  gpt_5_6_luna:
+    label: OpenAI Luna model through OpenRouter
     factors:
       provider:
-        value: openai
+        value: openrouter
         semantic: llm.provider
       model:
-        value: gpt-4.1-mini
+        value: openrouter:openai/gpt-5.6-luna
         semantic: llm.model.name
         optimize: true
       temperature:
@@ -918,7 +918,7 @@ obs = Observation(
     value=1234,
     unit="tokens",
     case_id="case_1",
-    variant_id="gpt_4_1_mini",
+    variant_id="gpt_5_6_luna",
 )
 ```
 
@@ -1403,8 +1403,8 @@ def run_case(ctx, case):
 
     ctx.metric("input_tokens", usage.input_tokens, semantic_type=Semantic.LLM_TOKENS_INPUT)
     ctx.metric("output_tokens", usage.output_tokens, semantic_type=Semantic.LLM_TOKENS_OUTPUT)
-    ctx.factor_observation("provider", "openai", semantic_type=Semantic.LLM_PROVIDER)
-    ctx.factor_observation("model", "gpt-4.1-mini", semantic_type=Semantic.LLM_MODEL_NAME)
+    ctx.factor_observation("provider", "openrouter", semantic_type=Semantic.LLM_PROVIDER)
+    ctx.factor_observation("model", "openrouter:openai/gpt-5.6-luna", semantic_type=Semantic.LLM_MODEL_NAME)
 
     return {"answer": result.output}
 ```
@@ -1413,10 +1413,10 @@ Pricing YAML:
 
 ```yaml
 pricing:
-  provider: openai
+  provider: openrouter
   source: manual
   models:
-    gpt-4.1-mini:
+    openai/gpt-5.6-luna:
       input:
         unit: mtok
         price: 0.4
@@ -2761,15 +2761,15 @@ case = Case(id="synthetic_1", input={"question": "..."}, expected={"answer": "..
 marked = mark_generated_case(
     case,
     generator_asset_version="prompt.generator@abc123",
-    model_provider="openai",
-    model_name="gpt-4.1-mini",
+    model_provider="openrouter",
+    model_name="openai/gpt-5.6-luna",
 )
 
 batch = generated_batch_from_cases(
     [case],
     generator_asset_version="prompt.generator@abc123",
-    model_provider="openai",
-    model_name="gpt-4.1-mini",
+    model_provider="openrouter",
+    model_name="openai/gpt-5.6-luna",
 )
 ```
 

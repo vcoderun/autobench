@@ -1,13 +1,14 @@
 from __future__ import annotations as _annotations
 
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
 import pytest
 from click.testing import CliRunner
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from autobench import (
     DEFAULT_SEMANTIC_REGISTRY,
@@ -52,6 +53,17 @@ from autobench.records.recording import (
     run_record_payload_from_yaml_view,
     run_record_to_yaml_view,
 )
+from autobench.runtime.context import SpanRecord
+
+
+class _OpaqueValue:
+    pass
+
+
+class _NestedOpaqueModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    value: _OpaqueValue
 
 
 async def test_record_experiment_writes_successful_and_failed_run_records(
@@ -533,6 +545,34 @@ def test_run_record_yaml_view_round_trips_alternate_payload_shapes() -> None:
         version="v1",
         content_hash="hash1",
     )
+
+
+def test_run_record_yaml_view_serializes_nested_opaque_pydantic_values() -> None:
+    started_at = datetime(2026, 8, 3, 12, tzinfo=UTC)
+    record = RunRecord(
+        run_id="run_1",
+        experiment_id="exp_1",
+        benchmark_id="record-demo",
+        case_id="case_1",
+        variant_id="variant_1",
+        status=RunStatus.PASSED,
+        evaluation_status=EvaluationStatus.PASSED,
+        task_status=TaskStatus.PASSED,
+        case=Case(id="case_1"),
+        spans=(
+            SpanRecord(
+                id="span_1",
+                name="sdk.call",
+                started_at=started_at,
+                input=_NestedOpaqueModel(value=_OpaqueValue()),
+            ),
+        ),
+    )
+
+    view = run_record_to_yaml_view(record)
+
+    assert view["spans"]["span_1"]["started_at"] == "2026-08-03T12:00:00+00:00"
+    assert view["spans"]["span_1"]["input"] == {"value": "<_OpaqueValue>"}
 
 
 def test_run_record_yaml_view_supports_primary_and_legacy_errors() -> None:

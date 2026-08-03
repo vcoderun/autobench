@@ -79,7 +79,7 @@ variants:
     label: Current production route
     factors:
       model:
-        value: openai:gpt-4.1-mini
+        value: openrouter:openai/gpt-5.6-luna
         semantic: llm.model.name
         optimize: true
       prompt_version:
@@ -104,7 +104,7 @@ variant = Variant(
     factors=[
         FactorValue(
             name="model",
-            value="openai:gpt-4.1-mini",
+            value="openrouter:openai/gpt-5.6-luna",
             semantic_type=Semantic.LLM_MODEL_NAME,
             optimize=True,
         ),

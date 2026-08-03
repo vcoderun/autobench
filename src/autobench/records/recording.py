@@ -735,8 +735,8 @@ def _spans_view(spans: tuple[SpanRecord, ...]) -> dict[str, Any]:
                 "name": span.name,
                 "kind": str(span.kind),
                 "parent": span.parent_id,
-                "started_at": span.model_dump(mode="json")["started_at"],
-                "ended_at": span.model_dump(mode="json")["ended_at"],
+                "started_at": span.started_at.isoformat(),
+                "ended_at": None if span.ended_at is None else span.ended_at.isoformat(),
                 "duration": span.duration_seconds,
                 "input": _to_serializable(span.input),
                 "output": _to_serializable(span.output),
@@ -1297,7 +1297,10 @@ def _model_dump(model: BaseModel) -> dict[str, Any]:
 
 def _to_serializable(value: Any) -> Any:
     if isinstance(value, BaseModel):
-        return value.model_dump(mode="json")
+        return value.model_dump(
+            mode="json",
+            fallback=lambda item: f"<{type(item).__qualname__}>",
+        )
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, tuple | list):

@@ -13,6 +13,7 @@ from pydantic_ai import RunContext as AgentRunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 from rich.console import Console
+from rich.pretty import pretty_repr
 from rich.table import Table
 
 from autobench import (
@@ -62,10 +63,11 @@ INSTRUCTIONS = track.prompt(
 
 
 async def run(ctx: RunContext, case: Case) -> ShoppingAnswer:
-    model_name = ctx.factor("model")
-    if not isinstance(model_name, str):
+    requested_model = ctx.factor("model")
+    if not isinstance(requested_model, str):
         raise TypeError("The model factor must contain an OpenRouter model slug.")
 
+    model_name = requested_model.removeprefix("openrouter:")
     model = OpenAIChatModel(model_name, provider=OpenRouterProvider())
     agent = Agent[Catalog, ShoppingAnswer](
         model,
@@ -132,7 +134,7 @@ def print_evidence(run_result: RunResult, *, record_dir: Path) -> None:
         observations.add_row(
             observation.name,
             observation.semantic_type,
-            json.dumps(observation.value, sort_keys=True),
+            pretty_repr(observation.value, max_width=72, max_length=20, max_depth=4),
             observation.source,
         )
     console.print(observations)
@@ -154,7 +156,7 @@ def print_evidence(run_result: RunResult, *, record_dir: Path) -> None:
     "--model",
     envvar="OPENROUTER_MODEL",
     required=True,
-    help="OpenRouter model slug, for example openai/gpt-4.1-mini.",
+    help="Pydantic AI model ID or OpenRouter slug, for example openrouter:openai/gpt-5.6-luna.",
 )
 @click.option(
     "--record",

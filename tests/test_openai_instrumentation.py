@@ -943,3 +943,40 @@ def test_openai_calls_outside_an_active_run_are_untouched() -> None:
         manager.close()
 
     assert result.id == "chatcmpl-test"
+
+
+def test_openai_request_sentinels_are_not_captured_as_input() -> None:
+    ctx = _run_context()
+    runtime = InstrumentationRuntime()
+    instrumentor = OpenAIClient()
+    handler = openai_instrumentation._EndpointHandler(
+        openai_instrumentation._Endpoint(
+            name="openai.chat.completions",
+            input_keys=("messages", "response_format", "tools"),
+        ),
+        runtime,
+        instrumentor.info,
+        openai_instrumentation._RawRegistry(),
+    )
+    token = set_active_run_context(ctx)
+    try:
+        lifecycle = handler.begin(
+            InstrumentCall(
+                instance=None,
+                args=(),
+                kwargs={
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "response_format": openai_instrumentation.Omit(),
+                    "tools": openai_instrumentation.NotGiven(),
+                },
+            )
+        )
+        assert isinstance(lifecycle, openai_instrumentation._OpenAICall)
+        lifecycle.finish()
+    finally:
+        reset_active_run_context(token)
+        ctx.finalize()
+
+    assert _runtime_spans(ctx, "openai.chat.completions")[0].input == {
+        "messages": [{"role": "user", "content": "hello"}]
+    }

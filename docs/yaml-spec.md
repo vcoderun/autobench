@@ -40,7 +40,7 @@ benchmark:
       baseline:
         factors:
           model:
-            value: openai:gpt-4.1-mini
+            value: openrouter:openai/gpt-5.6-luna
             semantic: llm.model.name
           prompt_version:
             value: route-v3
@@ -49,7 +49,7 @@ benchmark:
       candidate:
         factors:
           model:
-            value: openai:gpt-4.1-mini
+            value: openrouter:openai/gpt-5.6-luna
             semantic: llm.model.name
           prompt_version:
             value: route-v4
@@ -499,7 +499,7 @@ report:
   variants:
     baseline:
       factors:
-        model.name: gpt-4.1-mini
+        model.name: openrouter:openai/gpt-5.6-luna
   leaderboard:
     baseline:
       runs: 2

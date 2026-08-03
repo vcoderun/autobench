@@ -10,7 +10,7 @@ instrumentation:
 ```bash
 uv sync --extra instrumentation
 export OPENROUTER_API_KEY=...
-export OPENROUTER_MODEL=openai/gpt-4.1-mini
+export OPENROUTER_MODEL=openrouter:openai/gpt-5.6-luna
 uv run python examples/pydantic_ai/openrouter_instrument_all.py \
   --record /tmp/autobench-openrouter
 ```

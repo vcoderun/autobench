@@ -9,7 +9,7 @@ from time import perf_counter
 from typing import Any, Literal, Protocol, runtime_checkable
 from weakref import WeakKeyDictionary
 
-from openai import APIResponse, AsyncAPIResponse
+from openai import APIResponse, AsyncAPIResponse, NotGiven, Omit
 from openai._legacy_response import LegacyAPIResponse
 from openai.lib.streaming.chat import AsyncChatCompletionStream, ChatCompletionStream
 from openai.lib.streaming.responses import AsyncResponseStream, ResponseStream
@@ -410,7 +410,9 @@ class _EndpointHandler:
             if isinstance(value, str | int | float):
                 attributes[key] = value
         input_payload = {
-            key: call.kwargs[key] for key in self.endpoint.input_keys if key in call.kwargs
+            key: call.kwargs[key]
+            for key in self.endpoint.input_keys
+            if key in call.kwargs and not isinstance(call.kwargs[key], (NotGiven, Omit))
         }
         span = run_context.span(
             self.endpoint.name,

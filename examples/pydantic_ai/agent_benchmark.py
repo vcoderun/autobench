@@ -88,7 +88,8 @@ def main() -> None:
     model = os.environ.get("PYDANTIC_AI_MODEL")
     if model is None:
         raise SystemExit(
-            "Set PYDANTIC_AI_MODEL to a configured provider model, for example openai:gpt-4.1-mini."
+            "Set PYDANTIC_AI_MODEL to a configured provider model, for example "
+            "openrouter:openai/gpt-5.6-luna."
         )
 
     benchmark = (
