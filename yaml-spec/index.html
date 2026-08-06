@@ -1,0 +1,2782 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Replayable, semantic benchmark evidence for any system.">
+      
+      
+      
+        <link rel="canonical" href="https://vcoderun.github.io/autobench/yaml-spec/">
+      
+      
+        <link rel="prev" href="../abp-compatibility/">
+      
+      
+        <link rel="next" href="../python-api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.52">
+    
+    
+      
+        <title>YAML Spec - Autobench</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.8b3b5a67.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/copy-markdown.css">
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#yaml-spec" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="Autobench" class="md-header__button md-logo" aria-label="Autobench" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Autobench
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              YAML Spec
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715M16 12a4 4 0 0 0-4-4M19 5l-1.256 1.256M20 12h2"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/vcoderun/autobench" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M216.5 362.5c-66-8-112.5-55.5-112.5-117 0-25 9-52 24-70-6.5-16.5-5.5-51.5 2-66 20-2.5 47 8 63 22.5 19-6 39-9 63.5-9s44.5 3 62.5 8.5c15.5-14 43-24.5 63-22 7 13.5 8 48.5 1.5 65.5 16 19 24.5 44.5 24.5 70.5 0 61.5-46.5 108-113.5 116.5 17 11 28.5 35 28.5 62.5v52c0 15 12.5 23.5 27.5 17.5C441 459.5 512 369 512 257 512 115.5 397 0 255.5 0S0 115.5 0 257c0 111 70.5 203 165.5 237.5 13.5 5 26.5-4 26.5-17.5v-40c-7 3-16 5-24 5-33 0-52.5-18-66.5-51.5-5.5-13.5-11.5-21.5-23-23-6-.5-8-3-8-6 0-6 10-10.5 20-10.5 14.5 0 27 9 40 27.5 10 14.5 20.5 21 33 21s20.5-4.5 32-16c8.5-8.5 15-16 21-21"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vcoderun/autobench
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="Autobench" class="md-nav__button md-logo" aria-label="Autobench" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+
+    </a>
+    Autobench
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vcoderun/autobench" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M216.5 362.5c-66-8-112.5-55.5-112.5-117 0-25 9-52 24-70-6.5-16.5-5.5-51.5 2-66 20-2.5 47 8 63 22.5 19-6 39-9 63.5-9s44.5 3 62.5 8.5c15.5-14 43-24.5 63-22 7 13.5 8 48.5 1.5 65.5 16 19 24.5 44.5 24.5 70.5 0 61.5-46.5 108-113.5 116.5 17 11 28.5 35 28.5 62.5v52c0 15 12.5 23.5 27.5 17.5C441 459.5 512 369 512 257 512 115.5 397 0 255.5 0S0 115.5 0 257c0 111 70.5 203 165.5 237.5 13.5 5 26.5-4 26.5-17.5v-40c-7 3-16 5-24 5-33 0-52.5-18-66.5-51.5-5.5-13.5-11.5-21.5-23-23-6-.5-8-3-8-6 0-6 10-10.5 20-10.5 14.5 0 27 9 40 27.5 10 14.5 20.5 21 33 21s20.5-4.5 32-16c8.5-8.5 15-16 21-21"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vcoderun/autobench
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Get Started
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Get Started
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Installation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  First Benchmark
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../use-cases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Use Cases
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Example Projects
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Foundations
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Foundations
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Core Concepts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../datasets-and-variants/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Datasets And Variants
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tasks-and-runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tasks And Runtime
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observations-and-semantics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Observations And Semantics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Evaluation
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Evaluation
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring-and-derivation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Scoring And Derivation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agentic-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Agentic Evaluation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Evidence And Lineage
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Evidence And Lineage
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recording-and-reporting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Recording And Reporting
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../asset-tracking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Asset Tracking
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../automatic-asset-discovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Automatic Asset Discovery
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Autobench Protocol (ABP)
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Autobench Protocol (ABP)
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../instrumentation-and-traces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Protocol And Traces
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../native-instrumentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Native Instrumentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../abp-compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Compatibility Contract
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  YAML Spec
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  YAML Spec
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authoring-sections" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Authoring Sections
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-authoring-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Complete Authoring Example
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resolution-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Resolution Rules
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Shape
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-benchmark-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Benchmark YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Notes
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#native-instrumentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Native Instrumentation
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#capture-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Capture Policy
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#safe-extensibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Safe Extensibility
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-run-record-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Run Record YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-dataset-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Dataset YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-semantic-registry-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Semantic Registry YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-pricing-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Pricing YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-report-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Report YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-experiment-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Experiment YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-artifact-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Artifact YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-asset-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Asset YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Python API
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Capability Map
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Troubleshooting
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Project
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Project
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Development
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_8_2" id="__nav_8_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Release Notes
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Release Notes
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-notes/0.2.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0.2.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-notes/0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0.1.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authoring-sections" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Authoring Sections
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-authoring-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Complete Authoring Example
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resolution-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Resolution Rules
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Shape
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-benchmark-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Benchmark YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Notes
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#native-instrumentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Native Instrumentation
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#capture-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Capture Policy
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#safe-extensibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Safe Extensibility
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-run-record-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Run Record YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-dataset-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Dataset YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-semantic-registry-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Semantic Registry YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-pricing-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Pricing YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-report-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Report YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-experiment-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Experiment YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-artifact-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Artifact YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exported-asset-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Exported Asset YAML
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="./.." class="md-path__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="././" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  <button
+    type="button"
+    title="Copy as Markdown"
+    aria-label="Copy as Markdown"
+    class="md-content__button md-icon"
+    data-md-copy-markdown
+    data-md-copy-markdown-source="https://github.com/vcoderun/autobench/edit/main/docs/yaml-spec.md"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-clipboard-copy" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M16 4h2a2 2 0 0 1 2 2v4M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>
+  </button>
+  
+    <a href="https://github.com/vcoderun/autobench/edit/main/docs/yaml-spec.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/vcoderun/autobench/raw/main/docs/yaml-spec.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-code-2" viewBox="0 0 24 24"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5M5 16l-3 3 3 3M9 22l3-3-3-3"/></svg>
+    </a>
+  
+
+
+<h1 id="yaml-spec">YAML Spec<a class="headerlink" href="#yaml-spec" title="Permanent link">&para;</a></h1>
+<p>Autobench is YAML-first. Python builders compile to the same internal <code>BenchmarkSpec</code>.
+Every YAML file written by Autobench includes a <code>yaml-language-server</code> schema header that points
+to the versioned schema cache under <code>~/.autobench/&lt;version&gt;/schemas/</code>.</p>
+<h2 id="authoring-sections">Authoring Sections<a class="headerlink" href="#authoring-sections" title="Permanent link">&para;</a></h2>
+<p>The authoring DSL places the benchmark ID under <code>benchmark</code> and keeps all behavior inside that
+named benchmark:</p>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Required</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>description</code></td>
+<td>No</td>
+<td>Human-readable benchmark intent</td>
+</tr>
+<tr>
+<td><code>dataset</code></td>
+<td>Yes</td>
+<td>Inline or file-backed cases, defaults, version, and metadata</td>
+</tr>
+<tr>
+<td><code>run</code></td>
+<td>For execution</td>
+<td>Python task target</td>
+</tr>
+<tr>
+<td><code>variants</code></td>
+<td>Yes</td>
+<td>Named factor combinations</td>
+</tr>
+<tr>
+<td><code>score</code></td>
+<td>No</td>
+<td>Built-in or Python scorers</td>
+</tr>
+<tr>
+<td><code>derive</code></td>
+<td>No</td>
+<td>Per-run semantic derivation such as token cost</td>
+</tr>
+<tr>
+<td><code>post_derive</code></td>
+<td>No</td>
+<td>Cross-run derivation such as paired baseline</td>
+</tr>
+<tr>
+<td><code>policies</code></td>
+<td>No</td>
+<td>Semantic metric constraints</td>
+</tr>
+<tr>
+<td><code>report</code></td>
+<td>No</td>
+<td>Leaderboard, matrix, comparisons, and distributions</td>
+</tr>
+<tr>
+<td><code>semantic_registry</code></td>
+<td>No</td>
+<td>Custom semantic definitions and aliases</td>
+</tr>
+</tbody>
+</table>
+<h2 id="complete-authoring-example">Complete Authoring Example<a class="headerlink" href="#complete-authoring-example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="c1"># yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json</span>
+<span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">support-routing</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Compare current and candidate routing behavior.</span>
+<span class="w">    </span><span class="nt">dataset</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file://datasets/cases.yaml</span>
+<span class="w">      </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2</span>
+<span class="w">      </span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">regression</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">run</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benchmark_tasks:run_case</span>
+<span class="w">    </span><span class="nt">variants</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">baseline</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">model</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openrouter:openai/gpt-5.6-luna</span>
+<span class="w">            </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llm.model.name</span>
+<span class="w">          </span><span class="nt">prompt_version</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route-v3</span>
+<span class="w">            </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prompt.version</span>
+<span class="w">            </span><span class="nt">optimize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">candidate</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">model</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openrouter:openai/gpt-5.6-luna</span>
+<span class="w">            </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llm.model.name</span>
+<span class="w">          </span><span class="nt">prompt_version</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route-v4</span>
+<span class="w">            </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prompt.version</span>
+<span class="w">            </span><span class="nt">optimize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">score</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">route_correctness</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exact</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">actual</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">output.route</span>
+<span class="w">          </span><span class="nt">expected</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">case.expected.route</span>
+<span class="w">        </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">        </span><span class="nt">goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maximize</span>
+<span class="w">        </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">objective</span>
+<span class="w">      </span><span class="nt">success</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">output.ok</span>
+<span class="w">        </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">result.success</span>
+<span class="w">        </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constraint</span>
+<span class="w">    </span><span class="nt">derive</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">token_cost</span>
+<span class="w">        </span><span class="nt">pricing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file://pricing/models.yaml</span>
+<span class="w">        </span><span class="nt">output</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">request_cost</span>
+<span class="w">          </span><span class="nt">semantic_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">money.cost</span>
+<span class="w">          </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">usd</span>
+<span class="w">          </span><span class="nt">direction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">minimize</span>
+<span class="w">          </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constraint</span>
+<span class="w">    </span><span class="nt">policies</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">must-succeed</span>
+<span class="w">        </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">result.success</span>
+<span class="w">        </span><span class="nt">must_equal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">report</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">leaderboard</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">show</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">accuracy</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">            </span><span class="nt">aggregate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ratio_true</span>
+<span class="w">          </span><span class="nt">total_cost</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">money.cost</span>
+<span class="w">            </span><span class="nt">aggregate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sum</span>
+<span class="w">      </span><span class="nt">matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">      </span><span class="nt">compare</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">baseline -&gt; candidate</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">show</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">accuracy</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">              </span><span class="nt">aggregate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ratio_true</span>
+</code></pre></div>
+<h2 id="resolution-rules">Resolution Rules<a class="headerlink" href="#resolution-rules" title="Permanent link">&para;</a></h2>
+<ul>
+<li>File references resolve relative to the benchmark YAML.</li>
+<li>Python targets use <code>module:callable</code> and receive inferred search paths from the spec directory.</li>
+<li>Duplicate case and variant IDs are validation errors.</li>
+<li>A nonempty runnable matrix requires a task.</li>
+<li>Scorer definitions must select exactly one scoring action.</li>
+<li>Remote file references are rejected; price-source URL loading is an explicit integration API.</li>
+<li>Custom semantics should be declared in the semantic registry.</li>
+</ul>
+<h2 id="shape">Shape<a class="headerlink" href="#shape" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">support-routing</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deterministic support routing benchmark.</span>
+<span class="w">    </span><span class="nt">dataset</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file://datasets/cases.yaml</span>
+<span class="w">      </span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">metadata</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docs</span>
+<span class="w">    </span><span class="nt">run</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app.benchmarks.support:run_ticket_case</span>
+<span class="w">    </span><span class="nt">variants</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">route_v1</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">prompt_version</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route-v1</span>
+<span class="w">            </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prompt.version</span>
+<span class="w">            </span><span class="nt">optimize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">          </span><span class="nt">routing_profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">baseline</span>
+<span class="w">    </span><span class="nt">score</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">routing_correctness</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exact</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">actual</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">output.queue</span>
+<span class="w">          </span><span class="nt">expected</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">case.expected.queue</span>
+<span class="w">        </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">      </span><span class="nt">tool_arguments</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">expected_action</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">arguments</span>
+<span class="w">          </span><span class="nt">observed_kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">        </span><span class="nt">span</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">        </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent.tool.argument.correctness</span>
+<span class="w">    </span><span class="nt">report</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">leaderboard</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">show</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">pass_rate</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">result.success</span>
+<span class="w">            </span><span class="nt">aggregate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ratio_true</span>
+</code></pre></div>
+<h2 id="exported-benchmark-yaml">Exported Benchmark YAML<a class="headerlink" href="#exported-benchmark-yaml" title="Permanent link">&para;</a></h2>
+<p>When Autobench renders a benchmark spec back to YAML, it uses a DSL-like shape instead of a raw
+model dump:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">support-routing</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Route support tickets.</span>
+<span class="w">    </span><span class="nt">dataset</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datasets/cases.yaml</span>
+<span class="w">      </span><span class="nt">cases</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ticket_1</span>
+<span class="w">          </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Refund</span>
+<span class="w">    </span><span class="nt">run</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app.benchmarks.support:run_ticket_case</span>
+<span class="w">    </span><span class="nt">variants</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">route_v1</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">prompt_version</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route-v1</span>
+<span class="w">            </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prompt.version</span>
+<span class="w">            </span><span class="nt">optimize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">          </span><span class="nt">routing_profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">baseline</span>
+<span class="w">    </span><span class="nt">score</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">success</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">output.matched</span>
+<span class="w">        </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">result.success</span>
+<span class="w">        </span><span class="nt">goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maximize</span>
+<span class="w">    </span><span class="nt">report</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">leaderboard</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">show</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">pass_rate</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">result.success</span>
+<span class="w">            </span><span class="nt">aggregate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ratio_true</span>
+</code></pre></div>
+<h2 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>dataset.source</code> supports local <code>file://</code> references and globs.</li>
+<li>task targets use <code>module:function</code>.</li>
+<li>variant factors accept either mapping or list form.</li>
+<li>YAML does not execute inline expressions.</li>
+<li>importable code hooks such as Python scorers remain explicit dotted targets.</li>
+<li><code>score.&lt;name&gt;.span</code> can target component spans by kind, name, tag, path, or semantic type.</li>
+<li><code>expected_action</code> scores compare <code>case.expected.actions</code> or <code>case.expected.tool_calls</code> with observed spans.</li>
+</ul>
+<h2 id="native-instrumentation">Native Instrumentation<a class="headerlink" href="#native-instrumentation" title="Permanent link">&para;</a></h2>
+<p>The optional <code>instrumentation</code> section installs ABP SDK integrations for the complete benchmark
+matrix:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">support-agent</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">instrumentation</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">all</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">httpx</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">strict</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">        </span><span class="nt">assets</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">discover</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">          </span><span class="nt">representations</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">definition</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">effective</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">include</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prompt</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tool</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">output_schema</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">capability</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">pydantic_ai</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">      </span><span class="nt">openai</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">      </span><span class="nt">openai_agents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">      </span><span class="nt">httpx</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hash</span>
+<span class="w">          </span><span class="nt">request_headers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">x-request-id</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">response_headers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">x-request-id</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">request_body</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="nt">response_body</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="nt">max_body_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">65536</span>
+</code></pre></div>
+<p><code>all</code> discovers every installed, compatible built-in integration. Missing integrations are skipped
+and recorded as run diagnostics unless <code>strict: true</code> is set. <code>exclude</code> accepts <code>pydantic_ai</code>,
+<code>openai</code>, <code>openai_agents</code>, and <code>httpx</code>. An explicit entry, including <code>false</code>, overrides discovery;
+the explicit HTTPX block above therefore remains enabled despite the discovery exclusion.</p>
+<p><code>{}</code> selects privacy-safe defaults. <code>false</code> disables a known integration. Unknown integration
+names, settings, exclusions, or HTTP capture modes are validation errors. Optional SDKs are
+imported only when their enabled integration is resolved for execution. Replay never resolves this
+section.</p>
+<p>The versioned <code>benchmark_schema.json</code> describes this surface, so YAML language servers complete
+integration names and capture settings. See <a href="../native-instrumentation/">Native Instrumentation</a> for
+the lifecycle and privacy contract.</p>
+<h2 id="capture-policy">Capture Policy<a class="headerlink" href="#capture-policy" title="Permanent link">&para;</a></h2>
+<p>The benchmark-level <code>capture</code> section controls ABP evidence and discovered asset content for every
+case/variant run:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">private-agent</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hash</span>
+<span class="w">      </span><span class="nt">use_semantic_defaults</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">      </span><span class="nt">semantic_overrides</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">full</span>
+<span class="w">        </span><span class="nt">output_schema</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">full</span>
+<span class="w">      </span><span class="nt">deny_paths</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">assets.*:prompt:private_notes</span>
+</code></pre></div>
+<p>Supported levels are <code>none</code>, <code>metadata</code>, <code>hash</code>, <code>redacted</code>, and <code>full</code>. Other fields include
+semantic/path allow and deny lists, secret names, inline/artifact limits, collection/string/depth
+limits, binary retention, and source-attribute retention. Unknown fields or levels fail validation.
+See <a href="../automatic-asset-discovery/#privacy-and-capture-policy">Automatic Asset Discovery</a> for the
+content/version behavior.</p>
+<h2 id="safe-extensibility">Safe Extensibility<a class="headerlink" href="#safe-extensibility" title="Permanent link">&para;</a></h2>
+<p>YAML is intended to be shareable and replayable. For that reason:</p>
+<ul>
+<li>file references are resolved relative to the spec path</li>
+<li>remote URLs are rejected</li>
+<li>inline Python expressions are not part of the YAML surface</li>
+</ul>
+<h2 id="exported-run-record-yaml">Exported Run Record YAML<a class="headerlink" href="#exported-run-record-yaml" title="Permanent link">&para;</a></h2>
+<p>Run records are the immutable per-case/per-variant evidence files used by replay. The trace signal
+objects below are abridged; recorded files retain their timestamps, sequence IDs, execution
+references, scope provenance, and captured attributes:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">run</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+
+<span class="nt">protocol</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">abp</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">semantic_registry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">run</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">run_ticket_1_route_v1</span>
+<span class="w">  </span><span class="nt">experiment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">exp_support_routing_20260507T120000Z</span>
+<span class="w">  </span><span class="nt">benchmark</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">support-routing</span>
+<span class="w">  </span><span class="nt">case</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ticket_1</span>
+<span class="w">  </span><span class="nt">variant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route_v1</span>
+<span class="w">  </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">passed</span>
+<span class="w">  </span><span class="nt">outcome</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">evaluation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">passed</span>
+<span class="w">    </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">passed</span>
+
+<span class="nt">case</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ticket_1</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Refund</span>
+<span class="w">  </span><span class="nt">expected</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">billing</span>
+
+<span class="nt">variant</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route_v1</span>
+<span class="w">  </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">prompt_version</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route-v1</span>
+<span class="w">      </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prompt.version</span>
+<span class="w">      </span><span class="nt">optimize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="nt">scores</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">routing_correctness</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">    </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">objective</span>
+
+<span class="nt">metrics</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">measurements</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">routing_correctness</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">observation_1</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">routing_correctness</span>
+<span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">metric</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">  </span><span class="nt">diagnostics</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">latency_ms</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12.4</span>
+<span class="w">      </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">time.latency</span>
+<span class="w">      </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ms</span>
+
+<span class="nt">trace</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">abp</span>
+<span class="w">  </span><span class="nt">protocol_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">trace_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">70d8f4b6742d412a85cb7a198db07fe1</span>
+<span class="w">  </span><span class="nt">execution</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">benchmark_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">support-routing</span>
+<span class="w">    </span><span class="nt">experiment_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">exp_support_routing_20260507T120000Z</span>
+<span class="w">    </span><span class="nt">run_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">run_ticket_1_route_v1</span>
+<span class="w">    </span><span class="nt">case_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ticket_1</span>
+<span class="w">    </span><span class="nt">variant_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route_v1</span>
+<span class="w">  </span><span class="nt">root_span_ids</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">3f2f6c57b9f56a11</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">spans</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">span_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3f2f6c57b9f56a11</span>
+<span class="w">      </span><span class="nt">operation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benchmark.run</span>
+<span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">task</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">instrumentor_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autobench.manual</span>
+<span class="w">        </span><span class="nt">instrumentor_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3.0</span>
+<span class="w">        </span><span class="nt">package_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autobench</span>
+<span class="w">        </span><span class="nt">package_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3.0</span>
+<span class="w">        </span><span class="nt">mechanism</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manual</span>
+<span class="w">        </span><span class="nt">layer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application</span>
+<span class="w">      </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ok</span>
+<span class="w">      </span><span class="nt">end_reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">completed</span>
+<span class="w">      </span><span class="nt">measurements</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">      </span><span class="nt">events</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">      </span><span class="nt">links</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">      </span><span class="nt">references</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">      </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">links</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">  </span><span class="nt">references</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">  </span><span class="nt">diagnostics</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">  </span><span class="nt">signals</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">span_start</span>
+<span class="w">      </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">abp</span>
+<span class="w">      </span><span class="nt">protocol_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">span_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3f2f6c57b9f56a11</span>
+<span class="w">      </span><span class="nt">operation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benchmark.run</span>
+<span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">task</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">span_end</span>
+<span class="w">      </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">abp</span>
+<span class="w">      </span><span class="nt">protocol_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">span_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3f2f6c57b9f56a11</span>
+<span class="w">      </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ok</span>
+<span class="w">      </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">completed</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+
+<span class="nt">spans</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">call_router</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow</span>
+<span class="w">    </span><span class="nt">started_at</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-05-07T12:00:00Z&quot;</span>
+<span class="w">    </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0124</span>
+<span class="w">    </span><span class="nt">attributes</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">component</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">router</span>
+<span class="w">  </span><span class="nt">lookup_user</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">    </span><span class="nt">parent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">call_router</span>
+<span class="w">    </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">user_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">u1</span>
+<span class="w">    </span><span class="nt">output</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">tier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gold</span>
+<span class="w">    </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.004</span>
+
+<span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">generated_spec</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">media</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application/x-yaml</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifacts/run_ticket_1_route_v1/generated_spec.yaml</span>
+
+<span class="nt">assets</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">prompt.router</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7c91d4d7b1af</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">billing</span>
+</code></pre></div>
+<p>When the serialized ABP trace exceeds the inline limit, the same section becomes a compact summary
+and artifact reference:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">trace</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">70d8f4b6742d412a85cb7a198db07fe1</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">spans</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7</span>
+<span class="w">  </span><span class="nt">signals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">31</span>
+<span class="w">  </span><span class="nt">artifact</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">abp_trace</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ABP trace</span>
+<span class="w">    </span><span class="nt">media</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application/vnd.autobench.abp-trace+yaml</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifacts/run_ticket_1_route_v1/trace.yaml</span>
+</code></pre></div>
+<h2 id="exported-dataset-yaml">Exported Dataset YAML<a class="headerlink" href="#exported-dataset-yaml" title="Permanent link">&para;</a></h2>
+<p>Dataset exports use a DSL-like shape instead of raw model dumps:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dataset</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">dataset</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tickets</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="w">  </span><span class="nt">metadata</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">support</span>
+<span class="w">  </span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">smoke</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">cases</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ticket_1</span>
+<span class="w">      </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Refund</span>
+</code></pre></div>
+<h2 id="exported-semantic-registry-yaml">Exported Semantic Registry YAML<a class="headerlink" href="#exported-semantic-registry-yaml" title="Permanent link">&para;</a></h2>
+<p>Semantic registry exports use stable type ids with compact metadata:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semantic_registry</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">semantic_registry</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">aliases</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">quality.answer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.score</span>
+<span class="w">  </span><span class="nt">types</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">money.cost</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">usd</span>
+<span class="w">      </span><span class="nt">shape</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">number</span>
+<span class="w">    </span><span class="nt">serving.cost</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">parent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">money.cost</span>
+<span class="w">      </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">usd</span>
+<span class="w">      </span><span class="nt">shape</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">number</span>
+</code></pre></div>
+<h2 id="exported-pricing-yaml">Exported Pricing YAML<a class="headerlink" href="#exported-pricing-yaml" title="Permanent link">&para;</a></h2>
+<p>Pricing tables are helper data, not a required runtime dependency. They keep provider/model aliases
+and tiered token prices readable:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pricing</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">pricing</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openrouter</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">genai-prices</span>
+<span class="w">  </span><span class="nt">updated_at</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-05-07&quot;</span>
+<span class="w">  </span><span class="nt">models</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">google/gemini-3-flash-preview</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Gemini 3 Flash Preview</span>
+<span class="w">      </span><span class="nt">aliases</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">google:gemini-3-flash-preview</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openrouter/google/gemini-3-flash-preview</span>
+<span class="w">      </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtok</span>
+<span class="w">        </span><span class="nt">price</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
+<span class="w">        </span><span class="nt">tiers</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">up_to</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000000</span>
+<span class="w">            </span><span class="nt">price</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">price</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span>
+<span class="w">      </span><span class="nt">output</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtok</span>
+<span class="w">        </span><span class="nt">price</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.5</span>
+<span class="w">      </span><span class="nt">cache_read</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mtok</span>
+<span class="w">        </span><span class="nt">price</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.03</span>
+</code></pre></div>
+<h2 id="exported-report-yaml">Exported Report YAML<a class="headerlink" href="#exported-report-yaml" title="Permanent link">&para;</a></h2>
+<p>Report exports keep the summary under a single <code>report:</code> body:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">report</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">report</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">benchmark</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">support-routing</span>
+<span class="w">  </span><span class="nt">experiment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">exp_support_routing_20260507T120000Z</span>
+<span class="w">  </span><span class="nt">runs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6</span>
+<span class="w">  </span><span class="nt">status</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">passed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">    </span><span class="nt">failed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">variants</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">baseline</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">model.name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openrouter:openai/gpt-5.6-luna</span>
+<span class="w">  </span><span class="nt">leaderboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">baseline</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">runs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">metrics</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">avg_coverage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.82</span>
+<span class="w">  </span><span class="nt">cases</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">ticket_1</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">baseline</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">passed</span>
+<span class="w">        </span><span class="nt">metrics</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">coverage (coverage.ratio)</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
+<span class="w">  </span><span class="nt">matrix</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">coverage.ratio</span>
+<span class="w">    </span><span class="nt">cases</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">ticket_1</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">baseline</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
+<span class="w">  </span><span class="nt">compare</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">baseline -&gt; candidate</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">runs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">confounded</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">distributions</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">cost_distribution</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">money.cost</span>
+<span class="w">      </span><span class="nt">variants</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">baseline</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.01</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.02</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+<h2 id="exported-experiment-yaml">Exported Experiment YAML<a class="headerlink" href="#exported-experiment-yaml" title="Permanent link">&para;</a></h2>
+<p>Experiment records keep replay data structured, but the outer shape stays readable:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">experiment</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+
+<span class="nt">experiment</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">exp_support_routing_20260507T120000Z</span>
+<span class="w">  </span><span class="nt">benchmark</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">support-routing</span>
+
+<span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">support-routing</span>
+<span class="w">  </span><span class="nt">dataset</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tickets</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="w">    </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9b5d...</span>
+<span class="w">  </span><span class="nt">cases</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ticket_1</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ticket_2</span>
+<span class="w">  </span><span class="nt">counts</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">cases</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">variants</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">    </span><span class="nt">runs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6</span>
+<span class="w">  </span><span class="nt">warnings</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">  </span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">a13c...</span>
+<span class="w">    </span><span class="nt">snapshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">support-routing</span>
+
+<span class="nt">runs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6</span>
+<span class="w">  </span><span class="nt">passed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">  </span><span class="nt">failed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">errored</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">  </span><span class="nt">skipped</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">  </span><span class="nt">paths</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cases/ticket_1/route_v1/run.yaml</span>
+
+<span class="nt">files</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">/abs/path/autobench.yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3c4d...</span>
+
+<span class="nt">environment</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.11.13&quot;</span>
+<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">macOS-15.5-arm64-arm-64bit</span>
+<span class="w">  </span><span class="nt">cwd</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/workspace/autobench</span>
+
+<span class="nt">semantic_registry</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">aliases</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">quality.answer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.score</span>
+<span class="w">  </span><span class="nt">types</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">money.cost</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">usd</span>
+<span class="w">      </span><span class="nt">shape</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">number</span>
+</code></pre></div>
+<h2 id="exported-artifact-yaml">Exported Artifact YAML<a class="headerlink" href="#exported-artifact-yaml" title="Permanent link">&para;</a></h2>
+<p>Artifacts are split into metadata and payload files. Text payloads stay as text. Structured payloads
+are wrapped so they remain recognizable YAML records:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifact</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">artifact</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trace</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trace</span>
+<span class="w">  </span><span class="nt">media_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application/x-yaml</span>
+<span class="w">  </span><span class="nt">span_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">call_router</span>
+<span class="w">  </span><span class="nt">payload</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifacts/run_ticket_1_route_v1/trace.yaml</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifact_payload</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">artifact</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trace</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trace</span>
+<span class="w">  </span><span class="nt">media_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application/x-yaml</span>
+
+<span class="nt">payload</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route_ticket</span>
+<span class="w">      </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">billing</span>
+</code></pre></div>
+<h2 id="exported-asset-yaml">Exported Asset YAML<a class="headerlink" href="#exported-asset-yaml" title="Permanent link">&para;</a></h2>
+<p>Tracked assets are stored as a readable index plus per-asset history files:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset_index</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">assets</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tool.create_car</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">create_car</span>
+<span class="w">    </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent.tool</span>
+<span class="w">    </span><span class="nt">current_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7c91d4d7b1af</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool_create_car.yaml</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="nt">record</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">asset</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool.create_car</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">create_car</span>
+<span class="w">  </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent.tool</span>
+<span class="w">  </span><span class="nt">current_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7c91d4d7b1af</span>
+<span class="w">  </span><span class="nt">doc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Create a new car instance.</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">make</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Literal[&quot;audi&quot;, &quot;bmw&quot;, &quot;mercedes&quot;]</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">model</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">str</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">returns</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Car</span>
+<span class="w">    </span><span class="nt">asset_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">type.Car</span>
+
+<span class="nt">versions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15aa0dbceb02</span>
+<span class="w">    </span><span class="nt">state</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">create_car</span>
+<span class="w">      </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">make</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Literal[&quot;audi&quot;, &quot;bmw&quot;, &quot;mercedes&quot;]</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">hashes</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="w">    </span><span class="nt">changes</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">fields</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">initial</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7c91d4d7b1af</span>
+<span class="w">    </span><span class="nt">parent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15aa0dbceb02</span>
+<span class="w">    </span><span class="nt">state</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">create_car</span>
+<span class="w">      </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">make</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Literal[&quot;audi&quot;, &quot;bmw&quot;, &quot;mercedes&quot;]</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">hashes</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./vsh.py</span>
+<span class="w">    </span><span class="nt">changes</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">fields</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">params.year.type</span>
+<span class="w">      </span><span class="nt">diff</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">--- 15aa0dbceb02</span>
+<span class="w">        </span><span class="no">+++ 7c91d4d7b1af</span>
+<span class="w">        </span><span class="no">@@ ...</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Autobench contributors
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.instant","navigation.instant.progress","navigation.tracking","navigation.sections","navigation.expand","navigation.path","navigation.top","toc.follow","content.action.edit","content.action.view","content.code.copy","search.highlight"],"search":"../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.ed145cee.min.js"></script>
+      
+        <script src="../javascripts/copy-markdown.js"></script>
+      
+    
+  </body>
+</html>

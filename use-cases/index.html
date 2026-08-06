@@ -1,0 +1,2365 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Replayable, semantic benchmark evidence for any system.">
+      
+      
+      
+        <link rel="canonical" href="https://vcoderun.github.io/autobench/use-cases/">
+      
+      
+        <link rel="prev" href="../getting-started/">
+      
+      
+        <link rel="next" href="../examples/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.52">
+    
+    
+      
+        <title>Use Cases - Autobench</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.8b3b5a67.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/copy-markdown.css">
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#use-cases" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="Autobench" class="md-header__button md-logo" aria-label="Autobench" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Autobench
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Use Cases
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715M16 12a4 4 0 0 0-4-4M19 5l-1.256 1.256M20 12h2"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/vcoderun/autobench" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M216.5 362.5c-66-8-112.5-55.5-112.5-117 0-25 9-52 24-70-6.5-16.5-5.5-51.5 2-66 20-2.5 47 8 63 22.5 19-6 39-9 63.5-9s44.5 3 62.5 8.5c15.5-14 43-24.5 63-22 7 13.5 8 48.5 1.5 65.5 16 19 24.5 44.5 24.5 70.5 0 61.5-46.5 108-113.5 116.5 17 11 28.5 35 28.5 62.5v52c0 15 12.5 23.5 27.5 17.5C441 459.5 512 369 512 257 512 115.5 397 0 255.5 0S0 115.5 0 257c0 111 70.5 203 165.5 237.5 13.5 5 26.5-4 26.5-17.5v-40c-7 3-16 5-24 5-33 0-52.5-18-66.5-51.5-5.5-13.5-11.5-21.5-23-23-6-.5-8-3-8-6 0-6 10-10.5 20-10.5 14.5 0 27 9 40 27.5 10 14.5 20.5 21 33 21s20.5-4.5 32-16c8.5-8.5 15-16 21-21"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vcoderun/autobench
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="Autobench" class="md-nav__button md-logo" aria-label="Autobench" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+
+    </a>
+    Autobench
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vcoderun/autobench" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M216.5 362.5c-66-8-112.5-55.5-112.5-117 0-25 9-52 24-70-6.5-16.5-5.5-51.5 2-66 20-2.5 47 8 63 22.5 19-6 39-9 63.5-9s44.5 3 62.5 8.5c15.5-14 43-24.5 63-22 7 13.5 8 48.5 1.5 65.5 16 19 24.5 44.5 24.5 70.5 0 61.5-46.5 108-113.5 116.5 17 11 28.5 35 28.5 62.5v52c0 15 12.5 23.5 27.5 17.5C441 459.5 512 369 512 257 512 115.5 397 0 255.5 0S0 115.5 0 257c0 111 70.5 203 165.5 237.5 13.5 5 26.5-4 26.5-17.5v-40c-7 3-16 5-24 5-33 0-52.5-18-66.5-51.5-5.5-13.5-11.5-21.5-23-23-6-.5-8-3-8-6 0-6 10-10.5 20-10.5 14.5 0 27 9 40 27.5 10 14.5 20.5 21 33 21s20.5-4.5 32-16c8.5-8.5 15-16 21-21"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vcoderun/autobench
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Get Started
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Get Started
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Installation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  First Benchmark
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Use Cases
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Use Cases
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#choose-a-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Choose A Pattern
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#application-regression-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Application Regression Benchmark
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repeated-performance-measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Repeated Performance Measurement
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#llm-quality-usage-and-cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        LLM Quality, Usage, And Cost
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#existing-pydantic-ai-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Existing Pydantic AI Application
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-tool-selection-and-arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Agent Tool Selection And Arguments
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-sdk-without-application-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Custom SDK Without Application Changes
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#production-failures-as-regression-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Production Failures As Regression Cases
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#synthetic-case-generation-with-provenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Synthetic Case Generation With Provenance
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci-regression-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        CI Regression Gate
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Optimization Handoff
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#replay-only-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Replay-Only Analysis
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Example Projects
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Foundations
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Foundations
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Core Concepts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../datasets-and-variants/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Datasets And Variants
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tasks-and-runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tasks And Runtime
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observations-and-semantics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Observations And Semantics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Evaluation
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Evaluation
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring-and-derivation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Scoring And Derivation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agentic-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Agentic Evaluation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Evidence And Lineage
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Evidence And Lineage
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recording-and-reporting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Recording And Reporting
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../asset-tracking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Asset Tracking
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../automatic-asset-discovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Automatic Asset Discovery
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Autobench Protocol (ABP)
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Autobench Protocol (ABP)
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../instrumentation-and-traces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Protocol And Traces
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../native-instrumentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Native Instrumentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../abp-compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Compatibility Contract
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../yaml-spec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  YAML Spec
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Python API
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Capability Map
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Troubleshooting
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Project
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Project
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Development
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_8_2" id="__nav_8_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Release Notes
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Release Notes
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-notes/0.2.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0.2.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-notes/0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  0.1.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#choose-a-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Choose A Pattern
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#application-regression-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Application Regression Benchmark
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repeated-performance-measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Repeated Performance Measurement
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#llm-quality-usage-and-cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        LLM Quality, Usage, And Cost
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#existing-pydantic-ai-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Existing Pydantic AI Application
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-tool-selection-and-arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Agent Tool Selection And Arguments
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-sdk-without-application-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Custom SDK Without Application Changes
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#production-failures-as-regression-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Production Failures As Regression Cases
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#synthetic-case-generation-with-provenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Synthetic Case Generation With Provenance
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci-regression-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        CI Regression Gate
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Optimization Handoff
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#replay-only-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Replay-Only Analysis
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="./.." class="md-path__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="../installation/" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Get Started
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  <button
+    type="button"
+    title="Copy as Markdown"
+    aria-label="Copy as Markdown"
+    class="md-content__button md-icon"
+    data-md-copy-markdown
+    data-md-copy-markdown-source="https://github.com/vcoderun/autobench/edit/main/docs/use-cases.md"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-clipboard-copy" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M16 4h2a2 2 0 0 1 2 2v4M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>
+  </button>
+  
+    <a href="https://github.com/vcoderun/autobench/edit/main/docs/use-cases.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/vcoderun/autobench/raw/main/docs/use-cases.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-code-2" viewBox="0 0 24 24"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5M5 16l-3 3 3 3M9 22l3-3-3-3"/></svg>
+    </a>
+  
+
+
+<h1 id="use-cases">Use Cases<a class="headerlink" href="#use-cases" title="Permanent link">&para;</a></h1>
+<p>The same Autobench runtime supports deterministic functions, services, LLM applications, agents,
+and performance experiments. The patterns below show where domain code ends and framework
+infrastructure begins.</p>
+<h2 id="choose-a-pattern">Choose A Pattern<a class="headerlink" href="#choose-a-pattern" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Core primitives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Compare implementations</td>
+<td>cases, variants, exact/pass scorers, comparison</td>
+</tr>
+<tr>
+<td>Measure noisy performance</td>
+<td><code>measure_callable</code>, sample artifacts, paired baseline</td>
+</tr>
+<tr>
+<td>Compare LLM quality and cost</td>
+<td>semantic token metrics, pricing derivation, policies</td>
+</tr>
+<tr>
+<td>Evaluate agent behavior</td>
+<td>ABP tool spans, expected actions, span selectors</td>
+</tr>
+<tr>
+<td>Instrument an existing AI app</td>
+<td><code>instrument_all()</code>, native SDK instrumentors</td>
+</tr>
+<tr>
+<td>Track prompts/tools/schemas</td>
+<td>explicit tracking or automatic asset discovery</td>
+</tr>
+<tr>
+<td>Turn production failures into regressions</td>
+<td><code>ProductionSample</code>, sampling policy, reviewed cases</td>
+</tr>
+<tr>
+<td>Feed an optimizer</td>
+<td>objectives, constraints, factors, asset versions, feedback records</td>
+</tr>
+</tbody>
+</table>
+<h2 id="application-regression-benchmark">Application Regression Benchmark<a class="headerlink" href="#application-regression-benchmark" title="Permanent link">&para;</a></h2>
+<p>Use a file-backed dataset when the benchmark is a maintained regression suite:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json</span>
+<span class="nt">benchmark</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">support-routing</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">dataset</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file://datasets/tickets.yaml</span>
+<span class="w">      </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-08-06&quot;</span>
+<span class="w">      </span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">regression</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">run</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benchmark_tasks:route_ticket</span>
+<span class="w">    </span><span class="nt">variants</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">production</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">routing_profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v3</span>
+<span class="w">      </span><span class="nt">candidate</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">factors</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">routing_profile</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v4</span>
+<span class="w">            </span><span class="nt">optimize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">score</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">route</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exact</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">actual</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">output.queue</span>
+<span class="w">          </span><span class="nt">expected</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">case.expected.queue</span>
+<span class="w">        </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">        </span><span class="nt">goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maximize</span>
+<span class="w">        </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">objective</span>
+<span class="w">      </span><span class="nt">handled</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">output.handled</span>
+<span class="w">        </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">result.success</span>
+<span class="w">        </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constraint</span>
+</code></pre></div>
+<p>Keep routing logic in <code>benchmark_tasks.py</code>. Autobench handles matrix expansion, status isolation,
+score projection, and comparison. This pattern also fits parsers, validators, ranking functions,
+API clients, and data transformations.</p>
+<h2 id="repeated-performance-measurement">Repeated Performance Measurement<a class="headerlink" href="#repeated-performance-measurement" title="Permanent link">&para;</a></h2>
+<p>Do not hand-roll warmup, repetition budgets, percentiles, or sample artifacts:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">autobench</span><span class="w"> </span><span class="kn">import</span> <span class="n">Case</span><span class="p">,</span> <span class="n">RunContext</span><span class="p">,</span> <span class="n">Semantic</span><span class="p">,</span> <span class="n">measure_callable</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">RunContext</span><span class="p">,</span> <span class="n">case</span><span class="p">:</span> <span class="n">Case</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">input</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">])</span>
+    <span class="n">target</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">input</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">])</span>
+    <span class="n">strategy</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">factor</span><span class="p">(</span><span class="s2">&quot;strategy&quot;</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">strategy</span> <span class="o">==</span> <span class="s2">&quot;linear&quot;</span><span class="p">:</span>
+            <span class="n">target</span> <span class="ow">in</span> <span class="n">values</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">target</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="n">measurement</span> <span class="o">=</span> <span class="n">measure_callable</span><span class="p">(</span>
+        <span class="n">execute</span><span class="p">,</span>
+        <span class="n">warmup</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">repetitions</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+        <span class="n">max_seconds</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">record_measurement</span><span class="p">(</span>
+        <span class="s2">&quot;lookup_latency&quot;</span><span class="p">,</span>
+        <span class="n">measurement</span><span class="p">,</span>
+        <span class="n">semantic_type</span><span class="o">=</span><span class="n">Semantic</span><span class="o">.</span><span class="n">TIME_LATENCY</span><span class="p">,</span>
+        <span class="n">include_samples_artifact</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;found&quot;</span><span class="p">:</span> <span class="n">target</span> <span class="ow">in</span> <span class="n">values</span><span class="p">}</span>
+</code></pre></div>
+<p>Derive candidate speedup only after both matched runs exist:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">post_derive</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">paired_baseline</span>
+<span class="w">    </span><span class="nt">baseline_variant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">linear</span>
+<span class="w">    </span><span class="nt">match_on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">case_id</span>
+<span class="w">    </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">time.latency</span>
+<span class="w">    </span><span class="nt">formula</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">baseline_over_candidate</span>
+<span class="w">    </span><span class="nt">include_baseline</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">output</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">speedup</span>
+<span class="w">      </span><span class="nt">semantic_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">performance.speedup</span>
+<span class="w">      </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ratio</span>
+<span class="w">      </span><span class="nt">direction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maximize</span>
+<span class="w">      </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">objective</span>
+</code></pre></div>
+<p>Correctness should remain a constraint. A faster wrong implementation is not a successful
+candidate.</p>
+<h2 id="llm-quality-usage-and-cost">LLM Quality, Usage, And Cost<a class="headerlink" href="#llm-quality-usage-and-cost" title="Permanent link">&para;</a></h2>
+<p>Instrumentors or tasks record usage as semantic observations:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ctx</span><span class="o">.</span><span class="n">metric</span><span class="p">(</span>
+    <span class="s2">&quot;input_tokens&quot;</span><span class="p">,</span>
+    <span class="n">usage</span><span class="o">.</span><span class="n">input_tokens</span><span class="p">,</span>
+    <span class="n">semantic_type</span><span class="o">=</span><span class="s2">&quot;llm.tokens.input&quot;</span><span class="p">,</span>
+    <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;token&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">ctx</span><span class="o">.</span><span class="n">metric</span><span class="p">(</span>
+    <span class="s2">&quot;output_tokens&quot;</span><span class="p">,</span>
+    <span class="n">usage</span><span class="o">.</span><span class="n">output_tokens</span><span class="p">,</span>
+    <span class="n">semantic_type</span><span class="o">=</span><span class="s2">&quot;llm.tokens.output&quot;</span><span class="p">,</span>
+    <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;token&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">ctx</span><span class="o">.</span><span class="n">factor_observation</span><span class="p">(</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="n">model_name</span><span class="p">,</span> <span class="n">semantic_type</span><span class="o">=</span><span class="s2">&quot;llm.model.name&quot;</span><span class="p">)</span>
+<span class="n">ctx</span><span class="o">.</span><span class="n">factor_observation</span><span class="p">(</span><span class="s2">&quot;provider&quot;</span><span class="p">,</span> <span class="n">provider</span><span class="p">,</span> <span class="n">semantic_type</span><span class="o">=</span><span class="s2">&quot;llm.provider&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>Cost remains a derivation instead of being hard-coded into Autobench instrumentation:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">derive</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">token_cost</span>
+<span class="w">    </span><span class="nt">pricing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file://pricing/models.yaml</span>
+<span class="w">    </span><span class="nt">output</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">request_cost</span>
+<span class="w">      </span><span class="nt">semantic_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">money.cost</span>
+<span class="w">      </span><span class="nt">unit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">usd</span>
+<span class="w">      </span><span class="nt">direction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">minimize</span>
+<span class="w">      </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constraint</span>
+<span class="nt">policies</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality-floor</span>
+<span class="w">    </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quality.correctness</span>
+<span class="w">    </span><span class="nt">must_greater_equal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.9</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">per-request-budget</span>
+<span class="w">    </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">money.cost</span>
+<span class="w">    </span><span class="nt">must_less_equal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
+</code></pre></div>
+<p>The pricing file can normalize provider-specific model identifiers, aliases, cache prices, and
+tiered input/output rates. Price sources are convenience adapters into this format; Autobench does
+not become a live pricing service.</p>
+<h2 id="existing-pydantic-ai-application">Existing Pydantic AI Application<a class="headerlink" href="#existing-pydantic-ai-application" title="Permanent link">&para;</a></h2>
+<p>For a Pydantic AI application, automatic instrumentation removes task-level telemetry:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">autobench</span><span class="w"> </span><span class="kn">import</span> <span class="n">Benchmark</span><span class="p">,</span> <span class="n">Case</span><span class="p">,</span> <span class="n">ExactScorer</span><span class="p">,</span> <span class="n">Semantic</span>
+
+<span class="n">benchmark</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">Benchmark</span><span class="p">(</span><span class="s2">&quot;support-agent&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">dataset</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">Case</span><span class="p">(</span>
+                <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;order-status&quot;</span><span class="p">,</span>
+                <span class="nb">input</span><span class="o">=</span><span class="s2">&quot;Where is order A-42?&quot;</span><span class="p">,</span>
+                <span class="n">expected</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;delayed&quot;</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">variants</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;luna&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;factors&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;openrouter:openai/gpt-5.6-luna&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">task</span><span class="p">(</span><span class="s2">&quot;support_benchmark:run&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">scoring</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">ExactScorer</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;status&quot;</span><span class="p">,</span>
+                <span class="n">actual</span><span class="o">=</span><span class="s2">&quot;output.status&quot;</span><span class="p">,</span>
+                <span class="n">expected</span><span class="o">=</span><span class="s2">&quot;case.expected.status&quot;</span><span class="p">,</span>
+                <span class="n">semantic_type</span><span class="o">=</span><span class="n">Semantic</span><span class="o">.</span><span class="n">QUALITY_CORRECTNESS</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">instrument_all</span><span class="p">()</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The task can contain only the agent call. Compatible instrumentors collect Pydantic AI agent/model/
+tool/validation activity, the OpenAI-compatible client layer, and HTTPX transport evidence. The run
+also receives automatically discovered prompt, tool, output-schema, capability, and agent versions
+when those values cross supported SDK boundaries.</p>
+<p>Use <code>exclude={"httpx"}</code> to avoid transport spans or select a narrower asset family:</p>
+<div class="highlight"><pre><span></span><code><span class="n">benchmark</span><span class="o">.</span><span class="n">instrument_all</span><span class="p">(</span>
+    <span class="n">exclude</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;httpx&quot;</span><span class="p">},</span>
+    <span class="n">assets</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;representations&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;definition&quot;</span><span class="p">,</span> <span class="s2">&quot;effective&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;include&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;tool&quot;</span><span class="p">,</span> <span class="s2">&quot;output_schema&quot;</span><span class="p">],</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="agent-tool-selection-and-arguments">Agent Tool Selection And Arguments<a class="headerlink" href="#agent-tool-selection-and-arguments" title="Permanent link">&para;</a></h2>
+<p>Agent evaluation should use execution evidence, not only final text. Declare expected actions in
+the case:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">cases</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">refund-order</span>
+<span class="w">    </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Refund order A-42</span>
+<span class="w">    </span><span class="nt">expected</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lookup_order</span>
+<span class="w">          </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">order_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A-42</span>
+<span class="w">          </span><span class="nt">order</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">issue_refund</span>
+<span class="w">          </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">order_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A-42</span>
+<span class="w">          </span><span class="nt">order</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+</code></pre></div>
+<p>Then score the tool spans:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">score</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tool_selection</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">expected_action</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">selection</span>
+<span class="w">      </span><span class="nt">span</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">    </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent.tool.selection.correctness</span>
+<span class="w">    </span><span class="nt">goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maximize</span>
+<span class="w">    </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">objective</span>
+<span class="w">  </span><span class="nt">tool_arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">expected_action</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">arguments</span>
+<span class="w">      </span><span class="nt">span</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">    </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent.tool.argument.correctness</span>
+<span class="w">    </span><span class="nt">goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maximize</span>
+<span class="w">    </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">objective</span>
+<span class="w">  </span><span class="nt">tool_sequence</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">expected_action</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sequence</span>
+<span class="w">      </span><span class="nt">span</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool</span>
+<span class="w">    </span><span class="nt">semantic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent.tool.sequence.correctness</span>
+<span class="w">    </span><span class="nt">goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maximize</span>
+<span class="w">    </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constraint</span>
+</code></pre></div>
+<p>This works with manually recorded tool spans and native SDK traces. It does not require an LLM judge
+for deterministic action contracts.</p>
+<h2 id="custom-sdk-without-application-changes">Custom SDK Without Application Changes<a class="headerlink" href="#custom-sdk-without-application-changes" title="Permanent link">&para;</a></h2>
+<p>When an SDK is not built in, instrument a stable method and declare both evidence and assets:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">autobench</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">InstrumentAssetSpec</span><span class="p">,</span>
+    <span class="n">InstrumentMetricSpec</span><span class="p">,</span>
+    <span class="n">Semantic</span><span class="p">,</span>
+    <span class="n">SpanKind</span><span class="p">,</span>
+    <span class="n">instrument_method</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">instrument_method</span><span class="p">(</span>
+    <span class="n">WorkflowClient</span><span class="p">,</span>
+    <span class="s2">&quot;execute&quot;</span><span class="p">,</span>
+    <span class="n">span</span><span class="o">=</span><span class="s2">&quot;workflow.execute&quot;</span><span class="p">,</span>
+    <span class="n">span_kind</span><span class="o">=</span><span class="n">SpanKind</span><span class="o">.</span><span class="n">WORKFLOW</span><span class="p">,</span>
+    <span class="n">metrics</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">InstrumentMetricSpec</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;confidence&quot;</span><span class="p">,</span>
+            <span class="n">semantic_type</span><span class="o">=</span><span class="n">Semantic</span><span class="o">.</span><span class="n">QUALITY_SCORE</span><span class="p">,</span>
+            <span class="n">value_path</span><span class="o">=</span><span class="s2">&quot;result.confidence&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">assets</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">InstrumentAssetSpec</span><span class="p">(</span>
+            <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span>
+            <span class="n">local_id</span><span class="o">=</span><span class="s2">&quot;instructions&quot;</span><span class="p">,</span>
+            <span class="n">value_path</span><span class="o">=</span><span class="s2">&quot;kwargs.instructions&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;routing_instructions&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">InstrumentAssetSpec</span><span class="p">(</span>
+            <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;tool&quot;</span><span class="p">,</span>
+            <span class="n">local_id</span><span class="o">=</span><span class="s2">&quot;tools&quot;</span><span class="p">,</span>
+            <span class="n">value_path</span><span class="o">=</span><span class="s2">&quot;kwargs.tools&quot;</span><span class="p">,</span>
+            <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">InstrumentAssetSpec</span><span class="p">(</span>
+            <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;output_schema&quot;</span><span class="p">,</span>
+            <span class="n">local_id</span><span class="o">=</span><span class="s2">&quot;output&quot;</span><span class="p">,</span>
+            <span class="n">value_path</span><span class="o">=</span><span class="s2">&quot;kwargs.output_type&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;routing_output&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Serializable configurations use <code>value_path</code> or an import target. Typed Python integrations may use
+<code>value_factory</code> for extraction that cannot be represented as a path. Keep domain computation in the
+application; instrumentation should describe stable boundaries and evidence extraction.</p>
+<h2 id="production-failures-as-regression-cases">Production Failures As Regression Cases<a class="headerlink" href="#production-failures-as-regression-cases" title="Permanent link">&para;</a></h2>
+<p>Convert selected production samples into cases without coupling the benchmark to a production
+database:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">autobench</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ProductionSample</span><span class="p">,</span>
+    <span class="n">SampleReason</span><span class="p">,</span>
+    <span class="n">SamplingPolicy</span><span class="p">,</span>
+    <span class="n">samples_to_cases</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">samples</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">ProductionSample</span><span class="p">(</span>
+        <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;trace-1842&quot;</span><span class="p">,</span>
+        <span class="nb">input</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Refund order A-42&quot;</span><span class="p">},</span>
+        <span class="n">expected</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;route&quot;</span><span class="p">:</span> <span class="s2">&quot;billing&quot;</span><span class="p">},</span>
+        <span class="n">reason</span><span class="o">=</span><span class="n">SampleReason</span><span class="o">.</span><span class="n">FAILURE_ONLY</span><span class="p">,</span>
+        <span class="n">privacy_tags</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;customer_text&quot;</span><span class="p">,),</span>
+    <span class="p">)</span>
+<span class="p">]</span>
+
+<span class="n">cases</span> <span class="o">=</span> <span class="n">samples_to_cases</span><span class="p">(</span>
+    <span class="n">samples</span><span class="p">,</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">SamplingPolicy</span><span class="p">(</span>
+        <span class="n">reasons</span><span class="o">=</span><span class="p">(</span><span class="n">SampleReason</span><span class="o">.</span><span class="n">FAILURE_ONLY</span><span class="p">,),</span>
+        <span class="n">max_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Review state, source reason, timestamp, trace identity, and privacy tags become metadata. Promote
+reviewed cases into a versioned YAML dataset before using them as a release gate.</p>
+<h2 id="synthetic-case-generation-with-provenance">Synthetic Case Generation With Provenance<a class="headerlink" href="#synthetic-case-generation-with-provenance" title="Permanent link">&para;</a></h2>
+<p>Autobench does not own a model-based generator, but it preserves generated-data lineage:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">autobench</span><span class="w"> </span><span class="kn">import</span> <span class="n">Case</span><span class="p">,</span> <span class="n">generated_batch_from_cases</span>
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">generated_batch_from_cases</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">Case</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;edge-1&quot;</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">})],</span>
+    <span class="n">generator_asset_version</span><span class="o">=</span><span class="s2">&quot;prompt.generate_cases@82ab39&quot;</span><span class="p">,</span>
+    <span class="n">model_provider</span><span class="o">=</span><span class="s2">&quot;openrouter&quot;</span><span class="p">,</span>
+    <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;openai/gpt-5.6-luna&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Generated cases remain candidates until reviewed. This keeps generator behavior and benchmark truth
+from collapsing into the same untracked process.</p>
+<h2 id="ci-regression-gate">CI Regression Gate<a class="headerlink" href="#ci-regression-gate" title="Permanent link">&para;</a></h2>
+<p>A typical CI job validates, executes, stores artifacts, and checks policy state:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">set</span><span class="w"> </span>-e
+autobench<span class="w"> </span>validate<span class="w"> </span>benchmarks/release.yaml
+autobench<span class="w"> </span>run<span class="w"> </span>benchmarks/release.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--concurrency<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--record<span class="w"> </span>artifacts/autobench-release
+autobench<span class="w"> </span>report<span class="w"> </span>artifacts/autobench-release
+autobench<span class="w"> </span><span class="nb">export</span><span class="w"> </span>artifacts/autobench-release<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--format<span class="w"> </span>csv<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--path<span class="w"> </span>artifacts/autobench-runs.csv
+</code></pre></div>
+<p>Persist the whole record directory, not only the CSV. The CSV is a projection; the immutable YAML
+records and artifacts contain replay, lineage, source, and diagnostic evidence.</p>
+<h2 id="optimization-handoff">Optimization Handoff<a class="headerlink" href="#optimization-handoff" title="Permanent link">&para;</a></h2>
+<p>Autobench marks metrics by role and direction:</p>
+<ul>
+<li>objective: improve this metric;</li>
+<li>constraint: do not violate this boundary;</li>
+<li>diagnostic: explain behavior without becoming an objective.</li>
+</ul>
+<p>Factors can set <code>optimize: true</code>, and tracked assets identify the exact prompt/tool/schema versions
+used. Convert a recorded run into compact feedback:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">autobench</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_optimization_feedback_input</span><span class="p">,</span> <span class="n">load_run_record</span>
+
+<span class="n">record</span> <span class="o">=</span> <span class="n">load_run_record</span><span class="p">(</span>
+    <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;runs/latest/cases/refund-order/candidate/run.yaml&quot;</span><span class="p">),</span>
+    <span class="n">root_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;runs/latest&quot;</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">feedback</span> <span class="o">=</span> <span class="n">build_optimization_feedback_input</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
+</code></pre></div>
+<p>An optimizer should propose candidates and run controlled validation experiments. Autobench supplies
+evidence and comparison; it does not claim that independently best assets can be mixed safely.</p>
+<h2 id="replay-only-analysis">Replay-Only Analysis<a class="headerlink" href="#replay-only-analysis" title="Permanent link">&para;</a></h2>
+<p>Recorded evidence supports analysis in an environment without the application or provider SDKs:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">autobench</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_report</span><span class="p">,</span> <span class="n">replay_experiment</span>
+
+<span class="n">experiment</span> <span class="o">=</span> <span class="n">replay_experiment</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;runs/latest&quot;</span><span class="p">))</span>
+<span class="n">report</span> <span class="o">=</span> <span class="n">build_report</span><span class="p">(</span><span class="n">experiment</span><span class="p">)</span>
+</code></pre></div>
+<p>This is the correct boundary for dashboards, offline reports, audits, post-hoc extraction, and
+optimizer data ingestion.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Autobench contributors
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.instant","navigation.instant.progress","navigation.tracking","navigation.sections","navigation.expand","navigation.path","navigation.top","toc.follow","content.action.edit","content.action.view","content.code.copy","search.highlight"],"search":"../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.ed145cee.min.js"></script>
+      
+        <script src="../javascripts/copy-markdown.js"></script>
+      
+    
+  </body>
+</html>
