@@ -1,6 +1,6 @@
 site_name: Autobench
 site_url: https://vcoderun.github.io/autobench/
-site_description: Replayable, semantic benchmark evidence for any system.
+site_description: Define, run, record, compare, and replay benchmarks for any application.
 repo_url: https://github.com/vcoderun/autobench
 repo_name: vcoderun/autobench
 edit_uri: edit/main/docs/

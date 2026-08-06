@@ -141,6 +141,23 @@ class AssetVersion(BaseModel):
         return self.content_hash
 
 
+class AssetContentRef(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    asset_id: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    path: str = Field(min_length=1)
+
+
+class AssetDiffRef(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    asset_id: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    parent_version: str = Field(min_length=1)
+    path: str = Field(min_length=1)
+
+
 class TrackedPrompt(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -157,7 +174,9 @@ class TrackedPrompt(BaseModel):
 
 
 __all__ = (
+    "AssetContentRef",
     "AssetDefinition",
+    "AssetDiffRef",
     "AssetProvenance",
     "AssetRepresentation",
     "AssetSensitivity",

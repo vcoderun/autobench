@@ -188,7 +188,12 @@ def record_experiment(
         asset_id for asset_id in referenced_asset_ids if asset_registry.has_asset(asset_id)
     }
     if persisted_asset_ids:
-        asset_registry.write_assets(output_dir / "assets", asset_ids=persisted_asset_ids)
+        asset_registry.write_assets(
+            output_dir / "assets",
+            asset_ids=persisted_asset_ids,
+            content_path=artifacts_dir / "asset-content.sqlite3",
+            root_dir=output_dir,
+        )
 
     run_paths: list[str] = []
     for run in result.runs:

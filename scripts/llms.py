@@ -81,8 +81,9 @@ def render_full_documentation(pages: list[Page]) -> str:
     sections = [
         "# Autobench Full Documentation",
         "",
-        "> Complete, LLM-readable documentation for Autobench: a YAML-first framework for "
-        "semantic, replayable benchmark evidence.",
+        "> Complete, LLM-readable documentation for Autobench: define how an application should "
+        "be measured, then run, record, compare, and replay its benchmarks in one consistent "
+        "format.",
         "",
         f"Canonical documentation: {SITE_URL}/",
         "",

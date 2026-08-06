@@ -1,7 +1,10 @@
 from __future__ import annotations as _annotations
 
 import inspect
+import sqlite3
+import stat
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol, assert_type, cast
@@ -9,7 +12,17 @@ from typing import Any, Literal, Protocol, assert_type, cast
 import pytest
 from pydantic import BaseModel, Field
 
-from autobench import AssetVersion, FieldAsset, ToolAsset, TrackingRegistry, TypeAsset
+from autobench import (
+    AssetContentRef,
+    AssetDiffRef,
+    AssetVersion,
+    FieldAsset,
+    ToolAsset,
+    TrackingRegistry,
+    TypeAsset,
+    load_asset_content,
+    load_asset_diff,
+)
 from autobench.io import load_yaml
 from autobench.tracking import (
     ParamAsset,
@@ -27,6 +40,7 @@ from autobench.tracking.history import (
     _collect_changed_paths,
     _existing_asset_current_snapshot,
     _field_asset_yaml_view,
+    _param_asset_yaml_view,
     _version_entry_snapshot,
 )
 from autobench.tracking.introspection import (
@@ -47,6 +61,7 @@ from autobench.tracking.introspection import (
     _structured_type_kind,
     _tracked_type_asset_id,
 )
+from autobench.tracking.store import AssetContentStore
 
 MakeAlias = Literal["audi", "bmw"]
 
@@ -135,7 +150,9 @@ def test_tracking_registry_writes_asset_index_versions_and_diffs(tmp_path: Path)
     registry.write_assets(asset_dir)
 
     index = load_yaml(asset_dir / "index.yaml")
-    asset = load_yaml(asset_dir / "prompt_system.yaml")
+    asset_path = asset_dir / "prompt_system.yaml"
+    asset = load_yaml(asset_path)
+    content_path = asset_dir / "content.sqlite3"
 
     assert index["record"]["type"] == "asset_index"
     assert index["assets"]["prompt.system"]["file"] == "prompt_system.yaml"
@@ -144,12 +161,58 @@ def test_tracking_registry_writes_asset_index_versions_and_diffs(tmp_path: Path)
     assert asset["record"]["type"] == "asset"
     assert asset["asset"]["kind"] == "prompt"
     assert asset["asset"]["current_version"] == registry.version_of(second_prompt)
-    assert asset["asset"]["raw"] == "Respond briefly and cite evidence.\n"
+    assert "raw" not in asset["asset"]
+    assert asset["asset"]["content_ref"] == {
+        "asset_id": "prompt.system",
+        "version": registry.version_of(second_prompt),
+        "path": "content.sqlite3",
+    }
+    assert (
+        load_asset_content(
+            content_path,
+            asset_id="prompt.system",
+            version=registry.version_of(first_prompt),
+        )["raw"]
+        == "Respond briefly.\n"
+    )
+    assert (
+        load_asset_content(
+            content_path,
+            asset_id="prompt.system",
+            version=registry.version_of(second_prompt),
+        )["raw"]
+        == "Respond briefly and cite evidence.\n"
+    )
     assert registry.version_of(first_prompt) != registry.version_of(second_prompt)
+    assert "raw" not in registry.asset_version_of(second_prompt).metadata
     assert len(asset["versions"]) == 2
-    assert asset["versions"][0]["changes"] == {"fields": ["initial"], "diff": None}
+    assert asset["versions"][0]["changes"] == {"fields": ["initial"]}
     assert asset["versions"][1]["changes"]["fields"] == ["raw"]
-    assert isinstance(asset["versions"][1]["changes"]["diff"], str)
+    diff_ref = asset["versions"][1]["changes"]["diff_ref"]
+    assert diff_ref == {
+        "asset_id": "prompt.system",
+        "version": registry.version_of(second_prompt),
+        "parent_version": registry.version_of(first_prompt),
+        "path": "content.sqlite3",
+    }
+    manifest_text = asset_path.read_text(encoding="utf-8")
+    assert "Respond briefly." not in manifest_text
+    assert "Respond briefly and cite evidence." not in manifest_text
+    assert "Respond briefly" in load_asset_diff(
+        content_path,
+        asset_id=diff_ref["asset_id"],
+        version=diff_ref["version"],
+        parent_version=diff_ref["parent_version"],
+    )
+    registry.write_assets(asset_dir)
+    rewritten_asset = load_yaml(asset_dir / "prompt_system.yaml")
+    assert rewritten_asset["versions"][1]["changes"]["diff_ref"] == diff_ref
+    with closing(sqlite3.connect(content_path)) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM content_blobs").fetchone() == (2,)
+        assert connection.execute("SELECT COUNT(*) FROM asset_versions").fetchone() == (2,)
+        assert connection.execute("SELECT COUNT(*) FROM diff_blobs").fetchone() == (1,)
+    assert stat.S_IMODE(content_path.stat().st_mode) == 0o600
+    assert list(asset_dir.glob("content.sqlite3*")) == [content_path]
 
 
 def test_tracking_asset_yaml_view_renders_structured_tool_and_type_payloads(
@@ -174,16 +237,39 @@ def test_tracking_asset_yaml_view_renders_structured_tool_and_type_payloads(
 
     type_asset = load_yaml(asset_dir / "type_Car.yaml")
     tool_asset = load_yaml(asset_dir / "tool_create_car.yaml")
+    content_path = asset_dir / "content.sqlite3"
+    type_content = load_asset_content(
+        content_path,
+        asset_id="type.Car",
+        version=type_asset["asset"]["current_version"],
+    )
+    tool_content = load_asset_content(
+        content_path,
+        asset_id="tool.create_car",
+        version=tool_asset["asset"]["current_version"],
+    )
 
     assert type_asset["asset"]["kind"] == "pydantic_model"
-    assert type_asset["asset"]["fields"]["model"]["examples"] == ["a3", "320i"]
-    assert type_asset["asset"]["fields"]["year"]["constraints"] == {"exclusiveMinimum": 0}
+    assert "fields" not in type_asset["asset"]
+    type_fields = type_content["fields"]
+    assert isinstance(type_fields, dict)
+    model_field = type_fields["model"]
+    year_field = type_fields["year"]
+    assert isinstance(model_field, dict)
+    assert isinstance(year_field, dict)
+    assert model_field["examples"] == ["a3", "320i"]
+    assert year_field["constraints"] == {"exclusiveMinimum": 0}
     assert type_asset["versions"][0]["changes"]["fields"] == ["initial"]
     assert tool_asset["asset"]["kind"] == "tool"
-    assert tool_asset["asset"]["doc"] == "Create a new car instance."
-    assert tool_asset["asset"]["params"]["make"]["choices"] == ["audi", "bmw"]
-    assert tool_asset["asset"]["returns"] == {"type": "Car", "asset_id": "type.Car"}
-    assert tool_asset["versions"][0]["state"]["params"]["make"]["type"] == "Literal['audi', 'bmw']"
+    assert "doc" not in tool_asset["asset"]
+    assert tool_content["doc"] == "Create a new car instance."
+    tool_params = tool_content["params"]
+    assert isinstance(tool_params, dict)
+    make_param = tool_params["make"]
+    assert isinstance(make_param, dict)
+    assert make_param["choices"] == ["audi", "bmw"]
+    assert tool_content["returns"] == {"type": "Car", "asset_id": "type.Car"}
+    assert make_param["type"] == "Literal['audi', 'bmw']"
 
 
 def test_tracking_registry_handles_missing_and_malformed_asset_history(tmp_path: Path) -> None:
@@ -264,24 +350,30 @@ def test_tracking_yaml_helper_views_cover_optional_branches() -> None:
         metadata={"owner": "tests"},
     )
 
-    tool_view = _asset_yaml_view(tool_asset, current_version="v1")
-    type_view = _asset_yaml_view(type_asset, current_version="v2")
+    tool_ref = AssetContentRef(asset_id=tool_asset.id, version="v1", path="content.sqlite3")
+    type_ref = AssetContentRef(asset_id=type_asset.id, version="v2", path="content.sqlite3")
+    tool_view = _asset_yaml_view(tool_asset, current_version="v1", content_ref=tool_ref)
+    type_view = _asset_yaml_view(type_asset, current_version="v2", content_ref=type_ref)
     prompt_view = _asset_yaml_view(prompt_asset, current_version="v3")
     config_view = _asset_yaml_view(config_asset, current_version="v4")
 
     assert tool_view["semantic"] == "agent.tool"
     assert tool_view["metadata"] == {"owner": "tests"}
-    assert tool_view["params"]["mode"] == {
+    assert tool_view["content_ref"] == tool_ref.model_dump(mode="json")
+    assert "params" not in tool_view
+    assert "returns" not in tool_view
+    assert _param_asset_yaml_view(tool_asset.param_schema.params[0]) == {
         "required": False,
         "type": "str",
         "default": "fast",
         "kind": "keyword",
         "choices": ["fast", "slow"],
     }
-    assert "returns" not in tool_view
     assert type_view["semantic"] == "structured.output"
     assert type_view["metadata"] == {"owner": "tests"}
-    assert type_view["fields"]["answer"] == {
+    assert type_view["content_ref"] == type_ref.model_dump(mode="json")
+    assert "fields" not in type_view
+    assert _field_asset_yaml_view(field_asset) == {
         "required": False,
         "type": "str",
         "default": "ok",
@@ -397,10 +489,17 @@ def test_tracking_version_and_change_helpers_cover_snapshot_branches() -> None:
         "diff": None,
     }
 
+    diff_ref = AssetDiffRef(
+        asset_id="tool.lookup",
+        version="v2",
+        parent_version="v1",
+        path="content.sqlite3",
+    )
     version_payload = _asset_version_payload(
         version,
         current_snapshot,
         previous_snapshot=previous_snapshot,
+        diff_ref=diff_ref,
     )
 
     assert version_payload["parent"] == "v1"
@@ -414,7 +513,8 @@ def test_tracking_version_and_change_helpers_cover_snapshot_branches() -> None:
         "missing",
         "same",
     ]
-    assert isinstance(version_payload["changes"]["diff"], str)
+    assert version_payload["changes"]["diff_ref"] == diff_ref.model_dump(mode="json")
+    assert "diff" not in version_payload["changes"]
     assert _version_entry_snapshot({"state": {"answer": 1}}) == {"answer": 1}
     assert _version_entry_snapshot({"snapshot": {"answer": 1}}) == {"answer": 1}
     assert _version_entry_snapshot({"snapshot": "bad"}) is None
@@ -437,6 +537,7 @@ def test_tracking_version_and_change_helpers_cover_snapshot_branches() -> None:
         "metadata": {"owner": "tests"},
     }
     assert _existing_asset_current_snapshot({"asset": "bad"}) is None
+    assert _existing_asset_current_snapshot({"asset": {"content_ref": {}}}) is None
 
 
 def test_asset_to_yaml_view_falls_back_to_last_version_state_when_current_asset_is_missing() -> (
@@ -473,6 +574,154 @@ def test_asset_to_yaml_view_falls_back_to_last_version_state_when_current_asset_
     )
 
     assert payload["versions"][-1]["changes"]["fields"] == ["raw"]
+
+
+def test_asset_content_store_rejects_unknown_versions(tmp_path: Path) -> None:
+    missing_path = tmp_path / "missing.sqlite3"
+    with pytest.raises(FileNotFoundError):
+        load_asset_content(missing_path, asset_id="prompt.system", version="v1")
+    with pytest.raises(FileNotFoundError):
+        load_asset_diff(
+            missing_path,
+            asset_id="prompt.system",
+            version="v1",
+            parent_version="v0",
+        )
+    assert not missing_path.exists()
+
+    registry = TrackingRegistry()
+    registry.prompt(name="system", text="Hello")
+    registry.write_assets(tmp_path)
+    changed = registry.prompt(name="system", text="Hello again")
+    registry.write_assets(tmp_path)
+    content_path = tmp_path / "content.sqlite3"
+    with pytest.raises(KeyError, match="Unknown Autobench asset content"):
+        load_asset_content(
+            content_path,
+            asset_id="prompt.system",
+            version="missing",
+        )
+    with pytest.raises(KeyError, match="Unknown Autobench asset diff"):
+        load_asset_diff(
+            content_path,
+            asset_id="prompt.system",
+            version="missing",
+            parent_version="v0",
+        )
+    with closing(sqlite3.connect(content_path)) as connection, connection:
+        connection.execute(
+            "UPDATE content_blobs SET payload = ?",
+            (sqlite3.Binary(b"invalid"),),
+        )
+        connection.execute(
+            "UPDATE diff_blobs SET payload = ?",
+            (sqlite3.Binary(b"invalid"),),
+        )
+    with pytest.raises(ValueError, match="Invalid Autobench asset content"):
+        load_asset_content(
+            content_path,
+            asset_id="prompt.system",
+            version=changed.version,
+        )
+    with pytest.raises(ValueError, match="Invalid Autobench asset diff"):
+        load_asset_diff(
+            content_path,
+            asset_id="prompt.system",
+            version=changed.version,
+            parent_version=registry.versions[0].version,
+        )
+
+
+def test_asset_content_store_is_immutable_deduplicated_and_parent_aware(
+    tmp_path: Path,
+) -> None:
+    content_path = tmp_path / "content.sqlite3"
+    with AssetContentStore(content_path) as store:
+        store.write_content(
+            asset_id="prompt.first",
+            version="v1",
+            content_hash="content-v1",
+            snapshot={"raw": "Hello"},
+        )
+        store.write_content(
+            asset_id="prompt.first",
+            version="v1",
+            content_hash="content-v1",
+            snapshot={"raw": "Hello"},
+        )
+        store.write_content(
+            asset_id="prompt.second",
+            version="v1",
+            content_hash="content-v1",
+            snapshot={"raw": "Hello"},
+        )
+        with pytest.raises(ValueError, match="Conflicting Autobench asset content"):
+            store.write_content(
+                asset_id="prompt.first",
+                version="v1",
+                content_hash="content-v2",
+                snapshot={"raw": "Changed"},
+            )
+
+        store.write_diff(
+            asset_id="prompt.first",
+            version="v2",
+            parent_version="v1",
+            diff="first diff",
+        )
+        store.write_diff(
+            asset_id="prompt.first",
+            version="v2",
+            parent_version="v1",
+            diff="first diff",
+        )
+        store.write_diff(
+            asset_id="prompt.first",
+            version="v2",
+            parent_version="branch-v1",
+            diff="branch diff",
+        )
+        with pytest.raises(ValueError, match="Conflicting Autobench asset diff"):
+            store.write_diff(
+                asset_id="prompt.first",
+                version="v2",
+                parent_version="v1",
+                diff="changed diff",
+            )
+        assert (
+            store.diff(
+                asset_id="prompt.first",
+                version="v2",
+                parent_version="v1",
+            )
+            == "first diff"
+        )
+        assert (
+            store.diff(
+                asset_id="prompt.first",
+                version="v2",
+                parent_version="branch-v1",
+            )
+            == "branch diff"
+        )
+
+    with closing(sqlite3.connect(content_path)) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM content_blobs").fetchone() == (1,)
+        assert connection.execute("SELECT COUNT(*) FROM asset_versions").fetchone() == (2,)
+        assert connection.execute("SELECT COUNT(*) FROM diff_blobs").fetchone() == (2,)
+        assert connection.execute("SELECT COUNT(*) FROM asset_diffs").fetchone() == (2,)
+
+
+def test_tracking_registry_rejects_content_outside_its_root(tmp_path: Path) -> None:
+    registry = TrackingRegistry()
+    registry.prompt(name="system", text="Hello")
+
+    with pytest.raises(ValueError, match="inside the registry root"):
+        registry.write_assets(
+            tmp_path / "assets",
+            content_path=tmp_path.parent / "outside.sqlite3",
+            root_dir=tmp_path,
+        )
 
 
 def test_tracking_yaml_helpers_cover_absent_optional_branches() -> None:
@@ -514,16 +763,22 @@ def test_tracking_yaml_helpers_cover_absent_optional_branches() -> None:
     )
     config_without_metadata = TrackedAsset(id="config.runtime", kind="config", name="runtime")
 
-    assert _asset_yaml_view(tool_without_optional_fields, current_version="v1")["params"] == {
-        "query": {"required": True}
-    }
-    assert _asset_yaml_view(tool_with_return_annotation_only, current_version="v2")["returns"] == {
-        "type": "str"
-    }
-    assert _asset_yaml_view(tool_with_return_asset_only, current_version="v3")["returns"] == {
-        "asset_id": "type.Result"
-    }
-    assert _asset_yaml_view(type_without_optional_fields, current_version="v4")["fields"] == {}
+    assert "params" not in _asset_yaml_view(
+        tool_without_optional_fields,
+        current_version="v1",
+    )
+    assert "returns" not in _asset_yaml_view(
+        tool_with_return_annotation_only,
+        current_version="v2",
+    )
+    assert "returns" not in _asset_yaml_view(
+        tool_with_return_asset_only,
+        current_version="v3",
+    )
+    assert "fields" not in _asset_yaml_view(
+        type_without_optional_fields,
+        current_version="v4",
+    )
     assert _field_assets_for_type(type("NoAnnotations", (), {}), "typed_class") == []
     assert _asset_version_snapshot(tool_without_optional_fields) == {
         "kind": "tool",

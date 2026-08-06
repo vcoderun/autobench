@@ -647,9 +647,8 @@ class RunContext:
         span_id: str | None,
     ) -> AssetCandidate:
         fingerprint = canonical_asset_hash(candidate.canonical_content)
-        level = self.capture_policy.level_for(
+        level = self.capture_policy.level_for_asset(
             candidate.semantic_type,
-            candidate.canonical_content,
         )
         if candidate.sensitivity is AssetSensitivity.SENSITIVE and level is CaptureLevel.METADATA:
             level = CaptureLevel.HASH

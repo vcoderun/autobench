@@ -282,6 +282,11 @@ def benchmark_schema() -> SchemaDocument:
                 "enum": ["none", "metadata", "hash", "redacted", "full"],
                 "default": "metadata",
             },
+            "asset_default_level": {
+                "type": "string",
+                "enum": ["none", "metadata", "hash", "redacted", "full"],
+                "default": "full",
+            },
             "use_semantic_defaults": {"type": "boolean", "default": True},
             "semantic_overrides": {
                 "type": "object",

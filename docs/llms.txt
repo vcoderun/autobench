@@ -1,6 +1,6 @@
 # Autobench
 
-> Autobench is a YAML-first Python framework for evaluating AI and non-AI systems as semantic, replayable experiments. It owns case/variant execution, ABP instrumentation, scoring, derivation, immutable records, reports, and behavioral asset lineage without making OpenTelemetry or one evaluation runtime part of its core.
+> Teams often evaluate a changed application with a custom script that runs representative inputs, checks outputs, collects measurements, and compares versions. Autobench replaces that repeated infrastructure with a YAML-first Python framework: define cases, variants, tasks, scores, and reports once; then run, record, replay, compare, and export AI or non-AI experiments in a consistent format. Its deeper evidence model includes semantic observations, ABP instrumentation, immutable records, and behavioral asset lineage without making OpenTelemetry or one evaluation runtime part of its core.
 
 Use this index to load the smallest relevant page. Use the full bundle when broad context is required.
 

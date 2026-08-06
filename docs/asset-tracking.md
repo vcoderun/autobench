@@ -144,9 +144,26 @@ from autobench import track
 track.write_assets(Path(".autobench/assets"))
 ```
 
-The YAML history contains an index plus one file per asset. Every new version links to its parent
-when available and stores a human-readable diff from the previous serialized state. Source changes,
-schema changes, decorator options, and metadata changes therefore remain reviewable.
+The directory contains an index, one lightweight manifest per asset, and `content.sqlite3`, a local
+content-addressed registry keyed by asset ID and version. Every new manifest version links to its
+parent and stores changed paths plus typed content and diff references. Prompt text, tool bodies,
+schema definitions, and readable diffs never appear in the manifests. SQLite transactions avoid
+rewriting the complete history as it grows, while content hashes deduplicate identical snapshots.
+
+```python
+from autobench import load_asset_content
+
+version = track.asset_version_of(SYSTEM_PROMPT)
+snapshot = load_asset_content(
+    Path(".autobench/assets/content.sqlite3"),
+    asset_id=version.asset_id,
+    version=version.version,
+)
+assert snapshot["raw"] == SYSTEM_PROMPT.raw
+```
+
+For a version with a parent, resolve its readable diff with
+`load_asset_diff(path, asset_id=..., version=..., parent_version=...)`.
 
 ## Binding Assets To Runs
 

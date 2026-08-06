@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Made behavioral asset definitions full-capture by default while retaining metadata-first runtime
+  evidence, and added an independent `asset_default_level` privacy control.
+- Externalized versioned asset snapshots and diffs into one transaction-safe, content-addressed
+  `artifacts/asset-content.sqlite3` registry with typed manifest references and loaders.
 - Reorganized and expanded the documentation around installation, architecture, first-run workflow,
   practical AI and non-AI use cases, current Python/CLI APIs, automatic asset discovery, and
   troubleshooting.

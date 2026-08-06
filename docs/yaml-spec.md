@@ -252,6 +252,7 @@ benchmark:
   private-agent:
     capture:
       default_level: hash
+      asset_default_level: hash
       use_semantic_defaults: false
       semantic_overrides:
         tool: full
@@ -260,7 +261,9 @@ benchmark:
         - assets.*:prompt:private_notes
 ```
 
-Supported levels are `none`, `metadata`, `hash`, `redacted`, and `full`. Other fields include
+Supported levels are `none`, `metadata`, `hash`, `redacted`, and `full`. `default_level` controls
+runtime evidence and defaults to `metadata`; `asset_default_level` controls versioned behavioral
+assets and defaults to `full`. Other fields include
 semantic/path allow and deny lists, secret names, inline/artifact limits, collection/string/depth
 limits, binary retention, and source-attribute retention. Unknown fields or levels fail validation.
 See [Automatic Asset Discovery](automatic-asset-discovery.md#privacy-and-capture-policy) for the
@@ -671,7 +674,7 @@ assets:
 ```yaml
 record:
   type: asset
-  version: 1
+  version: 2
 
 asset:
   id: tool.create_car
@@ -679,40 +682,27 @@ asset:
   name: create_car
   semantic: agent.tool
   current_version: 7c91d4d7b1af
-  doc: Create a new car instance.
-  params:
-    make:
-      type: Literal["audi", "bmw", "mercedes"]
-      required: true
-    model:
-      type: str
-      required: true
-  returns:
-    type: Car
-    asset_id: type.Car
+  content_ref:
+    asset_id: tool.create_car
+    version: 7c91d4d7b1af
+    path: artifacts/asset-content.sqlite3
 
 versions:
   - version: 15aa0dbceb02
-    state:
-      kind: tool
-      name: create_car
-      params:
-        make:
-          type: Literal["audi", "bmw", "mercedes"]
-          required: true
+    content_ref:
+      asset_id: tool.create_car
+      version: 15aa0dbceb02
+      path: artifacts/asset-content.sqlite3
     hashes:
       content: ...
     changes:
       fields: [initial]
   - version: 7c91d4d7b1af
     parent: 15aa0dbceb02
-    state:
-      kind: tool
-      name: create_car
-      params:
-        make:
-          type: Literal["audi", "bmw", "mercedes"]
-          required: true
+    content_ref:
+      asset_id: tool.create_car
+      version: 7c91d4d7b1af
+      path: artifacts/asset-content.sqlite3
     hashes:
       content: ...
       source: ...
@@ -721,8 +711,14 @@ versions:
     changes:
       fields:
         - params.year.type
-      diff: |
-        --- 15aa0dbceb02
-        +++ 7c91d4d7b1af
-        @@ ...
+      diff_ref:
+        asset_id: tool.create_car
+        version: 7c91d4d7b1af
+        parent_version: 15aa0dbceb02
+        path: artifacts/asset-content.sqlite3
 ```
+
+The referenced SQLite artifact is an internal, transaction-safe content store rather than an
+authoring DSL. It keeps content-addressed snapshots and readable diffs out of manifests while
+supporting indexed lookup by `asset_id` and `version`. Use `load_asset_content(...)` or
+`load_asset_diff(...)`; application code does not query its tables directly.

@@ -36,6 +36,7 @@ from autobench import (
     TaskSpec,
     TaskStatus,
     Variant,
+    load_asset_content,
     load_experiment_record,
     load_run_record,
     record_experiment,
@@ -204,7 +205,14 @@ def test_recording_persists_and_replays_exact_discovered_asset_uses(
     recorded_run = load_run_record(record_dir / "cases" / case.id / "default" / "run.yaml")
     replayed = replay_experiment(record_dir)
 
-    assert asset_history["asset"]["content"] == "Use the lookup tool."
+    content_ref = asset_history["asset"]["content_ref"]
+    asset_content = load_asset_content(
+        record_dir / content_ref["path"],
+        asset_id=content_ref["asset_id"],
+        version=content_ref["version"],
+    )
+    assert "content" not in asset_history["asset"]
+    assert asset_content["content"] == "Use the lookup tool."
     assert asset_history["asset"]["current_version"] == registered.version.version
     assert asset_history["versions"][0]["version"] == registered.version.version
     assert recorded_run.asset_uses == (registered.use,)

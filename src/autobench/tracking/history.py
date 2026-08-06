@@ -5,7 +5,9 @@ from typing import Any
 
 from .introspection import _normalize_value, _safe_filename
 from .models import (
+    AssetContentRef,
     AssetDefinition,
+    AssetDiffRef,
     AssetVersion,
     FieldAsset,
     ParamAsset,
@@ -42,27 +44,58 @@ def asset_to_yaml_view(
     version: AssetVersion,
     *,
     existing: Any = None,
+    previous_snapshot: dict[str, Any] | None = None,
+    content_path: str = "content.sqlite3",
 ) -> dict[str, Any]:
     existing_versions = _existing_asset_versions(existing)
     current_snapshot = _asset_version_snapshot(asset)
-    previous_snapshot = _existing_asset_current_snapshot(existing)
+    prior_snapshot = (
+        previous_snapshot
+        if previous_snapshot is not None
+        else _existing_asset_current_snapshot(existing)
+    )
     existing_asset = existing.get("asset") if isinstance(existing, dict) else None
     current_version = (
         existing_asset.get("current_version") if isinstance(existing_asset, dict) else None
     )
     previous_version = current_version if isinstance(current_version, str) else None
-    if previous_snapshot is None and existing_versions:
-        previous_snapshot = _version_entry_snapshot(existing_versions[-1])
+    if prior_snapshot is None and existing_versions:
+        prior_snapshot = _version_entry_snapshot(existing_versions[-1])
     if (
         version.parent_version is None
         and previous_version is not None
         and previous_version != version.version
     ):
         version = version.model_copy(update={"parent_version": previous_version})
-    version_payload = _asset_version_payload(
-        version,
-        current_snapshot,
-        previous_snapshot=previous_snapshot,
+    content_ref = AssetContentRef(
+        asset_id=asset.id,
+        version=version.version,
+        path=content_path,
+    )
+    diff_ref = (
+        AssetDiffRef(
+            asset_id=asset.id,
+            version=version.version,
+            parent_version=version.parent_version,
+            path=content_path,
+        )
+        if prior_snapshot is not None and version.parent_version is not None
+        else None
+    )
+    existing_version_payload = next(
+        (entry for entry in existing_versions if entry.get("version") == version.version),
+        None,
+    )
+    version_payload = (
+        existing_version_payload
+        if previous_version == version.version and existing_version_payload is not None
+        else _asset_version_payload(
+            version,
+            current_snapshot,
+            previous_snapshot=prior_snapshot,
+            content_ref=content_ref,
+            diff_ref=diff_ref,
+        )
     )
     versions = [
         entry
@@ -70,7 +103,11 @@ def asset_to_yaml_view(
         if isinstance(entry.get("version"), str) and entry["version"] != version.version
     ]
     versions.append(version_payload)
-    asset_view = _asset_yaml_view(asset, current_version=version.version)
+    asset_view = _asset_yaml_view(
+        asset,
+        current_version=version.version,
+        content_ref=content_ref,
+    )
     if isinstance(asset, AssetDefinition) and isinstance(existing, dict):
         existing_asset = existing.get("asset")
         if isinstance(existing_asset, dict):
@@ -90,14 +127,19 @@ def asset_to_yaml_view(
     return {
         "record": {
             "type": "asset",
-            "version": 1,
+            "version": 2,
         },
         "asset": asset_view,
         "versions": versions,
     }
 
 
-def _asset_yaml_view(asset: TrackedAsset, *, current_version: str) -> dict[str, Any]:
+def _asset_yaml_view(
+    asset: TrackedAsset,
+    *,
+    current_version: str,
+    content_ref: AssetContentRef | None = None,
+) -> dict[str, Any]:
     view: dict[str, Any] = {
         "id": asset.id,
         "kind": _asset_yaml_kind(asset),
@@ -111,9 +153,10 @@ def _asset_yaml_view(asset: TrackedAsset, *, current_version: str) -> dict[str, 
         metadata.pop("raw", None)
         if metadata:
             view["metadata"] = metadata
+    if content_ref is not None:
+        view["content_ref"] = content_ref.model_dump(mode="json")
     if isinstance(asset, AssetDefinition):
         view["representation"] = asset.representation.value
-        view["content"] = asset.canonical_content
         if asset.scope is not None:
             view["scope"] = asset.scope
         if asset.owner_locator is not None:
@@ -127,33 +170,10 @@ def _asset_yaml_view(asset: TrackedAsset, *, current_version: str) -> dict[str, 
     if isinstance(asset, ToolAsset):
         if asset.qualname is not None:
             view["qualname"] = asset.qualname
-        if asset.doc is not None:
-            view["doc"] = asset.doc
-        view["params"] = {
-            param.name: _param_asset_yaml_view(param) for param in asset.param_schema.params
-        }
-        if asset.return_annotation is not None or asset.return_type_asset_id is not None:
-            returns: dict[str, Any] = {}
-            if asset.return_annotation is not None:
-                returns["type"] = asset.return_annotation
-            if asset.return_type_asset_id is not None:
-                returns["asset_id"] = asset.return_type_asset_id
-            view["returns"] = returns
         return view
     if isinstance(asset, TypeAsset):
         if asset.qualname is not None:
             view["qualname"] = asset.qualname
-        if asset.doc is not None:
-            view["doc"] = asset.doc
-        view["fields"] = {
-            field_asset.name: _field_asset_yaml_view(field_asset)
-            for field_asset in asset.field_assets
-        }
-        return view
-    if asset.kind == "prompt":
-        prompt_text = asset.metadata.get("raw")
-        if isinstance(prompt_text, str):
-            view["raw"] = prompt_text
         return view
     return view
 
@@ -221,10 +241,6 @@ def _asset_version_snapshot(asset: TrackedAsset) -> dict[str, Any]:
             snapshot["scope"] = asset.scope
         if asset.owner_locator is not None:
             snapshot["owner"] = asset.owner_locator
-        if asset.source_locators:
-            snapshot["source_locators"] = list(asset.source_locators)
-        if asset.aliases:
-            snapshot["aliases"] = list(asset.aliases)
         if asset.metadata:
             snapshot["metadata"] = asset.metadata
         return snapshot
@@ -288,14 +304,22 @@ def _asset_version_payload(
     snapshot: dict[str, Any],
     *,
     previous_snapshot: dict[str, Any] | None,
+    content_ref: AssetContentRef | None = None,
+    diff_ref: AssetDiffRef | None = None,
 ) -> dict[str, Any]:
     changes = _asset_version_changes(previous_snapshot, snapshot)
+    changes.pop("diff", None)
+    if diff_ref is not None:
+        changes["diff_ref"] = diff_ref.model_dump(mode="json")
     payload: dict[str, Any] = {
         "version": version.version,
-        "state": snapshot,
         "changes": changes,
         "hashes": {"content": version.content_hash},
     }
+    if content_ref is not None:
+        payload["content_ref"] = content_ref.model_dump(mode="json")
+    else:
+        payload["state"] = snapshot
     if version.parent_version is not None:
         payload["parent"] = version.parent_version
     if version.source_hash is not None:
@@ -377,6 +401,8 @@ def _existing_asset_current_snapshot(existing: Any) -> dict[str, Any] | None:
         return None
     raw_asset = existing.get("asset")
     if not isinstance(raw_asset, dict):
+        return None
+    if "content_ref" in raw_asset:
         return None
     current_asset = dict(raw_asset)
     current_asset.pop("id", None)

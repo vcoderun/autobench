@@ -1,6 +1,15 @@
 # Autobench
 
-Autobench turns one-off benchmark scripts into semantic, replayable experiment evidence.
+When an application changes, you need to know whether the new version is more correct, faster,
+cheaper, or more reliable. Teams usually answer that question with a custom benchmark script: a
+small program that runs representative inputs, checks the outputs, collects measurements, and
+prints a comparison. As the application grows, these scripts are repeatedly rewritten and their
+results become difficult to reproduce or compare.
+
+We built Autobench to solve that problem. Define the cases, variants, task, scores, and reports
+once in YAML or Python. Autobench runs the experiment, collects the evidence, records exactly what
+happened, and lets you replay, report, compare, or export the result without rebuilding that
+infrastructure for every application.
 
 It is a YAML-first Python framework for AI and non-AI systems:
 

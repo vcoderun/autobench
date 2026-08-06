@@ -1,6 +1,6 @@
 # Autobench Full Documentation
 
-> Complete, LLM-readable documentation for Autobench: a YAML-first framework for semantic, replayable benchmark evidence.
+> Complete, LLM-readable documentation for Autobench: define how an application should be measured, then run, record, compare, and replay its benchmarks in one consistent format.
 
 Canonical documentation: https://vcoderun.github.io/autobench/
 
@@ -14,12 +14,23 @@ Canonical page: https://vcoderun.github.io/autobench/
 
 # Autobench
 
-**Build benchmarks once. Keep the evidence, semantics, lineage, and replay.**
+**Define how your application should be measured once. Run, compare, and revisit every result in
+the same format.**
 
-Autobench is a YAML-first Python framework for evaluating AI and non-AI systems. It replaces
-one-off benchmark runners with a reusable runtime that expands datasets across variants, executes
-application-owned tasks, collects semantic evidence, evaluates outcomes, and writes immutable run
-records.
+Applications change: a team may switch models, revise a prompt, replace a tool, tune an algorithm,
+or ship a new configuration. To decide whether the change is actually better, they commonly write
+a benchmark script. That script runs representative inputs, checks the outputs, records values
+such as correctness, latency, token usage, or cost, and compares one version with another.
+
+The script works, but every project tends to build this machinery again. Results use incompatible
+formats, measurement and scoring logic become mixed with application code, and an old result is
+often impossible to inspect without rerunning the original program.
+
+We built Autobench to solve this problem. You describe the inputs to test, the variants to compare,
+the application task, and the meaning of success in YAML or Python. Autobench then runs the full
+matrix, collects measurements and traces, evaluates each result, records the application assets
+that affected it, and stores an immutable experiment record. That same record can be replayed,
+reported, compared, or exported later without calling the application again.
 
 ```bash
 uv add autobench
@@ -27,7 +38,7 @@ autobench validate autobench.yaml
 autobench run autobench.yaml --record runs/latest
 ```
 
-The same recorded experiment can then be inspected without executing the application again:
+After the run, inspect the recorded experiment without executing the application again:
 
 ```bash
 autobench replay runs/latest
@@ -228,7 +239,9 @@ export OPENROUTER_MODEL=openrouter:openai/gpt-5.6-luna
 
 Do not place credentials in benchmark specs, cases, artifacts, or capture policies. Use the
 [capture policy](automatic-asset-discovery.md#privacy-and-capture-policy) to prevent sensitive SDK
-inputs from being retained.
+inputs from being retained. Runtime evidence defaults to metadata, but versioned behavioral assets
+default to full content and are stored in `artifacts/asset-content.sqlite3`; set
+`asset_default_level: hash` when that local registry must not retain prompt, tool, or schema bodies.
 
 ## Next Step
 
@@ -2188,11 +2201,19 @@ runs/support-routing/
   experiment.yaml
   summary.yaml
   cases/<case-id>/<variant-id>/run.yaml
-  artifacts/...
+  assets/index.yaml
+  assets/<safe-asset-id>.yaml
+  artifacts/asset-content.sqlite3
+  artifacts/<other-payloads>...
 ```
 
 Paths are stable and artifact references are relative so the directory can be moved or archived.
 Recording is append-only: an existing run payload is never silently replaced.
+
+Asset manifests contain identity, lineage, hashes, changed fields, and content references. The
+versioned prompt/tool/schema snapshots and readable diffs live in the single experiment-local,
+content-addressed `artifacts/asset-content.sqlite3` registry. Resolve them with
+`load_asset_content(...)` and `load_asset_diff(...)`.
 
 ## RunRecord
 
@@ -2528,9 +2549,26 @@ from autobench import track
 track.write_assets(Path(".autobench/assets"))
 ```
 
-The YAML history contains an index plus one file per asset. Every new version links to its parent
-when available and stores a human-readable diff from the previous serialized state. Source changes,
-schema changes, decorator options, and metadata changes therefore remain reviewable.
+The directory contains an index, one lightweight manifest per asset, and `content.sqlite3`, a local
+content-addressed registry keyed by asset ID and version. Every new manifest version links to its
+parent and stores changed paths plus typed content and diff references. Prompt text, tool bodies,
+schema definitions, and readable diffs never appear in the manifests. SQLite transactions avoid
+rewriting the complete history as it grows, while content hashes deduplicate identical snapshots.
+
+```python
+from autobench import load_asset_content
+
+version = track.asset_version_of(SYSTEM_PROMPT)
+snapshot = load_asset_content(
+    Path(".autobench/assets/content.sqlite3"),
+    asset_id=version.asset_id,
+    version=version.version,
+)
+assert snapshot["raw"] == SYSTEM_PROMPT.raw
+```
+
+For a version with a parent, resolve its readable diff with
+`load_asset_diff(path, asset_id=..., version=..., parent_version=...)`.
 
 ## Binding Assets To Runs
 
@@ -2775,8 +2813,15 @@ asset discovery.
 
 ## Privacy And Capture Policy
 
-Asset content passes through the same `CapturePolicy` as ABP evidence before it reaches the
-registry. Configure one policy for every run in the benchmark:
+Asset definitions and runtime evidence share one `CapturePolicy`, but they have separate fallback
+levels because they serve different purposes:
+
+- `default_level` defaults to `metadata` for messages, model payloads, HTTP data, and other runtime
+  evidence;
+- `asset_default_level` defaults to `full` so a successful prompt, tool, or output schema can be
+  reconstructed, diffed, replayed, and optimized later.
+
+Configure a stricter asset policy when the experiment directory cannot retain behavioral content:
 
 ```python
 from autobench import Benchmark, CaptureLevel, CapturePolicy
@@ -2799,6 +2844,7 @@ benchmark:
   private-agent:
     capture:
       default_level: hash
+      asset_default_level: hash
       use_semantic_defaults: false
       semantic_overrides:
         tool: full
@@ -2807,9 +2853,11 @@ benchmark:
         - assets.*:prompt:private_notes
 ```
 
-Capture levels are `none`, `metadata`, `hash`, `redacted`, and `full`. Sensitive prompt content at
-the default metadata level is upgraded to a hash. Public definitions at metadata level may retain
-full normalized content. Secret field names are always filtered by the capture normalizer.
+Capture levels are `none`, `metadata`, `hash`, `redacted`, and `full`. The preset constructors
+`none()`, `metadata()`, `hashed()`, `redacted()`, and `full()` set both fallbacks together. A direct
+`CapturePolicy()` keeps runtime evidence metadata-first while retaining captured asset definitions.
+Semantic overrides apply to both paths, and secret field names are filtered by the capture
+normalizer.
 
 The private content fingerprint still drives behavioral versioning. Changing capture from hash to
 full does not create a false asset version. Omitted values retain an omission marker and digest;
@@ -2925,11 +2973,38 @@ recording/
   assets/
     index.yaml
     <safe-asset-id>.yaml
+  artifacts/
+    asset-content.sqlite3
 ```
 
-Each asset history contains its current definition, immutable versions, parent links, changed
-paths, and a readable diff. Writes are atomic and protected by a file lock. Independent workers
-merge existing versions, locators, and aliases instead of replacing each other's histories.
+Each asset history is a lightweight manifest containing identity, immutable versions, parent
+links, changed paths, and typed `content_ref` and `diff_ref` values. Captured snapshots and readable
+diffs are stored in the experiment-local `artifacts/asset-content.sqlite3` registry; prompt, tool,
+and schema bodies never appear in manifests. The content-addressed store deduplicates identical
+payloads, performs indexed lookups, and updates transactionally without rewriting the complete
+history. A file lock coordinates manifest updates while SQLite protects registry writes.
+
+Resolve any historical snapshot directly:
+
+```python
+from pathlib import Path
+
+from autobench import load_asset_content, load_asset_diff
+
+snapshot = load_asset_content(
+    Path("recording/artifacts/asset-content.sqlite3"),
+    asset_id="pydantic_ai:agent:support-router:prompt:instructions",
+    version="595012541db0",
+)
+prompt = snapshot["content"]
+
+diff = load_asset_diff(
+    Path("recording/artifacts/asset-content.sqlite3"),
+    asset_id="pydantic_ai:agent:support-router:prompt:instructions",
+    version="595012541db0",
+    parent_version="21477c4a101a",
+)
+```
 
 Every run record contains:
 
@@ -4099,6 +4174,7 @@ benchmark:
   private-agent:
     capture:
       default_level: hash
+      asset_default_level: hash
       use_semantic_defaults: false
       semantic_overrides:
         tool: full
@@ -4107,7 +4183,9 @@ benchmark:
         - assets.*:prompt:private_notes
 ```
 
-Supported levels are `none`, `metadata`, `hash`, `redacted`, and `full`. Other fields include
+Supported levels are `none`, `metadata`, `hash`, `redacted`, and `full`. `default_level` controls
+runtime evidence and defaults to `metadata`; `asset_default_level` controls versioned behavioral
+assets and defaults to `full`. Other fields include
 semantic/path allow and deny lists, secret names, inline/artifact limits, collection/string/depth
 limits, binary retention, and source-attribute retention. Unknown fields or levels fail validation.
 See [Automatic Asset Discovery](automatic-asset-discovery.md#privacy-and-capture-policy) for the
@@ -4518,7 +4596,7 @@ assets:
 ```yaml
 record:
   type: asset
-  version: 1
+  version: 2
 
 asset:
   id: tool.create_car
@@ -4526,40 +4604,27 @@ asset:
   name: create_car
   semantic: agent.tool
   current_version: 7c91d4d7b1af
-  doc: Create a new car instance.
-  params:
-    make:
-      type: Literal["audi", "bmw", "mercedes"]
-      required: true
-    model:
-      type: str
-      required: true
-  returns:
-    type: Car
-    asset_id: type.Car
+  content_ref:
+    asset_id: tool.create_car
+    version: 7c91d4d7b1af
+    path: artifacts/asset-content.sqlite3
 
 versions:
   - version: 15aa0dbceb02
-    state:
-      kind: tool
-      name: create_car
-      params:
-        make:
-          type: Literal["audi", "bmw", "mercedes"]
-          required: true
+    content_ref:
+      asset_id: tool.create_car
+      version: 15aa0dbceb02
+      path: artifacts/asset-content.sqlite3
     hashes:
       content: ...
     changes:
       fields: [initial]
   - version: 7c91d4d7b1af
     parent: 15aa0dbceb02
-    state:
-      kind: tool
-      name: create_car
-      params:
-        make:
-          type: Literal["audi", "bmw", "mercedes"]
-          required: true
+    content_ref:
+      asset_id: tool.create_car
+      version: 7c91d4d7b1af
+      path: artifacts/asset-content.sqlite3
     hashes:
       content: ...
       source: ...
@@ -4568,11 +4633,17 @@ versions:
     changes:
       fields:
         - params.year.type
-      diff: |
-        --- 15aa0dbceb02
-        +++ 7c91d4d7b1af
-        @@ ...
+      diff_ref:
+        asset_id: tool.create_car
+        version: 7c91d4d7b1af
+        parent_version: 15aa0dbceb02
+        path: artifacts/asset-content.sqlite3
 ```
+
+The referenced SQLite artifact is an internal, transaction-safe content store rather than an
+authoring DSL. It keeps content-addressed snapshots and readable diffs out of manifests while
+supporting indexed lookup by `asset_id` and `version`. Use `load_asset_content(...)` or
+`load_asset_diff(...)`; application code does not query its tables directly.
 
 ---
 
@@ -4885,8 +4956,11 @@ def lookup_order(order_id: str) -> dict[str, str]:
 ```
 
 `track.prompt`, `track.tool`, `track.type`, `track.dataclass`, and `track.asset` register exact
-versions. `track.write_assets(path)` writes DSL-shaped history files. Native discovery can attach
-unadorned SDK-visible components to runs.
+versions. `track.write_assets(path)` writes DSL-shaped manifests plus one `content.sqlite3`
+registry. `load_asset_content(...)` resolves an exact historical snapshot and
+`load_asset_diff(...)` resolves the corresponding readable diff. Native discovery can attach
+unadorned SDK-visible components to runs. Experiment recording uses the same contract at
+`artifacts/asset-content.sqlite3`.
 
 ## Production And Generated Cases
 
@@ -5465,12 +5539,14 @@ autobench instrumentation trace runs/example
 ABP materialization keeps completed spans and diagnostics instead of dropping the trace. Accounting
 extractors avoid double counting aggregate and leaf usage even when evidence is incomplete.
 
-## Captured Content Is Redacted Or Hashed
+## Captured Content Is Missing Or Hashed
 
-Capture is privacy-first. A value's retained representation is controlled by the benchmark
-`CapturePolicy`, semantic defaults, path rules, and SDK-specific HTTP settings.
+Runtime evidence is metadata-first, while behavioral asset definitions are full by default so
+historical candidates remain reconstructable. Both are controlled by the benchmark
+`CapturePolicy`, path rules, semantic overrides, and SDK-specific HTTP settings.
 
-Use `CapturePolicy.full()` only for controlled local evidence. Prefer targeted semantic overrides:
+To avoid retaining asset bodies, use a preset that changes both defaults or set the asset fallback
+explicitly:
 
 ```python
 from autobench import CaptureLevel, CapturePolicy
@@ -5480,7 +5556,9 @@ policy = CapturePolicy.hashed(
 )
 ```
 
-Secret names, denied paths, truncation limits, and binary rules still apply.
+The experiment-local bodies and readable diffs are in `artifacts/asset-content.sqlite3`;
+`assets/*.yaml` contains typed references and changed paths rather than copies. Secret names,
+denied paths, truncation limits, and binary rules still apply.
 
 ## Replay Needs An Optional SDK
 

@@ -22,6 +22,17 @@
                 },
                 "type": "array"
               },
+              "asset_default_level": {
+                "default": "full",
+                "enum": [
+                  "none",
+                  "metadata",
+                  "hash",
+                  "redacted",
+                  "full"
+                ],
+                "type": "string"
+              },
               "default_level": {
                 "default": "metadata",
                 "enum": [

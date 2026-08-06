@@ -161,12 +161,14 @@ autobench instrumentation trace runs/example
 ABP materialization keeps completed spans and diagnostics instead of dropping the trace. Accounting
 extractors avoid double counting aggregate and leaf usage even when evidence is incomplete.
 
-## Captured Content Is Redacted Or Hashed
+## Captured Content Is Missing Or Hashed
 
-Capture is privacy-first. A value's retained representation is controlled by the benchmark
-`CapturePolicy`, semantic defaults, path rules, and SDK-specific HTTP settings.
+Runtime evidence is metadata-first, while behavioral asset definitions are full by default so
+historical candidates remain reconstructable. Both are controlled by the benchmark
+`CapturePolicy`, path rules, semantic overrides, and SDK-specific HTTP settings.
 
-Use `CapturePolicy.full()` only for controlled local evidence. Prefer targeted semantic overrides:
+To avoid retaining asset bodies, use a preset that changes both defaults or set the asset fallback
+explicitly:
 
 ```python
 from autobench import CaptureLevel, CapturePolicy
@@ -176,7 +178,9 @@ policy = CapturePolicy.hashed(
 )
 ```
 
-Secret names, denied paths, truncation limits, and binary rules still apply.
+The experiment-local bodies and readable diffs are in `artifacts/asset-content.sqlite3`;
+`assets/*.yaml` contains typed references and changed paths rather than copies. Secret names,
+denied paths, truncation limits, and binary rules still apply.
 
 ## Replay Needs An Optional SDK
 

@@ -303,8 +303,11 @@ def lookup_order(order_id: str) -> dict[str, str]:
 ```
 
 `track.prompt`, `track.tool`, `track.type`, `track.dataclass`, and `track.asset` register exact
-versions. `track.write_assets(path)` writes DSL-shaped history files. Native discovery can attach
-unadorned SDK-visible components to runs.
+versions. `track.write_assets(path)` writes DSL-shaped manifests plus one `content.sqlite3`
+registry. `load_asset_content(...)` resolves an exact historical snapshot and
+`load_asset_diff(...)` resolves the corresponding readable diff. Native discovery can attach
+unadorned SDK-visible components to runs. Experiment recording uses the same contract at
+`artifacts/asset-content.sqlite3`.
 
 ## Production And Generated Cases
 

@@ -534,9 +534,9 @@ def test_openai_client_discovers_only_semantic_request_assets() -> None:
     }
     assert all(use.representation.value == "effective" for use in ctx.asset_uses)
     serialized = "\n".join(str(asset.model_dump(mode="json")) for asset in registry.definitions)
-    assert "Use records." not in serialized
+    assert "Use records." in serialized
     assert "private user input" not in serialized
-    assert "sha256" in serialized
+    assert "sha256" not in serialized
 
 
 def test_openai_responses_discovers_instructions_managed_prompt_and_tools() -> None:

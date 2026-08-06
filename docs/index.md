@@ -1,11 +1,22 @@
 # Autobench
 
-**Build benchmarks once. Keep the evidence, semantics, lineage, and replay.**
+**Define how your application should be measured once. Run, compare, and revisit every result in
+the same format.**
 
-Autobench is a YAML-first Python framework for evaluating AI and non-AI systems. It replaces
-one-off benchmark runners with a reusable runtime that expands datasets across variants, executes
-application-owned tasks, collects semantic evidence, evaluates outcomes, and writes immutable run
-records.
+Applications change: a team may switch models, revise a prompt, replace a tool, tune an algorithm,
+or ship a new configuration. To decide whether the change is actually better, they commonly write
+a benchmark script. That script runs representative inputs, checks the outputs, records values
+such as correctness, latency, token usage, or cost, and compares one version with another.
+
+The script works, but every project tends to build this machinery again. Results use incompatible
+formats, measurement and scoring logic become mixed with application code, and an old result is
+often impossible to inspect without rerunning the original program.
+
+We built Autobench to solve this problem. You describe the inputs to test, the variants to compare,
+the application task, and the meaning of success in YAML or Python. Autobench then runs the full
+matrix, collects measurements and traces, evaluates each result, records the application assets
+that affected it, and stores an immutable experiment record. That same record can be replayed,
+reported, compared, or exported later without calling the application again.
 
 ```bash
 uv add autobench
@@ -13,7 +24,7 @@ autobench validate autobench.yaml
 autobench run autobench.yaml --record runs/latest
 ```
 
-The same recorded experiment can then be inspected without executing the application again:
+After the run, inspect the recorded experiment without executing the application again:
 
 ```bash
 autobench replay runs/latest

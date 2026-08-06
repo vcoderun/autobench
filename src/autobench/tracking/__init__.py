@@ -7,9 +7,14 @@ from .discovery import (
     canonical_asset_content,
     canonical_asset_hash,
 )
-from .history import asset_index_to_yaml_view, asset_to_yaml_view
+from .history import (
+    asset_index_to_yaml_view,
+    asset_to_yaml_view,
+)
 from .models import (
+    AssetContentRef,
     AssetDefinition,
+    AssetDiffRef,
     AssetProvenance,
     AssetRepresentation,
     AssetSensitivity,
@@ -25,10 +30,13 @@ from .models import (
     TypeDecorator,
 )
 from .registry import TrackingRegistry, track
+from .store import load_asset_content, load_asset_diff
 
 __all__ = (
     "AssetCandidate",
+    "AssetContentRef",
     "AssetDefinition",
+    "AssetDiffRef",
     "AssetProvenance",
     "AssetRepresentation",
     "AssetSensitivity",
@@ -49,5 +57,7 @@ __all__ = (
     "asset_to_yaml_view",
     "canonical_asset_content",
     "canonical_asset_hash",
+    "load_asset_content",
+    "load_asset_diff",
     "track",
 )

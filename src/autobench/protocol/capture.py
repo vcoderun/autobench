@@ -85,6 +85,7 @@ class CapturePolicy(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     default_level: CaptureLevel = CaptureLevel.METADATA
+    asset_default_level: CaptureLevel = CaptureLevel.FULL
     use_semantic_defaults: bool = True
     semantic_overrides: dict[SemanticType, CaptureLevel] = Field(default_factory=dict)
     allow_semantics: tuple[str, ...] = ()
@@ -113,23 +114,46 @@ class CapturePolicy(BaseModel):
 
     @classmethod
     def none(cls, **changes: Any) -> CapturePolicy:
+        changes.setdefault("asset_default_level", CaptureLevel.NONE)
         return cls(default_level=CaptureLevel.NONE, use_semantic_defaults=False, **changes)
 
     @classmethod
     def metadata(cls, **changes: Any) -> CapturePolicy:
+        changes.setdefault("asset_default_level", CaptureLevel.METADATA)
         return cls(default_level=CaptureLevel.METADATA, use_semantic_defaults=False, **changes)
 
     @classmethod
     def hashed(cls, **changes: Any) -> CapturePolicy:
+        changes.setdefault("asset_default_level", CaptureLevel.HASH)
         return cls(default_level=CaptureLevel.HASH, use_semantic_defaults=False, **changes)
 
     @classmethod
     def redacted(cls, **changes: Any) -> CapturePolicy:
+        changes.setdefault("asset_default_level", CaptureLevel.REDACTED)
         return cls(default_level=CaptureLevel.REDACTED, use_semantic_defaults=False, **changes)
 
     @classmethod
     def full(cls, **changes: Any) -> CapturePolicy:
+        changes.setdefault("asset_default_level", CaptureLevel.FULL)
         return cls(default_level=CaptureLevel.FULL, use_semantic_defaults=False, **changes)
+
+    def level_for_asset(
+        self,
+        semantic_type: SemanticType | None,
+        *,
+        explicit: CaptureLevel | None = None,
+    ) -> CaptureLevel:
+        if explicit is not None:
+            return explicit
+        if semantic_type is not None:
+            matches = tuple(
+                (prefix, level)
+                for prefix, level in self.semantic_overrides.items()
+                if semantic_type == prefix or semantic_type.startswith(f"{prefix}.")
+            )
+            if matches:
+                return max(matches, key=lambda match: len(match[0]))[1]
+        return self.asset_default_level
 
     def level_for(
         self,

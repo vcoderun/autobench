@@ -9,13 +9,14 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from pydantic.json_schema import JsonSchemaMode, JsonSchemaValue
 
-from autobench import Case, RunContext, Variant
+from autobench import Case, RunContext, Variant, load_asset_content
 from autobench.instrumentation import (
     InstrumentAssetSpec,
     InstrumentationRuntime,
     InstrumentCall,
     InstrumentorInfo,
 )
+from autobench.io import load_yaml
 from autobench.protocol import (
     AbstractionLayer,
     ActiveContext,
@@ -118,8 +119,16 @@ def test_registry_versions_targetless_candidates_and_scoped_names(tmp_path: Path
         if path.name != "index.yaml"
     )
     assert "representation: definition" in text
-    assert "Be precise." in text
+    assert "Be precise." not in text
     assert "parent:" in text
+    assert (
+        load_asset_content(
+            tmp_path / "content.sqlite3",
+            asset_id=changed.asset.id,
+            version=changed.version.version,
+        )["content"]
+        == "Be precise."
+    )
 
 
 def test_registry_recovers_from_stale_index_and_rejects_unknown_locators(
@@ -340,6 +349,11 @@ def test_capture_policy_does_not_change_behavioral_asset_version() -> None:
         variant=Variant(id="variant-1"),
         capture_policy=CapturePolicy.full(),
     )
+    default_context = RunContext(
+        benchmark_id="asset-discovery",
+        case=Case(id="case-default"),
+        variant=Variant(id="variant-1"),
+    )
     sensitive = _candidate(
         "Never reveal this prompt.",
         sensitivity=AssetSensitivity.SENSITIVE,
@@ -355,15 +369,62 @@ def test_capture_policy_does_not_change_behavioral_asset_version() -> None:
         full = runtime.asset(_info(), sensitive)
     finally:
         reset_active_run_context(token)
+    token = set_active_run_context(default_context)
+    try:
+        default = runtime.asset(_info(), sensitive)
+    finally:
+        reset_active_run_context(token)
 
     assert hashed is not None
     assert full is not None
+    assert default is not None
     assert hashed.version == full.version
     assert len(registry.versions) == 1
     assert isinstance(hashed.asset, AssetDefinition)
     assert isinstance(full.asset, AssetDefinition)
     assert hashed.asset.canonical_content != "Never reveal this prompt."
     assert full.asset.canonical_content == "Never reveal this prompt."
+    assert isinstance(default.asset, AssetDefinition)
+    assert default.asset.canonical_content == "Never reveal this prompt."
+
+
+def test_asset_metadata_fallback_respects_sensitivity() -> None:
+    registry = TrackingRegistry()
+    runtime = InstrumentationRuntime(registry=registry)
+    context = RunContext(
+        benchmark_id="asset-discovery",
+        case=Case(id="case-metadata"),
+        variant=Variant(id="variant-1"),
+        capture_policy=CapturePolicy.metadata(),
+    )
+
+    token = set_active_run_context(context)
+    try:
+        sensitive = runtime.asset(
+            _info(),
+            _candidate(
+                "Private instructions",
+                locator="test_sdk:prompt:private",
+                sensitivity=AssetSensitivity.SENSITIVE,
+            ),
+        )
+        public = runtime.asset(
+            _info(),
+            _candidate(
+                "Published instructions",
+                locator="test_sdk:prompt:public",
+                sensitivity=AssetSensitivity.PUBLIC,
+            ),
+        )
+    finally:
+        reset_active_run_context(token)
+
+    assert sensitive is not None
+    assert public is not None
+    assert isinstance(sensitive.asset, AssetDefinition)
+    assert isinstance(public.asset, AssetDefinition)
+    assert sensitive.asset.canonical_content != "Private instructions"
+    assert public.asset.canonical_content == "Published instructions"
 
 
 def test_capture_policy_omits_or_references_discovered_asset_content() -> None:
@@ -527,7 +588,11 @@ def test_asset_yaml_preserves_optional_definition_context_and_empty_collections(
     assert rich_view["asset"]["owner"] == "application:agent:retrieval"
     assert rich_view["asset"]["source_locators"] == ["application:prompt:rich"]
     assert rich_view["asset"]["aliases"] == ["provider:prompt:rich"]
-    assert rich_view["versions"][0]["state"]["metadata"] == {"team": "retrieval"}
+    assert rich_view["versions"][0]["content_ref"] == {
+        "asset_id": rich.id,
+        "version": rich_version.version,
+        "path": "content.sqlite3",
+    }
     assert list_existing_view["asset"] == rich_view["asset"]
 
 
@@ -637,14 +702,25 @@ def test_asset_history_merges_versions_written_by_independent_workers(tmp_path: 
         for write in writes:
             write.result()
 
-    prompt_record = next(path for path in tmp_path.glob("*.yaml") if path.name != "index.yaml")
-    content = prompt_record.read_text(encoding="utf-8")
-    assert "Version one" in content
-    assert "Version two" in content
-    assert content.count("version:") >= 3
-    assert "parent:" in content
-    assert "worker:first" in content
-    assert "worker:second" in content
+    prompt_record = load_yaml(tmp_path / "test_sdk_prompt_instructions.yaml")
+    version_one = first.version_by_asset_id("test_sdk:prompt:instructions").version
+    version_two = second.version_by_asset_id("test_sdk:prompt:instructions").version
+    first_content = load_asset_content(
+        tmp_path / "content.sqlite3",
+        asset_id="test_sdk:prompt:instructions",
+        version=version_one,
+    )
+    second_content = load_asset_content(
+        tmp_path / "content.sqlite3",
+        asset_id="test_sdk:prompt:instructions",
+        version=version_two,
+    )
+
+    assert first_content["content"] == "Version one"
+    assert second_content["content"] == "Version two"
+    assert len(prompt_record["versions"]) == 2
+    assert prompt_record["versions"][1]["parent"] == prompt_record["versions"][0]["version"]
+    assert set(prompt_record["asset"]["aliases"]) == {"worker:first", "worker:second"}
 
 
 def extract_result(call: InstrumentCall) -> str:

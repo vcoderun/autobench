@@ -221,8 +221,15 @@ asset discovery.
 
 ## Privacy And Capture Policy
 
-Asset content passes through the same `CapturePolicy` as ABP evidence before it reaches the
-registry. Configure one policy for every run in the benchmark:
+Asset definitions and runtime evidence share one `CapturePolicy`, but they have separate fallback
+levels because they serve different purposes:
+
+- `default_level` defaults to `metadata` for messages, model payloads, HTTP data, and other runtime
+  evidence;
+- `asset_default_level` defaults to `full` so a successful prompt, tool, or output schema can be
+  reconstructed, diffed, replayed, and optimized later.
+
+Configure a stricter asset policy when the experiment directory cannot retain behavioral content:
 
 ```python
 from autobench import Benchmark, CaptureLevel, CapturePolicy
@@ -245,6 +252,7 @@ benchmark:
   private-agent:
     capture:
       default_level: hash
+      asset_default_level: hash
       use_semantic_defaults: false
       semantic_overrides:
         tool: full
@@ -253,9 +261,11 @@ benchmark:
         - assets.*:prompt:private_notes
 ```
 
-Capture levels are `none`, `metadata`, `hash`, `redacted`, and `full`. Sensitive prompt content at
-the default metadata level is upgraded to a hash. Public definitions at metadata level may retain
-full normalized content. Secret field names are always filtered by the capture normalizer.
+Capture levels are `none`, `metadata`, `hash`, `redacted`, and `full`. The preset constructors
+`none()`, `metadata()`, `hashed()`, `redacted()`, and `full()` set both fallbacks together. A direct
+`CapturePolicy()` keeps runtime evidence metadata-first while retaining captured asset definitions.
+Semantic overrides apply to both paths, and secret field names are filtered by the capture
+normalizer.
 
 The private content fingerprint still drives behavioral versioning. Changing capture from hash to
 full does not create a false asset version. Omitted values retain an omission marker and digest;
@@ -371,11 +381,38 @@ recording/
   assets/
     index.yaml
     <safe-asset-id>.yaml
+  artifacts/
+    asset-content.sqlite3
 ```
 
-Each asset history contains its current definition, immutable versions, parent links, changed
-paths, and a readable diff. Writes are atomic and protected by a file lock. Independent workers
-merge existing versions, locators, and aliases instead of replacing each other's histories.
+Each asset history is a lightweight manifest containing identity, immutable versions, parent
+links, changed paths, and typed `content_ref` and `diff_ref` values. Captured snapshots and readable
+diffs are stored in the experiment-local `artifacts/asset-content.sqlite3` registry; prompt, tool,
+and schema bodies never appear in manifests. The content-addressed store deduplicates identical
+payloads, performs indexed lookups, and updates transactionally without rewriting the complete
+history. A file lock coordinates manifest updates while SQLite protects registry writes.
+
+Resolve any historical snapshot directly:
+
+```python
+from pathlib import Path
+
+from autobench import load_asset_content, load_asset_diff
+
+snapshot = load_asset_content(
+    Path("recording/artifacts/asset-content.sqlite3"),
+    asset_id="pydantic_ai:agent:support-router:prompt:instructions",
+    version="595012541db0",
+)
+prompt = snapshot["content"]
+
+diff = load_asset_diff(
+    Path("recording/artifacts/asset-content.sqlite3"),
+    asset_id="pydantic_ai:agent:support-router:prompt:instructions",
+    version="595012541db0",
+    parent_version="21477c4a101a",
+)
+```
 
 Every run record contains:
 

@@ -154,9 +154,29 @@ def test_secret_paths_stay_redacted_even_with_full_capture() -> None:
 
 
 def test_policy_validation_factories_and_active_context_capture_reference() -> None:
+    default = CapturePolicy()
+    assert default.default_level is CaptureLevel.METADATA
+    assert default.asset_default_level is CaptureLevel.FULL
+    assert default.level_for("prompt.text", "private") is CaptureLevel.HASH
+    assert default.level_for_asset("prompt.text") is CaptureLevel.FULL
+    assert (
+        default.level_for_asset("prompt.text", explicit=CaptureLevel.REDACTED)
+        is CaptureLevel.REDACTED
+    )
+    assert (
+        CapturePolicy(semantic_overrides={"prompt": CaptureLevel.HASH}).level_for_asset(
+            "prompt.text"
+        )
+        is CaptureLevel.HASH
+    )
     assert CapturePolicy.metadata().default_level is CaptureLevel.METADATA
+    assert CapturePolicy.metadata().asset_default_level is CaptureLevel.METADATA
     assert CapturePolicy.redacted().default_level is CaptureLevel.REDACTED
+    assert CapturePolicy.redacted().asset_default_level is CaptureLevel.REDACTED
     assert CapturePolicy.full().default_level is CaptureLevel.FULL
+    assert CapturePolicy.full().asset_default_level is CaptureLevel.FULL
+    assert CapturePolicy.none().asset_default_level is CaptureLevel.NONE
+    assert CapturePolicy.hashed().asset_default_level is CaptureLevel.HASH
 
     with pytest.raises(ValidationError, match="capture paths and semantics cannot be empty"):
         CapturePolicy(allow_paths=("",))

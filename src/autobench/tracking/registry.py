@@ -14,7 +14,12 @@ from autobench.io import dump_yaml, load_yaml
 from autobench.metrics.semantics import Semantic, SemanticType
 
 from .discovery import AssetCandidate, AssetUse, RegisteredAsset
-from .history import asset_index_to_yaml_view, asset_to_yaml_view
+from .history import (
+    _asset_version_changes,
+    _asset_version_snapshot,
+    asset_index_to_yaml_view,
+    asset_to_yaml_view,
+)
 from .introspection import (
     _build_tool_asset,
     _build_type_asset,
@@ -36,6 +41,7 @@ from .models import (
     TrackedPrompt,
     TypeDecorator,
 )
+from .store import AssetContentStore
 
 _T = TypeVar("_T")
 _TypeT = TypeVar("_TypeT", bound=type)
@@ -75,8 +81,18 @@ class TrackingRegistry:
         directory: Path,
         *,
         asset_ids: Collection[str] | None = None,
+        content_path: Path | None = None,
+        root_dir: Path | None = None,
     ) -> None:
         directory.mkdir(parents=True, exist_ok=True)
+        active_content_path = (
+            directory / "content.sqlite3" if content_path is None else content_path
+        )
+        active_root = directory if root_dir is None else root_dir
+        try:
+            content_reference = active_content_path.relative_to(active_root).as_posix()
+        except ValueError as exc:
+            raise ValueError("asset content must be stored inside the registry root") from exc
         with self._lock:
             selected_ids = None if asset_ids is None else set(asset_ids)
             assets = sorted(
@@ -89,14 +105,50 @@ class TrackingRegistry:
             )
             versions = [self._version_for_asset_id(asset.id) for asset in assets]
         with FileLock(directory / ".write.lock"):
-            for asset, version in zip(assets, versions, strict=True):
-                asset_path = directory / f"{_safe_filename(asset.id)}.yaml"
-                existing = load_yaml(asset_path) if asset_path.exists() else None
-                _atomic_dump_yaml(
-                    asset_to_yaml_view(asset, version, existing=existing),
-                    asset_path,
-                    schema_name="asset",
-                )
+            active_content_path.parent.mkdir(parents=True, exist_ok=True)
+            with AssetContentStore(active_content_path) as content_store:
+                for asset, version in zip(assets, versions, strict=True):
+                    asset_path = directory / f"{_safe_filename(asset.id)}.yaml"
+                    existing = load_yaml(asset_path) if asset_path.exists() else None
+                    existing_asset = existing.get("asset") if isinstance(existing, dict) else None
+                    current_version = (
+                        existing_asset.get("current_version")
+                        if isinstance(existing_asset, dict)
+                        else None
+                    )
+                    previous_version = current_version if isinstance(current_version, str) else None
+                    previous_snapshot = (
+                        content_store.content(asset_id=asset.id, version=previous_version)
+                        if previous_version is not None
+                        else None
+                    )
+                    snapshot = _asset_version_snapshot(asset)
+                    content_store.write_content(
+                        asset_id=asset.id,
+                        version=version.version,
+                        content_hash=version.content_hash,
+                        snapshot=snapshot,
+                    )
+                    changes = _asset_version_changes(previous_snapshot, snapshot)
+                    diff = changes.get("diff")
+                    if previous_version is not None and isinstance(diff, str):
+                        content_store.write_diff(
+                            asset_id=asset.id,
+                            version=version.version,
+                            parent_version=previous_version,
+                            diff=diff,
+                        )
+                    _atomic_dump_yaml(
+                        asset_to_yaml_view(
+                            asset,
+                            version,
+                            existing=existing,
+                            previous_snapshot=previous_snapshot,
+                            content_path=content_reference,
+                        ),
+                        asset_path,
+                        schema_name="asset",
+                    )
             index_path = directory / "index.yaml"
             index_view = asset_index_to_yaml_view(assets, versions)
             if index_path.exists():
@@ -644,6 +696,8 @@ class TrackingRegistry:
         assert prompt_text is not None
         prompt_metadata = dict(metadata or {})
         prompt_metadata["raw"] = prompt_text
+        version_metadata = dict(prompt_metadata)
+        version_metadata.pop("raw")
         asset = TrackedAsset(
             id=f"prompt.{name}",
             kind="prompt",
@@ -663,7 +717,7 @@ class TrackingRegistry:
                 source_hash=content_hash if prompt_source_path is not None else None,
                 source_path=prompt_source_path,
                 parent_version=parent_version,
-                metadata=prompt_metadata,
+                metadata=version_metadata,
             ),
         )
         return prompt

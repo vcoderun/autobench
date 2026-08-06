@@ -13,8 +13,6 @@ from rich.table import Table
 
 from autobench import (
     Benchmark,
-    CaptureLevel,
-    CapturePolicy,
     Case,
     Direction,
     ExactScorer,
@@ -68,14 +66,6 @@ def build_benchmark() -> Benchmark:
     return (
         Benchmark("automatic-pydantic-assets")
         .description("Discover Pydantic AI behavioral assets without tracking decorators.")
-        .capture(
-            CapturePolicy.hashed(
-                semantic_overrides={
-                    "tool": CaptureLevel.FULL,
-                    "output_schema": CaptureLevel.FULL,
-                }
-            )
-        )
         .dataset(
             [
                 Case(

@@ -98,7 +98,9 @@ export OPENROUTER_MODEL=openrouter:openai/gpt-5.6-luna
 
 Do not place credentials in benchmark specs, cases, artifacts, or capture policies. Use the
 [capture policy](automatic-asset-discovery.md#privacy-and-capture-policy) to prevent sensitive SDK
-inputs from being retained.
+inputs from being retained. Runtime evidence defaults to metadata, but versioned behavioral assets
+default to full content and are stored in `artifacts/asset-content.sqlite3`; set
+`asset_default_level: hash` when that local registry must not retain prompt, tool, or schema bodies.
 
 ## Next Step
 

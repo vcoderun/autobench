@@ -12,6 +12,7 @@ from autobench import (
     collect_benchmark_source_files,
     export_runs_csv,
     export_summary_yaml,
+    load_asset_content,
     load_benchmark_spec,
     record_experiment,
     replay_experiment,
@@ -249,10 +250,23 @@ def test_automatic_asset_examples_persist_and_replay_sdk_lineage(
     assert any(use.scope == "retrieval" for use in pydantic_uses)
     assert any(use.representation.value == "effective" for use in pydantic_uses)
     assert any(use.definition_asset_id is not None for use in pydantic_uses)
+    prompt_use = next(
+        use
+        for use in pydantic_uses
+        if use.source_locator == "pydantic_ai:agent:support-router:prompt:instructions"
+        and use.representation.value == "definition"
+    )
+    prompt_snapshot = load_asset_content(
+        pydantic_record / "artifacts" / "asset-content.sqlite3",
+        asset_id=prompt_use.asset_id,
+        version=prompt_use.version,
+    )
+    assert "Route each support request using the policy tool." in str(prompt_snapshot["content"])
     assert {use.source_locator for use in custom_uses} == {
         "python:workflow_client.execute:prompt:instructions",
         "python:workflow_client.execute:tool:tools:lookup_incident",
         "python:workflow_client.execute:output_schema:output",
     }
     assert (pydantic_record / "assets" / "index.yaml").is_file()
+    assert (pydantic_record / "artifacts" / "asset-content.sqlite3").is_file()
     assert (custom_record / "assets" / "index.yaml").is_file()

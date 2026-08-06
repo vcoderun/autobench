@@ -16,11 +16,19 @@ runs/support-routing/
   experiment.yaml
   summary.yaml
   cases/<case-id>/<variant-id>/run.yaml
-  artifacts/...
+  assets/index.yaml
+  assets/<safe-asset-id>.yaml
+  artifacts/asset-content.sqlite3
+  artifacts/<other-payloads>...
 ```
 
 Paths are stable and artifact references are relative so the directory can be moved or archived.
 Recording is append-only: an existing run payload is never silently replaced.
+
+Asset manifests contain identity, lineage, hashes, changed fields, and content references. The
+versioned prompt/tool/schema snapshots and readable diffs live in the single experiment-local,
+content-addressed `artifacts/asset-content.sqlite3` registry. Resolve them with
+`load_asset_content(...)` and `load_asset_diff(...)`.
 
 ## RunRecord
 

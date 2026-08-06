@@ -330,7 +330,9 @@ from autobench.spec import (
 )
 
 from .tracking import (
+    AssetContentRef,
     AssetDefinition,
+    AssetDiffRef,
     AssetProvenance,
     AssetRepresentation,
     AssetSensitivity,
@@ -346,6 +348,8 @@ from .tracking import (
     TypeAsset,
     asset_index_to_yaml_view,
     asset_to_yaml_view,
+    load_asset_content,
+    load_asset_diff,
     track,
 )
 
@@ -355,7 +359,9 @@ __all__ = (
     "AggregationFn",
     "ActionMatchResult",
     "ArtifactRef",
+    "AssetContentRef",
     "AssetDefinition",
+    "AssetDiffRef",
     "AssetDiscoverySettings",
     "AssetProvenance",
     "AssetRepresentation",
@@ -617,6 +623,8 @@ __all__ = (
     "load_pricing_table",
     "load_run_record",
     "load_benchmark_spec",
+    "load_asset_content",
+    "load_asset_diff",
     "measure_callable",
     "mark_generated_case",
     "match_expected_actions",

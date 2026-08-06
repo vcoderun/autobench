@@ -217,6 +217,7 @@ def test_fluent_and_yaml_capture_policies_share_one_typed_contract(
         .capture(
             {
                 "default_level": "hash",
+                "asset_default_level": "hash",
                 "use_semantic_defaults": False,
                 "semantic_overrides": {"tool": "full"},
                 "deny_paths": ["prompt.secret"],
@@ -230,6 +231,7 @@ def test_fluent_and_yaml_capture_policies_share_one_typed_contract(
   private-assets:
     capture:
       default_level: hash
+      asset_default_level: hash
       use_semantic_defaults: false
       semantic_overrides:
         tool: full
@@ -245,6 +247,7 @@ def test_fluent_and_yaml_capture_policies_share_one_typed_contract(
     assert loaded == fluent
     assert benchmark_spec_to_yaml_view(loaded)["benchmark"]["private-assets"]["capture"] == {
         "default_level": "hash",
+        "asset_default_level": "hash",
         "use_semantic_defaults": False,
         "semantic_overrides": {"tool": "full"},
         "deny_paths": ["prompt.secret"],
