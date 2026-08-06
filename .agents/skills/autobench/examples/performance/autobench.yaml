@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/vcoderun/autobench/main/schemas/0.3.0/benchmark_schema.json
+benchmark:
+  search-performance:
+    description: Compare repeated measurements for two correct search implementations.
+    dataset:
+      source: file://cases.yaml
+      version: "2026-08-07"
+    run:
+      python: benchmark_task:run
+    variants:
+      linear:
+        label: Linear search baseline
+        factors:
+          strategy:
+            value: linear
+            optimize: true
+      indexed:
+        label: Pre-indexed candidate
+        factors:
+          strategy:
+            value: indexed
+            optimize: true
+    score:
+      correctness:
+        exact:
+          actual: output.found
+          expected: case.expected.found
+        semantic: quality.correctness
+        goal: maximize
+        role: constraint
+    post_derive:
+      - kind: paired_baseline
+        baseline_variant: linear
+        metric: time.latency
+        formula: baseline_over_candidate
+        include_baseline: true
+        output:
+          name: speedup
+          semantic_type: performance.speedup
+          unit: ratio
+          direction: maximize
+          role: objective
+    policies:
+      - name: preserve-correctness
+        metric: quality.correctness
+        must_equal: true
+    report:
+      leaderboard:
+        show:
+          correctness:
+            metric: quality.correctness
+            aggregate: ratio_true
+          median_latency:
+            metric: time.latency
+            aggregate: mean
+          speedup:
+            metric: performance.speedup
+            aggregate: mean
+      matrix:
+        metric: performance.speedup
+      compare:
+        linear -> indexed:
+          show:
+            median_latency:
+              metric: time.latency
+              aggregate: mean
+            speedup:
+              metric: performance.speedup
+              aggregate: mean
+      distributions:
+        - name: median_latency
+          semantic_type: time.latency
+          summaries: [min, median, p95, max]
+

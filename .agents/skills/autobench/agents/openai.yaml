@@ -1,0 +1,4 @@
+interface:
+  display_name: "Autobench"
+  short_description: "Design and run production-grade benchmarks"
+  default_prompt: "Use $autobench to design, implement, validate, and explain an Autobench workflow for this application."

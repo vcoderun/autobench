@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/vcoderun/autobench/main/schemas/0.3.0/benchmark_schema.json
+benchmark:
+  text-transform:
+    description: Compare two deterministic text transformations.
+    cases:
+      - id: greeting
+        input:
+          text: hello autobench
+        expected:
+          text: HELLO AUTOBENCH
+      - id: whitespace
+        input:
+          text: release ready
+        expected:
+          text: RELEASE READY
+    run:
+      python: benchmark_task:run
+    variants:
+      upper:
+        label: Python upper
+        factors:
+          transform: upper
+      title_upper:
+        label: Title then upper
+        factors:
+          transform:
+            value: title_upper
+            optimize: true
+    score:
+      exact_text:
+        exact:
+          actual: output.text
+          expected: case.expected.text
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+    report:
+      leaderboard:
+        show:
+          correctness:
+            metric: quality.correctness
+            aggregate: ratio_true
+      matrix:
+        metric: quality.correctness
+      compare:
+        upper -> title_upper:
+          show:
+            correctness:
+              metric: quality.correctness
+              aggregate: ratio_true
+

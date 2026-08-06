@@ -1,7 +1,7 @@
 # Autobench
 
-**Define how your application should be measured once. Run, compare, and revisit every result in
-the same format.**
+**Define what better means once. Autobench evaluates every version by the same rules, compares the
+results, and keeps the full history ready for inspection.**
 
 Applications change: a team may switch models, revise a prompt, replace a tool, tune an algorithm,
 or ship a new configuration. To decide whether the change is actually better, they commonly write

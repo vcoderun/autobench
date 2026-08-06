@@ -79,6 +79,7 @@ packages = ["src/autobench"]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
+    "/.agents",
     "/.autobench",
     "/AGENTS.md",
     "/autobench-opus-export-final",

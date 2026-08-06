@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/vcoderun/autobench/main/schemas/0.3.0/benchmark_schema.json
+benchmark:
+  support-routing:
+    description: Combine an explicit workflow span with method instrumentation.
+    cases:
+      - id: billing
+        input: {message: refund invoice}
+        expected: {queue: billing}
+      - id: technical
+        input: {message: service timeout}
+        expected: {queue: technical}
+    run:
+      python: benchmark_task:run
+    variants:
+      baseline:
+        factors:
+          routing_profile: baseline
+      keyword:
+        factors:
+          routing_profile: keyword
+    score:
+      correct_queue:
+        exact:
+          actual: output.queue
+          expected: case.expected.queue
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+    report:
+      leaderboard:
+        show:
+          accuracy:
+            metric: quality.correctness
+            aggregate: ratio_true
+      matrix:
+        metric: quality.correctness
+      compare:
+        baseline -> keyword:
+          show:
+            accuracy:
+              metric: quality.correctness
+              aggregate: ratio_true
+
