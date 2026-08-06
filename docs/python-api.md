@@ -1,252 +1,340 @@
 # Python API
 
-Autobench exposes typed models and functions for every core layer. The `Benchmark` builder is a
-compact convenience API; direct `BenchmarkSpec` construction provides the complete configuration
-surface.
+Autobench exposes the same runtime through a fluent builder, typed specification models, and
+lower-level extension seams. Use the highest-level surface that can express the benchmark clearly.
 
-## Builder Example
+## Surface Selection
+
+| Surface | Use it when |
+| --- | --- |
+| `Benchmark` | Application code composes a benchmark dynamically |
+| `BenchmarkSpec` | You need the complete typed configuration surface |
+| YAML + `load_benchmark_spec` | Humans or agents author portable benchmark definitions |
+| Runtime/evaluation functions | You are building an adapter, service, or custom runner |
+
+All three authoring paths execute through `run_benchmark_spec()`.
+
+## Fluent Builder
 
 ```python
-from autobench import Benchmark, Case, ExactScorer, FactorValue, PassFailScorer, Semantic, Variant
+from autobench import (
+    Benchmark,
+    Case,
+    Direction,
+    ExactScorer,
+    FactorValue,
+    ObservationRole,
+    PassFailScorer,
+    Semantic,
+    Variant,
+)
 
-result = (
+benchmark = (
     Benchmark("builder-demo")
-    .dataset([Case(id="case_1", expected={"answer": "ok"})])
+    .description("Compare current and candidate behavior.")
+    .dataset(
+        [
+            Case(
+                id="refund",
+                input={"message": "Refund order 42"},
+                expected={"route": "billing"},
+            )
+        ],
+        dataset_id="routing-regressions",
+        version="v3",
+    )
     .variants(
         [
-            Variant(id="v1", factors=[FactorValue(name="enabled", value=True)]),
-            {"id": "v2", "factors": {"enabled": False}},
+            Variant(
+                id="current",
+                factors=[FactorValue(name="routing_profile", value="v3")],
+            ),
+            {
+                "id": "candidate",
+                "factors": {
+                    "routing_profile": {
+                        "value": "v4",
+                        "optimize": True,
+                    }
+                },
+            },
         ]
     )
     .task("my_app.benchmarks:run_case")
     .scoring(
         [
+            ExactScorer(
+                name="route",
+                actual="output.route",
+                expected="case.expected.route",
+                semantic_type=Semantic.QUALITY_CORRECTNESS,
+                direction=Direction.MAXIMIZE,
+                role=ObservationRole.OBJECTIVE,
+            ),
             PassFailScorer(
                 name="success",
                 path="output.success",
                 semantic_type=Semantic.RESULT_SUCCESS,
-            ),
-            ExactScorer(
-                name="answer",
-                actual="output.answer",
-                expected="case.expected.answer",
-                semantic_type=Semantic.QUALITY_CORRECTNESS,
+                role=ObservationRole.CONSTRAINT,
             ),
         ]
     )
-    .run()
 )
+
+result = benchmark.run(experiment_id="routing-candidate-42", concurrency_limit=4)
 ```
 
-Builder methods cover description, dataset, variants, task, scoring, per-run derivation, spec
-compilation, and sync/async execution. `to_spec()` returns the canonical `BenchmarkSpec`.
+### Builder Methods
 
-For post-derivation, policies, report configuration, or a custom semantic registry, construct or
-update the typed spec before calling `run_benchmark_spec`:
+| Method | Configures |
+| --- | --- |
+| `description(value)` | Benchmark description |
+| `capture(policy)` | ABP and asset capture policy |
+| `dataset(...)` | Inline cases or a typed dataset source |
+| `variants(items)` | Typed variants or normalized dictionaries |
+| `task(target, kind="python")` | Task target |
+| `scoring(items)` | Built-in or Python scorer specs |
+| `derive(items)` | Per-run derivers |
+| `instrument(*items)` | Typed built-ins or runtime custom instrumentors |
+| `instrument_all(...)` | Compatible built-in discovery |
+| `to_spec()` | Canonical `BenchmarkSpec` |
+| `run(...)` / `run_async(...)` | Sync or async execution |
+
+Post-derivation, policies, report views, and custom semantic registries currently live on the full
+`BenchmarkSpec`. Extend the compiled spec rather than inventing builder-only state:
 
 ```python
-from autobench import BenchmarkSpec, PolicySpec, run_benchmark_spec
+import asyncio
 
-spec = BenchmarkSpec.model_validate(payload)
-spec = spec.model_copy(
+from autobench import PolicySpec, run_benchmark_spec
+
+spec = benchmark.to_spec().model_copy(
     update={
         "policies": [
             PolicySpec(
-                name="quality-gate",
-                metric="quality.correctness",
+                name="quality-floor",
+                metric=Semantic.QUALITY_CORRECTNESS,
                 must_greater_equal=0.9,
             )
         ]
     }
 )
-result = await run_benchmark_spec(spec, concurrency_limit=4)
+result = asyncio.run(run_benchmark_spec(spec, concurrency_limit=4))
 ```
 
-## Task Signature
-
-Python task targets use:
+## Task Contract
 
 ```python
-def run_case(ctx, case):
+from autobench import Case, RunContext
+
+
+def run_case(ctx: RunContext, case: Case) -> Result:
     ...
 ```
 
-`ctx` is always the first parameter. `case` is always the second.
+`ctx` is always first and `case` is always second. A task may be sync or async and may return any
+serializable result. A Pydantic model is useful because scorers can resolve output fields reliably.
 
-Tasks may be sync or async.
+The runtime resolves `module:function` targets relative to the benchmark file before falling back to
+normal Python import paths.
 
-## Context Utilities
+## RunContext
 
-`RunContext` and `Span` provide:
+`RunContext` owns evidence for one case x variant run:
 
-- `metric`
-- `factor_observation`
-- `event`
-- `diagnostic`
-- `outcome`
-- `check`
-- `metrics`
-- `record_measurement`
-- `artifact`
-- `error`
-
-Span duration is owned by Autobench. Tasks do not need to hand-roll `perf_counter` timing for benchmark spans.
-
-## Agentic Evidence
-
-Agent and workflow runs can record typed spans:
-
-```python
-from autobench import Semantic, SpanKind
-
-
-def run_case(ctx, case):
-    with ctx.span("support_agent", kind=SpanKind.AGENT) as agent:
-        agent.metric("task_completed", True, semantic_type=Semantic.AGENT_TASK_COMPLETION)
-        with ctx.span("lookup_user", kind=SpanKind.TOOL, input={"user_id": "u1"}) as tool:
-            tool.set_output({"tier": "gold"})
-```
-
-Expected tool/action checks can be expressed as scorers:
-
-```python
-from autobench import ExpectedActionScorer, Semantic, SpanSelector
-
-scorer = ExpectedActionScorer(
-    name="tool_arguments",
-    semantic_type=Semantic.AGENT_TOOL_ARGUMENT_CORRECTNESS,
-    metric="arguments",
-    span=SpanSelector(kind="tool"),
-)
-```
-
-Cases can use either `expected.actions` or `expected.tool_calls`:
-
-```python
-Case(
-    id="refund",
-    expected={
-        "actions": [
-            {"tool": "lookup_user", "args": {"user_id": "u1"}, "order": 1},
-        ]
-    },
-)
-```
-
-External framework traces can be attached with `TraceEnvelope`, and Pydantic AI usage can be recorded through `PydanticAIUsage` without making either OpenTelemetry or Pydantic AI a core dependency.
-
-## Programmatic Layers
-
-| Layer | Primary APIs |
+| Method | Purpose |
 | --- | --- |
-| Data | `Case`, `CaseDefaults`, `DatasetSpec`, `Variant`, `FactorValue` |
-| Spec | `BenchmarkInfo`, `BenchmarkSpec`, `TaskSpec`, `load_benchmark_spec`, `build_benchmark_plan` |
-| Runtime | `RunContext`, `Span`, `run_benchmark_spec`, `run_benchmark_path`, `expand_matrix` |
-| Native instrumentation | typed integration settings, `InstrumentationManager`, registry status, compatibility diagnostics |
-| Evidence | `Observation`, `ObservationQuery`, `SemanticRegistry`, projection helpers |
-| Scoring | built-in scorer models, `ScoringCall`, `ScoreRecord`, `SpanSelector` |
-| Derivation | token cost, pricing models, paired-baseline derivation, policies, measurement |
-| Tracking | `track`, `TrackingRegistry`, tracked asset models and YAML views |
-| Records | `record_experiment`, record loaders, `replay_experiment`, environment capture |
-| Reports | report models, builders, comparison, aggregation, rendering, and exporters |
-| Feedback | `build_feedback_records`, `build_optimization_feedback_input` |
+| `factor(name)` | Read a configured factor value |
+| `span(...)` | Time and nest an operation |
+| `metric(...)` / `metrics(...)` | Record numeric, boolean, or structured metrics |
+| `factor_observation(...)` | Record a factor discovered at runtime |
+| `event(...)` | Record a discrete event |
+| `diagnostic(...)` | Record non-objective evidence |
+| `outcome(...)` | Record semantic success |
+| `check(...)` | Record a correctness constraint and reason |
+| `record_measurement(...)` | Record summaries plus optional raw samples |
+| `artifact(...)` | Attach a payload |
+| `error(...)` | Preserve a structured error |
+| `attach_tracked_asset(...)` | Bind an explicit tracked asset version |
 
-## Loading And Running YAML
+Evidence emitted before an exception remains in the failed run.
+
+## Load And Run YAML
 
 ```python
+import asyncio
 from pathlib import Path
 
-from autobench import load_benchmark_spec, run_benchmark_path
+from autobench import load_benchmark_spec, run_benchmark_path, run_benchmark_spec
 
-spec = load_benchmark_spec(Path("autobench.yaml"))
-result = await run_benchmark_path(
-    Path("autobench.yaml"),
-    experiment_id="candidate-42",
+path = Path("benchmarks/routing.yaml")
+spec = load_benchmark_spec(path)
+
+sync_result = run_benchmark_path(
+    path,
+    experiment_id="routing-42",
     concurrency_limit=4,
 )
+
+async_result = asyncio.run(
+    run_benchmark_spec(
+        spec,
+        experiment_id="routing-43",
+        concurrency_limit=4,
+    )
+)
 ```
 
-`load_benchmark_spec` supports authoring DSL and normalized model shapes. It merges custom semantic
-registries with built-ins and resolves file-backed datasets and pricing relative to the spec.
+Loading resolves dataset, pricing, task, and Python scorer references relative to the YAML file.
 
-## Recording And Replay
+## Record And Replay
 
 ```python
 from pathlib import Path
 
-from autobench import record_experiment, replay_experiment
+from autobench import (
+    collect_benchmark_source_files,
+    record_experiment,
+    replay_experiment,
+)
 
-record_experiment(result, Path("runs/candidate-42"))
-replayed = replay_experiment(Path("runs/candidate-42"))
+record_dir = Path("runs/routing-42")
+record = record_experiment(
+    async_result,
+    record_dir,
+    source_files=list(collect_benchmark_source_files(path)),
+    path_root=Path.cwd(),
+)
+replayed = replay_experiment(record_dir)
 ```
 
-Replay returns normal runtime result models but never imports the task target.
+`record_experiment()` refuses to overwrite an existing experiment. Use a new directory for every
+execution. Referenced tracked-asset histories and large trace artifacts are persisted automatically.
+
+Load one exact record when building an audit or optimizer adapter:
+
+```python
+from autobench import load_experiment_record, load_run_record
+
+experiment = load_experiment_record(record_dir)
+run = load_run_record(record_dir / experiment.run_paths[0], root_dir=record_dir)
+```
 
 ## Reports And Exports
 
 ```python
 from pathlib import Path
 
-from autobench import build_report, export_runs_csv, export_summary_yaml
+from autobench import (
+    build_report,
+    compare_variants,
+    export_markdown_report,
+    export_runs_csv,
+    export_summary_yaml,
+)
 
 report = build_report(replayed)
+comparison = compare_variants(
+    replayed,
+    baseline="current",
+    candidate="candidate",
+)
+
 export_summary_yaml(replayed, Path("analysis/summary.yaml"))
 export_runs_csv(replayed, Path("analysis/runs.csv"))
+export_markdown_report(replayed, Path("analysis/report.md"))
 ```
 
-Report builders can also be called independently: `build_leaderboard`, `build_case_matrix`,
-`compare_variants`, `build_metric_distribution`, and `build_run_metric_rows`.
+`build_leaderboard`, `build_case_matrix`, `build_metric_distribution`, and
+`build_run_metric_rows` expose individual projections.
 
-## Typed Native Instrumentation
-
-Activate every compatible built-in integration available in the current environment:
+## Native Instrumentation
 
 ```python
 from autobench import Benchmark
 
-benchmark = Benchmark("chat").instrument_all(
+benchmark = Benchmark("agent").instrument_all(
     exclude={"httpx"},
     strict=False,
+    assets={
+        "representations": ["definition", "effective"],
+        "include": ["prompt", "tool", "output_schema"],
+    },
 )
 ```
 
-Discovery skips unavailable integrations and records why on each run. `strict=True` turns the
-first unavailable or unsupported selected integration into an `InstrumentationError`. Explicit
-typed settings and custom runtime instrumentors take precedence over their discovered equivalent.
+Unavailable integrations become diagnostic observations. `strict=True` instead requires every
+selected integration to be compatible.
 
-Configure individual integrations when capture settings must be controlled directly:
+Use typed settings for explicit control:
+
+```python
+from autobench import HTTPXCaptureSettings, HTTPXInstrumentation, OpenAIInstrumentation
+
+benchmark.instrument(
+    OpenAIInstrumentation(),
+    HTTPXInstrumentation(
+        capture=HTTPXCaptureSettings(
+            path="hash",
+            response_headers=("x-request-id",),
+        )
+    ),
+)
+```
+
+Explicit settings override automatic discovery, including `enabled=False`. A custom runtime
+`Instrumentor` can also be passed to `instrument()` and remains Python-only.
+
+## Explicit Tracking
+
+```python
+from autobench import track
+
+SYSTEM_PROMPT = track.prompt(
+    name="support_system",
+    source="prompts/support.md",
+)
+
+
+@track.tool
+def lookup_order(order_id: str) -> dict[str, str]:
+    """Return the current order status."""
+    ...
+```
+
+`track.prompt`, `track.tool`, `track.type`, `track.dataclass`, and `track.asset` register exact
+versions. `track.write_assets(path)` writes DSL-shaped history files. Native discovery can attach
+unadorned SDK-visible components to runs.
+
+## Production And Generated Cases
 
 ```python
 from autobench import (
-    Benchmark,
-    HTTPXCaptureSettings,
-    HTTPXInstrumentation,
-    OpenAIInstrumentation,
-    instrumentor_statuses,
+    SamplingPolicy,
+    generated_batch_from_cases,
+    samples_to_cases,
 )
 
-benchmark = Benchmark("chat").instrument(
-    OpenAIInstrumentation(),
-    HTTPXInstrumentation(
-        capture=HTTPXCaptureSettings(path="hash", response_headers=("x-request-id",))
-    ),
+review_cases = samples_to_cases(production_samples, policy=SamplingPolicy(max_samples=50))
+generated = generated_batch_from_cases(
+    synthetic_cases,
+    generator_asset_version="prompt.generator@v4",
+    model_provider="openrouter",
+    model_name="openai/gpt-5.6-luna",
 )
-
-for status in instrumentor_statuses():
-    print(status.name, status.compatibility.status)
 ```
 
-Settings are part of `BenchmarkSpec` and round-trip through the YAML DSL. Custom `Instrumentor`
-instances can use the same fluent method but remain runtime-only. See
-[Native Instrumentation](native-instrumentation.md).
+These helpers normalize provenance; they do not own production querying or case generation.
 
 ## Extension Rules
 
-- Keep application execution in tasks.
-- Use custom Python scorers for domain evaluation, returning `ScoreRecord`.
-- Register domain semantics rather than overloading generic names.
-- Use adapters to convert external traces or usage into Autobench evidence.
-- Store large native payloads as artifacts.
-- Do not mutate recorded evidence; produce a new derived experiment or export.
+- Put subject execution in a task.
+- Put domain judgment in a Python scorer.
+- Use a deriver for same-run computations and a post-deriver for matched runs.
+- Use a policy for acceptance boundaries.
+- Use an instrumentor for a stable SDK boundary.
+- Use source maps and extractors for external field normalization.
+- Use metric packs for reusable domain defaults.
+- Never mutate recorded evidence; create a derived record or a new experiment.
 
-The complete signatures and model fields are available in [API Reference](api-reference.md).
+See [API Reference](api-reference.md) for generated signatures and model fields.

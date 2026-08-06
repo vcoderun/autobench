@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
 from autobench._version import __version__
+from autobench.instrumentation.config import AssetDiscoverySettings
 from autobench.instrumentation.manager import InstrumentationRuntime
 from autobench.instrumentation.models import (
     Compatibility,
@@ -42,9 +43,11 @@ class PydanticAI:
         self,
         *,
         assets: Sequence[Any] = (),
+        discovery: AssetDiscoverySettings | None = None,
         registry: TrackingRegistry = track,
     ) -> None:
         self._assets = tuple(assets)
+        self._discovery = discovery or AssetDiscoverySettings()
         self._registry = registry
         self._info = InstrumentorInfo(
             id="autobench.pydantic_ai",
@@ -62,6 +65,16 @@ class PydanticAI:
                 async_=True,
                 streaming=True,
                 native_hooks=True,
+                asset_discovery=True,
+                asset_kinds=(
+                    "agent",
+                    "capability",
+                    "output_schema",
+                    "policy",
+                    "prompt",
+                    "tool",
+                    "toolset",
+                ),
             ),
         )
 
@@ -112,6 +125,7 @@ class PydanticAI:
             target_version=version("pydantic-ai-slim"),
             assets=self._assets,
             registry=self._registry,
+            discovery=self._discovery,
         )
         installed: list[type[Any]] = []
         try:
@@ -151,7 +165,10 @@ def _install_entry_point(
         from autobench.instrumentation.pydantic_ai.capability import AutobenchCapability
 
         if not any(isinstance(item, AutobenchCapability) for item in capabilities):
-            kwargs["capabilities"] = (*capabilities, capability)
+            kwargs["capabilities"] = (
+                *capabilities,
+                capability.for_entrypoint(kwargs),
+            )
         return descriptor(*args, **kwargs)
 
     target.iter = iter_with_autobench

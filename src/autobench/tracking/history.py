@@ -4,7 +4,15 @@ from difflib import unified_diff
 from typing import Any
 
 from .introspection import _normalize_value, _safe_filename
-from .models import AssetVersion, FieldAsset, ParamAsset, ToolAsset, TrackedAsset, TypeAsset
+from .models import (
+    AssetDefinition,
+    AssetVersion,
+    FieldAsset,
+    ParamAsset,
+    ToolAsset,
+    TrackedAsset,
+    TypeAsset,
+)
 
 
 def asset_index_to_yaml_view(
@@ -38,8 +46,19 @@ def asset_to_yaml_view(
     existing_versions = _existing_asset_versions(existing)
     current_snapshot = _asset_version_snapshot(asset)
     previous_snapshot = _existing_asset_current_snapshot(existing)
+    existing_asset = existing.get("asset") if isinstance(existing, dict) else None
+    current_version = (
+        existing_asset.get("current_version") if isinstance(existing_asset, dict) else None
+    )
+    previous_version = current_version if isinstance(current_version, str) else None
     if previous_snapshot is None and existing_versions:
         previous_snapshot = _version_entry_snapshot(existing_versions[-1])
+    if (
+        version.parent_version is None
+        and previous_version is not None
+        and previous_version != version.version
+    ):
+        version = version.model_copy(update={"parent_version": previous_version})
     version_payload = _asset_version_payload(
         version,
         current_snapshot,
@@ -51,12 +70,29 @@ def asset_to_yaml_view(
         if isinstance(entry.get("version"), str) and entry["version"] != version.version
     ]
     versions.append(version_payload)
+    asset_view = _asset_yaml_view(asset, current_version=version.version)
+    if isinstance(asset, AssetDefinition) and isinstance(existing, dict):
+        existing_asset = existing.get("asset")
+        if isinstance(existing_asset, dict):
+            for field_name in ("source_locators", "aliases"):
+                previous_values = existing_asset.get(field_name)
+                current_values = asset_view.get(field_name)
+                merged_values = tuple(
+                    dict.fromkeys(
+                        (
+                            *(previous_values if isinstance(previous_values, list) else []),
+                            *(current_values if isinstance(current_values, list) else []),
+                        )
+                    )
+                )
+                if merged_values:
+                    asset_view[field_name] = list(merged_values)
     return {
         "record": {
             "type": "asset",
             "version": 1,
         },
-        "asset": _asset_yaml_view(asset, current_version=version.version),
+        "asset": asset_view,
         "versions": versions,
     }
 
@@ -75,6 +111,19 @@ def _asset_yaml_view(asset: TrackedAsset, *, current_version: str) -> dict[str, 
         metadata.pop("raw", None)
         if metadata:
             view["metadata"] = metadata
+    if isinstance(asset, AssetDefinition):
+        view["representation"] = asset.representation.value
+        view["content"] = asset.canonical_content
+        if asset.scope is not None:
+            view["scope"] = asset.scope
+        if asset.owner_locator is not None:
+            view["owner"] = asset.owner_locator
+        if asset.source_locators:
+            view["source_locators"] = list(asset.source_locators)
+        if asset.aliases:
+            view["aliases"] = list(asset.aliases)
+        view["sensitivity"] = asset.sensitivity.value
+        return view
     if isinstance(asset, ToolAsset):
         if asset.qualname is not None:
             view["qualname"] = asset.qualname
@@ -160,6 +209,25 @@ def _field_asset_yaml_view(field_asset: FieldAsset) -> dict[str, Any]:
 
 
 def _asset_version_snapshot(asset: TrackedAsset) -> dict[str, Any]:
+    if isinstance(asset, AssetDefinition):
+        snapshot: dict[str, Any] = {
+            "kind": asset.kind,
+            "name": asset.name,
+            "representation": asset.representation.value,
+            "content": asset.canonical_content,
+            "sensitivity": asset.sensitivity.value,
+        }
+        if asset.scope is not None:
+            snapshot["scope"] = asset.scope
+        if asset.owner_locator is not None:
+            snapshot["owner"] = asset.owner_locator
+        if asset.source_locators:
+            snapshot["source_locators"] = list(asset.source_locators)
+        if asset.aliases:
+            snapshot["aliases"] = list(asset.aliases)
+        if asset.metadata:
+            snapshot["metadata"] = asset.metadata
+        return snapshot
     if isinstance(asset, ToolAsset):
         tool_snapshot: dict[str, Any] = {
             "kind": "tool",

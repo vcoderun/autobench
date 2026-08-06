@@ -23,6 +23,7 @@ from autobench.protocol.collector import Emitter
 from autobench.protocol.context import get_context
 from autobench.protocol.signals import InstrumentationScope
 from autobench.protocol.traces import DiagnosticSeverity
+from autobench.tracking import AssetCandidate, RegisteredAsset, TrackingRegistry, track
 
 
 @dataclass(slots=True)
@@ -34,8 +35,14 @@ class _Installation:
 
 
 class InstrumentationRuntime:
-    def __init__(self, patches: PatchManager | None = None) -> None:
+    def __init__(
+        self,
+        patches: PatchManager | None = None,
+        *,
+        registry: TrackingRegistry = track,
+    ) -> None:
         self.patches = PatchManager() if patches is None else patches
+        self.registry = registry
 
     def patch_method(
         self,
@@ -98,6 +105,38 @@ class InstrumentationRuntime:
         except RuntimeError:
             return False
         return True
+
+    def asset(
+        self,
+        info: InstrumentorInfo,
+        candidate: AssetCandidate,
+        *,
+        span_id: str | None = None,
+        registry: TrackingRegistry | None = None,
+    ) -> RegisteredAsset | None:
+        """Register and attach one SDK-observed asset without affecting the host call."""
+
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, "assets"):
+            return None
+        try:
+            from autobench.runtime.context import active_run_context
+
+            run_context = active_run_context()
+            if run_context is None:
+                return None
+            active_registry = self.registry if registry is None else registry
+            prepared = run_context.prepare_discovered_asset(candidate, span_id=span_id)
+            registered = active_registry.register_candidate(prepared, span_id=span_id)
+            run_context.attach_discovered_asset(registered)
+            return registered
+        except Exception as error:
+            self.diagnose(
+                info,
+                "asset_discovery_failed",
+                f"{candidate.source_locator}: {type(error).__name__}: {error}",
+            )
+            return None
 
 
 class InstrumentationManager(AbstractContextManager["InstrumentationManager"]):

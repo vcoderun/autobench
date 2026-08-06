@@ -22,16 +22,19 @@ from pydantic_ai import (
     RunContext as AgentRunContext,
 )
 from pydantic_ai.agent.wrapper import WrapperAgent
-from pydantic_ai.capabilities import Instrumentation
+from pydantic_ai.capabilities import AbstractCapability, Instrumentation
 from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry
 from pydantic_ai.messages import (
     AgentStreamEvent,
     DeferredToolResultsEvent,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
+    InstructionPart,
     ModelMessage,
+    ModelRequest,
     ModelResponse,
     PartStartEvent,
+    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -39,7 +42,8 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import ModelRequestContext, ModelRequestParameters
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.output import OutputContext
+from pydantic_ai.native_tools import AbstractNativeTool
+from pydantic_ai.output import OutputContext, OutputObjectDefinition
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets.external import ExternalToolset
@@ -57,9 +61,11 @@ from autobench import (
     Variant,
     suppress_instrumentation,
 )
+from autobench.instrumentation.config import AssetDiscoverySettings
 from autobench.instrumentation.manager import InstrumentationRuntime
 from autobench.instrumentation.patching import InstrumentationConflictError
 from autobench.instrumentation.pydantic_ai import PydanticAI
+from autobench.instrumentation.pydantic_ai.assets import AssetDiscovery
 from autobench.instrumentation.pydantic_ai.capability import AutobenchCapability
 from autobench.protocol import CapturePolicy, EndReason, SpanStatus
 from autobench.protocol.traces import SpanRecord
@@ -140,6 +146,16 @@ def test_instrumentor_declares_and_checks_supported_public_capabilities() -> Non
         "async": True,
         "streaming": True,
         "native_hooks": True,
+        "asset_discovery": True,
+        "asset_kinds": (
+            "agent",
+            "capability",
+            "output_schema",
+            "policy",
+            "prompt",
+            "tool",
+            "toolset",
+        ),
     }
 
 
@@ -236,13 +252,13 @@ def test_sync_agent_collects_model_tool_usage_stream_assets_and_extracted_eviden
     assert tool_span.attributes[Semantic.TOOL_NAME] == "add"
     assert tool_span.status is SpanStatus.OK
     assert validation_spans[0].status is SpanStatus.OK
-    assert {version.asset_id for version in context.asset_versions} == {
+    assert {
         "prompt.system",
         "tool.add",
         "type.Answer",
-    }
+    } <= {version.asset_id for version in context.asset_versions}
     agent_reference_ids = {reference.reference.id for reference in agent_span.references}
-    assert agent_reference_ids == {"prompt.system", "tool.add", "type.Answer"}
+    assert {"prompt.system", "tool.add", "type.Answer"} <= agent_reference_ids
 
     extracted = CompositeExtractor().extract(
         trace,
@@ -263,7 +279,224 @@ def test_sync_agent_collects_model_tool_usage_stream_assets_and_extracted_eviden
     assert summaries[Semantic.TOOL_CALL_COUNT] == 1
     assert summaries[Semantic.MESSAGE_INPUT_COUNT] == 4
     assert summaries[Semantic.MESSAGE_OUTPUT_COUNT] == 2
-    assert summaries[Semantic.ASSET_REFERENCE_COUNT] == 3
+    assert summaries[Semantic.ASSET_REFERENCE_COUNT] == len(context.reference_store.assets)
+
+
+def test_untracked_agent_discovers_scoped_capabilities_tools_prompts_and_output_schema() -> None:
+    class Output(BaseModel):
+        answer: str
+
+    class RetrievalCapability(AbstractCapability[None]):
+        id = "retrieval"
+        instruction_calls: int
+
+        def __init__(self) -> None:
+            self.instruction_calls = 0
+
+        def get_instructions(self) -> str:
+            self.instruction_calls += 1
+            return "Use the shared capability instruction."
+
+    class SafetyCapability(AbstractCapability[None]):
+        id = "safety"
+        instruction_calls: int
+
+        def __init__(self) -> None:
+            self.instruction_calls = 0
+
+        def get_instructions(self) -> str:
+            self.instruction_calls += 1
+            return "Use the shared capability instruction."
+
+    class RuntimeObserver(AbstractCapability[None]):
+        id = "runtime-observer"
+
+    def lookup(query: str) -> str:
+        return query
+
+    baseline_retrieval = RetrievalCapability()
+    baseline_safety = SafetyCapability()
+    baseline_capabilities: tuple[AbstractCapability[None], ...] = (
+        baseline_retrieval,
+        baseline_safety,
+    )
+    baseline = Agent[None, Output](
+        TestModel(),
+        name="baseline-agent",
+        output_type=Output,
+        deps_type=type(None),
+        instructions="Answer directly.",
+        tools=[Tool[None](lookup)],
+        capabilities=baseline_capabilities,
+    )
+    baseline.run_sync("answer", capabilities=[RuntimeObserver()])
+    baseline_calls = [
+        baseline_retrieval.instruction_calls,
+        baseline_safety.instruction_calls,
+    ]
+
+    retrieval = RetrievalCapability()
+    safety = SafetyCapability()
+    capabilities: tuple[AbstractCapability[None], ...] = (retrieval, safety)
+    agent = Agent[None, Output](
+        TestModel(),
+        name="discovery-agent",
+        output_type=Output,
+        deps_type=type(None),
+        instructions="Answer directly.",
+        tools=[Tool[None](lookup)],
+        capabilities=capabilities,
+    )
+    registry = TrackingRegistry()
+    context = _run_context()
+
+    with InstrumentationManager() as manager:
+        manager.install(PydanticAI(registry=registry))
+        with _active(context):
+            result = agent.run_sync(
+                "answer",
+                instructions="Use the runtime instruction too.",
+            )
+
+    assert isinstance(result.output, Output)
+    assert [retrieval.instruction_calls, safety.instruction_calls] == baseline_calls
+    asset_ids = {version.asset_id for version in context.asset_versions}
+    assert {
+        "pydantic_ai:retrieval:capability:self",
+        "pydantic_ai:retrieval:prompt:instructions",
+        "pydantic_ai:safety:capability:self",
+        "pydantic_ai:safety:prompt:instructions",
+        "pydantic_ai:agent:discovery-agent:agent:self",
+        "pydantic_ai:agent:discovery-agent:output_schema:output",
+        "pydantic_ai:agent:discovery-agent:prompt:runtime_instructions",
+        "pydantic_ai:agent:discovery-agent:tool:lookup",
+    } <= asset_ids
+    assert registry.resolve_locator("retrieval:prompt:instructions").id == (
+        "pydantic_ai:retrieval:prompt:instructions"
+    )
+    effective_uses = [use for use in context.asset_uses if use.representation.value == "effective"]
+    assert any(use.definition_asset_id is not None for use in effective_uses)
+    assert all(use.span_id is not None for use in context.asset_uses)
+
+
+def test_pydantic_ai_discovers_resolved_prompt_native_output_and_runtime_overrides() -> None:
+    class Output(BaseModel):
+        answer: str
+
+    agent = Agent[None, Output](
+        TestModel(),
+        name="rich-agent",
+        output_type=Output,
+        deps_type=type(None),
+        description="Extract a structured answer.",
+    )
+    agent_context = _agent_context(agent=agent)
+    registry = TrackingRegistry()
+    runtime = InstrumentationRuntime(registry=registry)
+    instrumentor = PydanticAI(registry=registry)
+    discovery = AssetDiscovery(
+        runtime,
+        instrumentor.info,
+        target_version="2.22.0",
+        registry=registry,
+        settings=AssetDiscoverySettings(),
+    )
+    benchmark_context = _run_context()
+    request_context = ModelRequestContext(
+        model=TestModel(),
+        messages=[
+            ModelRequest(
+                parts=[
+                    SystemPromptPart("Static system prompt."),
+                    SystemPromptPart("Resolved dynamic prompt.", dynamic_ref="dynamic"),
+                ]
+            )
+        ],
+        model_settings=None,
+        model_request_parameters=ModelRequestParameters(
+            native_tools=[AbstractNativeTool(kind="web_search")],
+            output_object=OutputObjectDefinition(
+                {"type": "object", "properties": {"answer": {"type": "string"}}},
+                name="Output",
+            ),
+            prompted_output_template="Return JSON matching {schema}",
+            instruction_parts=[
+                InstructionPart("Static instruction."),
+                InstructionPart("Resolved instruction.", dynamic=True),
+            ],
+        ),
+    )
+    token = set_active_run_context(benchmark_context)
+    try:
+        discovery.agent(
+            agent_context,
+            span_id="agent",
+            overrides={
+                "output_type": str,
+                "toolsets": [ExternalToolset[None]([]), "not-a-toolset"],
+                "spec": {"retries": 2},
+            },
+        )
+        discovery.request(agent_context, request_context, span_id="model")
+        discovery.request(
+            agent_context,
+            ModelRequestContext(
+                model=TestModel(),
+                messages=[],
+                model_settings=None,
+                model_request_parameters=ModelRequestParameters(
+                    instruction_parts=[InstructionPart("Only dynamic instructions.", dynamic=True)]
+                ),
+            ),
+            span_id="dynamic-model",
+        )
+        discovery.output(
+            agent_context,
+            OutputContext(
+                mode="text",
+                output_type=None,
+                object_def=None,
+                has_function=False,
+            ),
+            span_id="validation",
+        )
+        unnamed = Agent[None, str](TestModel(), deps_type=type(None))
+        discovery.agent(
+            _agent_context(agent=unnamed),
+            span_id="unnamed",
+            overrides={},
+        )
+        disabled = AssetDiscovery(
+            runtime,
+            instrumentor.info,
+            target_version="2.22.0",
+            registry=registry,
+            settings=AssetDiscoverySettings(discover=False),
+        )
+        disabled.agent(
+            agent_context,
+            span_id="disabled",
+            overrides={},
+        )
+    finally:
+        reset_active_run_context(token)
+
+    asset_ids = {asset.id for asset in registry.definitions}
+    assert {
+        "pydantic_ai:agent:rich-agent:prompt:description",
+        "pydantic_ai:agent:rich-agent:output_schema:runtime_output",
+        "pydantic_ai:agent:rich-agent:policy:runtime_spec",
+        "pydantic_ai:agent:rich-agent:prompt:prompted_output",
+        "pydantic_ai:agent:rich-agent:prompt:system_prompt",
+        "pydantic_ai:agent:rich-agent:prompt:system_prompt:effective",
+        "pydantic_ai:agent:rich-agent:tool:native:AbstractNativeTool",
+    } <= asset_ids
+    effective_system = next(
+        use
+        for use in benchmark_context.asset_uses
+        if use.source_locator == "pydantic_ai:agent:rich-agent:prompt:system_prompt:effective"
+    )
+    assert effective_system.definition_asset_id is not None
 
 
 def test_request_only_model_preserves_response_metadata_and_reasoning_usage() -> None:

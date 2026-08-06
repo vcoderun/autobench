@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+from enum import StrEnum
 from typing import Literal, ParamSpec, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
@@ -11,6 +12,27 @@ _DecoratorParamT = ParamSpec("_DecoratorParamT")
 _StructuredTypeKind = Literal["pydantic_model", "dataclass", "typed_class"]
 _ParamKind = Literal["positional", "keyword", "var_positional", "var_keyword"]
 SerializedValue = JsonValue
+
+
+class AssetRepresentation(StrEnum):
+    DEFINITION = "definition"
+    EFFECTIVE = "effective"
+
+
+class AssetSensitivity(StrEnum):
+    PUBLIC = "public"
+    INTERNAL = "internal"
+    SENSITIVE = "sensitive"
+
+
+class AssetProvenance(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    system: str = Field(min_length=1)
+    key: str = Field(min_length=1)
+    path: tuple[str | int, ...] = ()
+    instrumentor: str | None = Field(default=None, min_length=1)
+    instrumented_library_version: str | None = Field(default=None, min_length=1)
 
 
 class TypeDecorator(Protocol[_DecoratorParamT]):
@@ -70,6 +92,18 @@ class TrackedAsset(BaseModel):
     metadata: dict[str, SerializedValue] = Field(default_factory=dict)
 
 
+class AssetDefinition(TrackedAsset):
+    model_config = ConfigDict(frozen=True)
+
+    representation: AssetRepresentation = AssetRepresentation.DEFINITION
+    canonical_content: SerializedValue
+    scope: str | None = None
+    owner_locator: str | None = None
+    source_locators: tuple[str, ...] = ()
+    aliases: tuple[str, ...] = ()
+    sensitivity: AssetSensitivity = AssetSensitivity.INTERNAL
+
+
 class ToolAsset(TrackedAsset):
     model_config = ConfigDict(frozen=True)
 
@@ -123,6 +157,10 @@ class TrackedPrompt(BaseModel):
 
 
 __all__ = (
+    "AssetDefinition",
+    "AssetProvenance",
+    "AssetRepresentation",
+    "AssetSensitivity",
     "AssetVersion",
     "FieldAsset",
     "ParamAsset",

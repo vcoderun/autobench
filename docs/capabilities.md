@@ -70,6 +70,12 @@ Python settings or the YAML `instrumentation` section. They emit ABP directly, c
 framework/client/transport layers, preserve streaming lifecycle, and remain optional for replay.
 See [Native Instrumentation](native-instrumentation.md).
 
+Semantic instrumentors automatically discover SDK-visible prompt, tool, output-schema, capability,
+agent, guardrail, handoff, policy, and toolset versions. Definition/effective relationships,
+capability scopes, aliases, privacy-controlled content, and span-local `AssetUse` evidence survive
+recording and replay. HTTPX remains transport evidence and performs no semantic asset inference.
+See [Automatic Asset Discovery](automatic-asset-discovery.md).
+
 ## Scoring And Constraints
 
 | Scorer | Purpose |
@@ -124,9 +130,13 @@ The tracking registry understands:
 - field names, annotations, descriptions, aliases, defaults, requirements, constraints, and examples
 - source hashes, structured-schema hashes, versions, parent versions, and diffs
 - persistent human-readable YAML asset histories
+- automatic SDK-boundary discovery without tracking decorators
+- source/effective representation links, capability scopes, provenance, and cross-layer aliases
+- automatic experiment persistence and replayable span-local asset uses
 
 Decorators preserve the original callable or class type so tracking does not degrade static
-typing. See [Asset Tracking](asset-tracking.md).
+typing. See [Asset Tracking](asset-tracking.md) and
+[Automatic Asset Discovery](automatic-asset-discovery.md).
 
 ## Records, Replay, And Analysis
 

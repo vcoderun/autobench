@@ -44,6 +44,7 @@ name = "autobench"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "filelock" },
     { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -97,6 +98,7 @@ dev = [
 requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'" },
     { name = "click", specifier = ">=8.1.8" },
+    { name = "filelock", specifier = ">=3.16" },
     { name = "httpx", marker = "extra == 'dev'", specifier = "==0.28.1" },
     { name = "httpx", marker = "extra == 'httpx'", specifier = ">=0.28,<0.29" },
     { name = "httpx", marker = "extra == 'instrumentation'", specifier = ">=0.28,<0.29" },

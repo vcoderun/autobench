@@ -123,7 +123,8 @@ The data helpers preserve where generated examples came from:
 - `ProductionSample` models a source sample and review state.
 - `sample_to_case` and `samples_to_cases` convert samples without losing provenance.
 - `mark_generated_case` records generation metadata.
-- `generated_batch_from_cases` creates a `GeneratedCaseBatch` with policy and source details.
+- `generated_batch_from_cases` creates a `GeneratedCaseBatch` with generator, model, and source
+  details.
 
 This layer is intentionally not a synthetic-data generator. It defines the evidence contract so a
 generator, production sampler, or review system can supply cases consistently.

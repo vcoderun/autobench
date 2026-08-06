@@ -45,7 +45,7 @@ from autobench.spec import (
     benchmark_spec_payload_from_yaml_view,
     benchmark_spec_to_yaml_view,
 )
-from autobench.tracking import AssetVersion
+from autobench.tracking import AssetUse, AssetVersion, TrackingRegistry, track
 
 RECORD_VERSION = 4
 TRACE_ARTIFACT_MEDIA_TYPE = "application/vnd.autobench.abp-trace+yaml"
@@ -99,6 +99,7 @@ class RunRecord(BaseModel):
     artifacts: tuple[ArtifactRef, ...] = ()
     factors: tuple[FactorValue, ...] = ()
     asset_versions: tuple[AssetVersion, ...] = ()
+    asset_uses: tuple[AssetUse, ...] = ()
     parent_run_id: str | None = None
     lineage: RecordLineage | None = None
     source_snapshots: tuple[SourceSnapshot, ...] = ()
@@ -161,6 +162,7 @@ def record_experiment(
     source_files: list[Path] | None = None,
     path_root: Path | None = None,
     trace_inline_limit_bytes: int = TRACE_INLINE_LIMIT_BYTES,
+    asset_registry: TrackingRegistry = track,
 ) -> ExperimentRecord:
     if trace_inline_limit_bytes < 1:
         raise ValueError("trace_inline_limit_bytes must be at least 1")
@@ -178,6 +180,15 @@ def record_experiment(
     )
     artifacts_dir.mkdir(exist_ok=True)
     cases_dir.mkdir(exist_ok=True)
+
+    referenced_asset_ids = {
+        version.asset_id for run in result.runs for version in run.asset_versions
+    }
+    persisted_asset_ids = {
+        asset_id for asset_id in referenced_asset_ids if asset_registry.has_asset(asset_id)
+    }
+    if persisted_asset_ids:
+        asset_registry.write_assets(output_dir / "assets", asset_ids=persisted_asset_ids)
 
     run_paths: list[str] = []
     for run in result.runs:
@@ -283,6 +294,7 @@ def run_record_from_result(
         artifacts=tuple(recorded_artifacts),
         factors=tuple(run.factors),
         asset_versions=tuple(run.asset_versions),
+        asset_uses=tuple(run.asset_uses),
         parent_run_id=run.parent_run_id,
         source_snapshots=run.source_snapshots,
         errors=tuple(errors),
@@ -443,6 +455,7 @@ def run_record_to_yaml_view(record: RunRecord) -> dict[str, Any]:
         "spans": _spans_view(record.spans),
         "artifacts": _artifacts_view(record.artifacts),
         "assets": _asset_versions_view(record.asset_versions),
+        "asset_uses": [use.model_dump(mode="json") for use in record.asset_uses],
         "errors": _errors_view(record),
         "canonicalization": _compact(
             {
@@ -623,6 +636,7 @@ def run_record_payload_from_yaml_view(raw: dict[str, Any]) -> dict[str, Any]:
         "artifacts": _artifacts_payload(raw.get("artifacts")),
         "factors": _factors_payload(raw.get("variant")),
         "asset_versions": _asset_versions_payload(raw.get("assets")),
+        "asset_uses": raw.get("asset_uses", []),
         "parent_run_id": run.get("parent"),
         "lineage": raw.get("lineage"),
         "source_snapshots": canonicalization.get("source_snapshots", []),
@@ -827,6 +841,7 @@ def _record_extensions(raw: dict[str, Any]) -> dict[str, Any]:
         "spans",
         "artifacts",
         "assets",
+        "asset_uses",
         "errors",
         "error",
         "canonicalization",

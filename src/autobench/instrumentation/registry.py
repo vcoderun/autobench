@@ -71,6 +71,16 @@ _INFO: dict[InstrumentorName, InstrumentorInfo] = {
             async_=True,
             streaming=True,
             native_hooks=True,
+            asset_discovery=True,
+            asset_kinds=(
+                "agent",
+                "capability",
+                "output_schema",
+                "policy",
+                "prompt",
+                "tool",
+                "toolset",
+            ),
         ),
     ),
     "openai": InstrumentorInfo(
@@ -84,7 +94,13 @@ _INFO: dict[InstrumentorName, InstrumentorInfo] = {
         semantic_families=("llm", "message", "tool", "stream"),
         source_convention="openai-python",
         source_convention_version="2.52",
-        capabilities=InstrumentorCapabilities(sync=True, async_=True, streaming=True),
+        capabilities=InstrumentorCapabilities(
+            sync=True,
+            async_=True,
+            streaming=True,
+            asset_discovery=True,
+            asset_kinds=("output_schema", "prompt", "tool"),
+        ),
     ),
     "openai_agents": InstrumentorInfo(
         id="autobench.openai_agents",
@@ -102,6 +118,17 @@ _INFO: dict[InstrumentorName, InstrumentorInfo] = {
             async_=True,
             streaming=True,
             native_hooks=True,
+            asset_discovery=True,
+            asset_kinds=(
+                "agent",
+                "guardrail",
+                "handoff",
+                "output_schema",
+                "policy",
+                "prompt",
+                "tool",
+                "toolset",
+            ),
         ),
     ),
     "httpx": InstrumentorInfo(
@@ -132,15 +159,15 @@ def resolve_instrumentor(config: BuiltinInstrumentationConfig) -> Instrumentor:
         if isinstance(config, PydanticAIInstrumentation):
             from autobench.instrumentation.pydantic_ai import PydanticAI
 
-            return PydanticAI()
+            return PydanticAI(discovery=config.assets)
         if isinstance(config, OpenAIInstrumentation):
             from autobench.instrumentation.openai import OpenAIClient
 
-            return OpenAIClient()
+            return OpenAIClient(discovery=config.assets)
         if isinstance(config, OpenAIAgentsInstrumentation):
             from autobench.instrumentation.openai_agents import OpenAIAgents
 
-            return OpenAIAgents()
+            return OpenAIAgents(discovery=config.assets)
 
         from autobench.instrumentation.httpx import HTTPX, HTTPXCapture
 
@@ -175,7 +202,20 @@ def resolve_instrumentors(
                     or _INFO[config.kind].id in reserved_ids
                 ):
                     continue
-                instrumentor, status = _inspect_instrumentor(config, manager=manager)
+                selected_config = config
+                if auto.assets is not None and isinstance(
+                    config,
+                    (
+                        PydanticAIInstrumentation,
+                        OpenAIInstrumentation,
+                        OpenAIAgentsInstrumentation,
+                    ),
+                ):
+                    selected_config = config.model_copy(update={"assets": auto.assets})
+                instrumentor, status = _inspect_instrumentor(
+                    selected_config,
+                    manager=manager,
+                )
                 if status.compatibility.installable and instrumentor is not None:
                     selected.append(instrumentor)
                     continue

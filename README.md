@@ -1,106 +1,97 @@
 # Autobench
 
-Autobench is a YAML-first benchmark and evidence framework for replayable, semantic experiment data.
+Autobench turns one-off benchmark scripts into semantic, replayable experiment evidence.
 
-It is built for the problem behind most hand-written `run_benchmark.py` files:
+It is a YAML-first Python framework for AI and non-AI systems:
 
-- define cases and variants once
-- run deterministic case x variant matrices
-- collect semantic metrics, factors, spans, and artifacts
-- derive metrics such as token cost or paired baseline speedup
-- record immutable YAML run records
-- replay, report, export, and compare without re-running tasks
-
-Autobench is general-purpose. AI and agent systems are a first-class use case, but the runtime is not tied to LLM-only semantics.
+- deterministic dataset x variant execution
+- sync and async application tasks
+- semantic observations, checks, measurements, artifacts, and ABP traces
+- built-in and custom scoring, cost derivation, policies, and paired baselines
+- native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX instrumentation
+- explicit and automatic prompt/tool/schema/agent asset lineage
+- immutable YAML records, replay, Rich reports, comparisons, and exports
 
 ## Install
 
 ```bash
-uv sync --extra dev
+uv add autobench
 ```
 
-## Quickstart
-
-Run the smallest complete example:
+For native SDK instrumentation:
 
 ```bash
-uv run autobench validate examples/minimal/autobench.yaml
-uv run autobench run examples/minimal/autobench.yaml --record /tmp/autobench-minimal
+uv add 'autobench[instrumentation]'
 ```
 
-Run and record it:
+## First Run
 
 ```bash
-uv run autobench run examples/basic/autobench.yaml --record /tmp/autobench-basic
+autobench validate examples/minimal/autobench.yaml
+autobench run examples/minimal/autobench.yaml --record /tmp/autobench-minimal
+autobench replay /tmp/autobench-minimal
+autobench report /tmp/autobench-minimal
 ```
 
-Replay and report without executing the task again:
+A task is a normal sync or async callable:
 
-```bash
-uv run autobench replay /tmp/autobench-basic
-uv run autobench report /tmp/autobench-basic
-uv run autobench export /tmp/autobench-basic --format yaml --path /tmp/basic-report.yaml
+```python
+from autobench import Case, RunContext
+
+
+def run(ctx: RunContext, case: Case) -> Result:
+    mode = ctx.factor("mode")
+    with ctx.span("subject", kind="workflow") as span:
+        result = application(case.input, mode=mode)
+        span.set_output(result)
+        return result
 ```
 
-## What Autobench Includes
-
-- YAML-first `BenchmarkSpec`
-- datasets, cases, case defaults, and file-backed dataset loading
-- variants and factor matrices
-- Python task runtime with sync and async support
-- `RunContext`, spans, artifacts, measurements, and semantic observations
-- scoring via output, pass/fail, exact, schema, and Python scorers
-- token-cost derivation
-- paired-baseline post-derivation
-- policy checks
-- immutable YAML run records and replay
-- Rich terminal tables for run, replay, report, export, and compare
-- Markdown, YAML, and CSV exports
-- portable source-file provenance for CLI-recorded evidence
-- offline minimal, basic, mid, and advanced end-to-end examples
-- a real, optional CodeMode integration example
-- ABP traces with privacy-aware capture and replayable semantic evidence
-- native Pydantic AI, OpenAI Python, OpenAI Agents, and HTTPX instrumentors
-- typed Python/YAML instrumentation settings, automatic compatible-integration discovery, and Rich
-  compatibility diagnostics
+The YAML spec owns reusable benchmark infrastructure: cases, variants, scoring, derivation,
+policies, instrumentation, and reports.
 
 ## Examples
 
-- `examples/minimal/`: inline cases, variants, exact scoring, reporting, and comparison.
-- `examples/basic/`: file-backed support tickets, spans, artifacts, and Rich reports.
-- `examples/mid/`: semantic token usage, pricing, cost derivation, policies, and distributions.
-- `examples/advanced/`: repeated measurement and paired-baseline speedup derivation.
-- `examples/codemode/`: live Vowel CodeMode generation and generated-spec replay.
-- `examples/pydantic_ai/`: provider-neutral and live OpenRouter Pydantic AI instrumentation.
-- `examples/abp_manual/`: manual spans and method instrumentation through ABP.
-- `examples/abp_concurrent/`: task-local concurrent trace parentage.
-- `examples/abp_openai/`: offline real OpenAI streaming over HTTPX.
-- `examples/abp_openai_agents/`: offline native OpenAI Agents trace processing.
-- `examples/abp_replay/`: provider-free trace replay and evidence extraction.
+| Directory | Demonstrates |
+| --- | --- |
+| `examples/minimal` | Inline cases, variants, exact scoring, report and comparison |
+| `examples/basic` | File dataset, spans, checks, artifacts and failure visibility |
+| `examples/mid` | Semantic usage, pricing, cost, policies and distributions |
+| `examples/advanced` | Repeated measurement and paired-baseline speedup |
+| `examples/pydantic_ai` | Live layered instrumentation and automatic asset discovery |
+| `examples/automatic_assets` | Offline Pydantic AI and custom SDK behavioral lineage |
+| `examples/abp_*` | Manual, concurrent, streaming, Agents and replay protocol flows |
+| `examples/codemode` | Migration of a real external benchmark runner |
 
-The minimal, basic, mid, advanced, ABP manual, and ABP concurrent examples run offline and are
-enforced by `make examples`. CodeMode and the OpenRouter Pydantic AI program are live integrations
-that require their model credentials and network access.
-
-## Development
-
-Primary quality gates:
+Run the offline release matrix:
 
 ```bash
-make prod
-make pre-commit
-make docs
 make examples
 ```
 
-Source coverage for `src/autobench` is enforced at `100%` line and branch coverage.
-
 ## Documentation
 
-The documentation is published at [vcoderun.github.io/autobench](https://vcoderun.github.io/autobench/).
-It is built with Zensical's modern theme:
+Full documentation: [vcoderun.github.io/autobench](https://vcoderun.github.io/autobench/)
+
+- [Installation](https://vcoderun.github.io/autobench/installation/)
+- [First Benchmark](https://vcoderun.github.io/autobench/getting-started/)
+- [Use Cases](https://vcoderun.github.io/autobench/use-cases/)
+- [Architecture](https://vcoderun.github.io/autobench/architecture/)
+- [YAML Spec](https://vcoderun.github.io/autobench/yaml-spec/)
+- [Python API](https://vcoderun.github.io/autobench/python-api/)
+- [Autobench Protocol](https://vcoderun.github.io/autobench/instrumentation-and-traces/)
+
+LLM-readable indexes are available at
+[`llms.txt`](https://vcoderun.github.io/autobench/llms.txt) and
+[`llms-full.txt`](https://vcoderun.github.io/autobench/llms-full.txt).
+
+## Development
 
 ```bash
-make docs
-make docs-serve
+uv sync --extra dev --extra instrumentation --extra openai-agents
+make prod
+make pre-commit
 ```
+
+The release gate enforces Python 3.11-3.14, strict lint and typing, strict documentation builds,
+offline examples, and 100% source line and branch coverage.

@@ -114,6 +114,7 @@ def _run_result_from_record(record: RunRecord) -> RunResult:
         scores=list(record.scores),
         factors=list(record.factors),
         asset_versions=list(record.asset_versions),
+        asset_uses=list(record.asset_uses),
         parent_run_id=record.parent_run_id,
         error=record.error,
         trace=record.trace,

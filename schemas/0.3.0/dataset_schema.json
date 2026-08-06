@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "dataset": {
+      "description": "Autobench dataset 'dataset' section."
+    },
+    "record": {
+      "description": "Autobench dataset 'record' section."
+    }
+  },
+  "title": "Autobench Dataset YAML",
+  "type": "object"
+}

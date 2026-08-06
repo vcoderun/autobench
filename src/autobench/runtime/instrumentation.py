@@ -1,14 +1,17 @@
 from __future__ import annotations as _annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextvars import Token
 from dataclasses import dataclass
+from functools import lru_cache
+from importlib import import_module
 from itertools import count
 from typing import Any
 
 from autobench._version import __version__
 from autobench.instrumentation.manager import InstrumentationRuntime
 from autobench.instrumentation.models import (
+    InstrumentAssetSpec,
     InstrumentationHandle,
     InstrumentCall,
     InstrumentFactorSpec,
@@ -26,6 +29,12 @@ from autobench.protocol.signals import (
     InstrumentationScope,
 )
 from autobench.runtime.context import RunContext, Span, SpanKind, active_run_context
+from autobench.tracking import (
+    AssetCandidate,
+    AssetProvenance,
+    canonical_asset_content,
+    canonical_asset_hash,
+)
 
 
 @dataclass(slots=True)
@@ -34,6 +43,7 @@ class _MethodInstrumentation:
     span_kind: SpanKind | str
     metrics: tuple[InstrumentMetricSpec, ...]
     factors: tuple[InstrumentFactorSpec, ...]
+    assets: tuple[InstrumentAssetSpec, ...]
     scope: InstrumentationScope
     operation_family: str
 
@@ -181,6 +191,7 @@ def instrument_method(
     span_kind: SpanKind | str = SpanKind.CUSTOM,
     metrics: list[InstrumentMetricSpec] | None = None,
     factors: list[InstrumentFactorSpec] | None = None,
+    assets: list[InstrumentAssetSpec] | None = None,
     operation_family: str | None = None,
 ) -> InstrumentationHandle:
     family = operation_family or f"{target.__module__}.{target.__qualname__}.{method_name}"
@@ -189,6 +200,7 @@ def instrument_method(
         span_kind=span_kind,
         metrics=tuple(metrics or ()),
         factors=tuple(factors or ()),
+        assets=tuple(assets or ()),
         scope=_METHOD_RUNTIME.scope(_METHOD_INFO),
         operation_family=family,
     )
@@ -238,6 +250,21 @@ def _emit_records(
         except Exception as exc:
             ctx.error(exc, span_id=span_id)
 
+    for asset in instrumentation.assets:
+        try:
+            value_factory = asset.value_factory
+            if asset.extractor_target is not None:
+                value_factory = _resolve_asset_extractor(asset.extractor_target)
+            value = _extract_value(asset.value_path, value_factory, call)
+            for candidate in _asset_candidates(
+                asset,
+                value,
+                operation_family=instrumentation.operation_family,
+            ):
+                _METHOD_RUNTIME.asset(_METHOD_INFO, candidate, span_id=span_id)
+        except Exception as exc:
+            ctx.error(exc, span_id=span_id)
+
 
 def _extract_value(
     value_path: str | None,
@@ -270,9 +297,97 @@ def _extract_value(
     return current
 
 
+@lru_cache(maxsize=128)
+def _resolve_asset_extractor(target: str) -> Callable[[InstrumentCall], Any]:
+    module_name, separator, attribute = target.partition(":")
+    if not separator or not module_name or not attribute:
+        raise ValueError("asset extractor targets must use 'module:attribute' syntax")
+    extractor = getattr(import_module(module_name), attribute)
+    if not callable(extractor):
+        raise TypeError(f"Asset extractor target is not callable: {target}")
+    return extractor
+
+
+def _asset_candidates(
+    spec: InstrumentAssetSpec,
+    value: Any,
+    *,
+    operation_family: str,
+) -> tuple[AssetCandidate, ...]:
+    if isinstance(value, AssetCandidate):
+        return (value,)
+    if spec.many:
+        if isinstance(value, Mapping):
+            values = tuple(
+                (str(key), item)
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            )
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            values = tuple((None, item) for item in value)
+        else:
+            raise TypeError("instrument asset specs with many=True require a sequence or mapping")
+    else:
+        values = ((None, value),)
+
+    candidates: list[AssetCandidate] = []
+    for mapping_key, item in values:
+        if isinstance(item, AssetCandidate):
+            candidates.append(item)
+            continue
+        content = canonical_asset_content(item)
+        item_name = _asset_item_name(item) or mapping_key
+        stable_item_id = item_name or canonical_asset_hash(content)[:12]
+        local_id = spec.local_id if not spec.many else f"{spec.local_id}:{stable_item_id}"
+        name = spec.name or item_name or local_id
+        source_locator = spec.source_locator or (
+            f"python:{operation_family}:{spec.kind}:{local_id}"
+        )
+        if spec.many and spec.source_locator is not None:
+            source_locator = f"{source_locator}:{stable_item_id}"
+        candidates.append(
+            AssetCandidate(
+                kind=spec.kind,
+                local_id=local_id,
+                name=name,
+                source_locator=source_locator,
+                canonical_content=content,
+                representation=spec.representation,
+                semantic_type=spec.semantic_type,
+                scope=spec.scope or operation_family,
+                python_target=item if isinstance(item, type) or callable(item) else None,
+                owner_locator=spec.owner_locator,
+                definition_locator=spec.definition_locator,
+                provenance=AssetProvenance(
+                    system="python",
+                    key=operation_family,
+                    instrumentor=_METHOD_INFO.id,
+                ),
+                aliases=spec.aliases,
+                metadata={
+                    **spec.metadata,
+                    **({"identity_confidence": "low"} if spec.many and item_name is None else {}),
+                },
+                sensitivity=spec.sensitivity,
+            )
+        )
+    return tuple(candidates)
+
+
+def _asset_item_name(value: Any) -> str | None:
+    if isinstance(value, Mapping):
+        mapping_name = value.get("name")
+        return mapping_name if isinstance(mapping_name, str) and mapping_name else None
+    try:
+        name: str = value.__name__
+    except AttributeError:
+        return None
+    return name or None
+
+
 __all__ = (
     "InstrumentCall",
     "InstrumentFactorSpec",
+    "InstrumentAssetSpec",
     "InstrumentationHandle",
     "InstrumentMetricSpec",
     "get_active_run_context",

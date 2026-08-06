@@ -19,6 +19,7 @@ _SCHEMA_TOP_LEVEL_KEYS: dict[str, tuple[str, ...]] = {
     "asset_index": ("record", "assets"),
     "benchmark": (
         "benchmark",
+        "capture",
         "dataset",
         "run",
         "variants",
@@ -46,6 +47,7 @@ _SCHEMA_TOP_LEVEL_KEYS: dict[str, tuple[str, ...]] = {
         "spans",
         "artifacts",
         "assets",
+        "asset_uses",
         "errors",
         "canonicalization",
         "extraction",
@@ -150,12 +152,37 @@ def yaml_schema(schema_name: str) -> SchemaDocument:
 def benchmark_schema() -> SchemaDocument:
     """Return the JSON Schema for the human-facing benchmark DSL."""
 
-    switch = {
+    asset_discovery = {
+        "type": "object",
+        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+        "properties": {
+            "discover": {"type": "boolean", "default": True},
+            "representations": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": ["definition", "effective"],
+                },
+                "uniqueItems": True,
+                "default": ["definition", "effective"],
+            },
+            "include": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "uniqueItems": True,
+            },
+        },
+        "additionalProperties": False,
+    }
+    semantic_switch = {
         "oneOf": [
             {"type": "boolean"},
             {
                 "type": "object",
-                "properties": {"enabled": {"type": "boolean", "default": True}},
+                "properties": {
+                    "enabled": {"type": "boolean", "default": True},
+                    "assets": asset_discovery,
+                },
                 "additionalProperties": False,
             },
         ]
@@ -186,21 +213,22 @@ def benchmark_schema() -> SchemaDocument:
                                 "uniqueItems": True,
                             },
                             "strict": {"type": "boolean", "default": False},
+                            "assets": asset_discovery,
                         },
                         "additionalProperties": False,
                     },
                 ],
             },
             "pydantic_ai": {
-                **switch,
+                **semantic_switch,
                 "description": "Pydantic AI agent, model, tool, and validation capture.",
             },
             "openai": {
-                **switch,
+                **semantic_switch,
                 "description": "Official OpenAI Python client and streaming capture.",
             },
             "openai_agents": {
-                **switch,
+                **semantic_switch,
                 "description": "OpenAI Agents native trace-processor capture.",
             },
             "httpx": {
@@ -245,6 +273,38 @@ def benchmark_schema() -> SchemaDocument:
         },
         "additionalProperties": False,
     }
+    capture_policy = {
+        "type": "object",
+        "description": "Privacy and retention policy for evidence and discovered assets.",
+        "properties": {
+            "default_level": {
+                "type": "string",
+                "enum": ["none", "metadata", "hash", "redacted", "full"],
+                "default": "metadata",
+            },
+            "use_semantic_defaults": {"type": "boolean", "default": True},
+            "semantic_overrides": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "string",
+                    "enum": ["none", "metadata", "hash", "redacted", "full"],
+                },
+            },
+            "allow_semantics": {"type": "array", "items": {"type": "string"}},
+            "deny_semantics": {"type": "array", "items": {"type": "string"}},
+            "allow_paths": {"type": "array", "items": {"type": "string"}},
+            "deny_paths": {"type": "array", "items": {"type": "string"}},
+            "secret_names": {"type": "array", "items": {"type": "string"}},
+            "max_inline_bytes": {"type": "integer", "minimum": 1},
+            "max_artifact_bytes": {"type": "integer", "minimum": 1},
+            "max_collection_items": {"type": "integer", "minimum": 1},
+            "max_string_length": {"type": "integer", "minimum": 1},
+            "max_depth": {"type": "integer", "minimum": 1},
+            "store_binary": {"type": "boolean"},
+            "retain_source_attributes": {"type": "boolean"},
+        },
+        "additionalProperties": False,
+    }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": f"Autobench {__version__} Benchmark DSL",
@@ -259,6 +319,7 @@ def benchmark_schema() -> SchemaDocument:
                     "type": "object",
                     "properties": {
                         "description": {"type": "string"},
+                        "capture": capture_policy,
                         "cases": {
                             "oneOf": [
                                 {"type": "array"},

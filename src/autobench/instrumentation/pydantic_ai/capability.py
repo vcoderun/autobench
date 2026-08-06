@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterable, Sequence
+from collections.abc import AsyncIterable, Mapping, Sequence
 from copy import copy
 from dataclasses import dataclass
 from time import perf_counter
@@ -47,8 +47,10 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RequestUsage, RunUsage
 
+from autobench.instrumentation.config import AssetDiscoverySettings
 from autobench.instrumentation.manager import InstrumentationRuntime
 from autobench.instrumentation.models import InstrumentorInfo
+from autobench.instrumentation.pydantic_ai.assets import AssetDiscovery
 from autobench.metrics.semantics import Semantic
 from autobench.protocol.signals import CaptureLevel, EndReason
 from autobench.runtime.context import RunContext, Span, SpanKind, active_run_context
@@ -75,14 +77,34 @@ class AutobenchCapability(AbstractCapability[Any]):
         target_version: str,
         assets: Sequence[Any] = (),
         registry: TrackingRegistry = track,
+        discovery: AssetDiscoverySettings | None = None,
     ) -> None:
         self._runtime = runtime
         self._info = info
         self._scope = runtime.scope(info, target_version=target_version)
         self._assets = tuple(assets)
         self._registry = registry
+        self._asset_discovery = AssetDiscovery(
+            runtime,
+            info,
+            target_version=target_version,
+            registry=registry,
+            settings=discovery or AssetDiscoverySettings(),
+        )
+        self._entrypoint_overrides: dict[str, Any] = {}
         self._model_stream: _ModelStreamState | None = None
         self._agent_span: Span | None = None
+
+    def for_entrypoint(self, kwargs: Mapping[str, Any]) -> AutobenchCapability:
+        capability = copy(self)
+        capability._entrypoint_overrides = {
+            key: kwargs[key]
+            for key in ("instructions", "output_type", "toolsets", "spec")
+            if key in kwargs and kwargs[key] is not None
+        }
+        capability._model_stream = None
+        capability._agent_span = None
+        return capability
 
     @classmethod
     def get_serialization_name(cls) -> str | None:
@@ -131,6 +153,11 @@ class AutobenchCapability(AbstractCapability[Any]):
             try:
                 self._capture_multimodal_inputs(run_context, span, ctx.prompt)
                 self._attach_run_assets(run_context, span, ctx)
+                self._asset_discovery.agent(
+                    ctx,
+                    span_id=span.id,
+                    overrides=self._entrypoint_overrides,
+                )
                 result = await handler()
                 span.set_output(result.output)
                 for name, value in _usage_values(
@@ -174,6 +201,7 @@ class AutobenchCapability(AbstractCapability[Any]):
             attributes=attributes,
             instrumentation_scope=self._scope,
         ) as span:
+            self._asset_discovery.request(ctx, request_context, span_id=span.id)
             span.event(
                 "messages.input",
                 request_context.messages,
@@ -327,6 +355,7 @@ class AutobenchCapability(AbstractCapability[Any]):
         span.__enter__()
         if output_context.output_type is not None:
             self._attach_if_tracked(run_context, span, output_context.output_type)
+            self._asset_discovery.output(ctx, output_context, span_id=span.id)
         try:
             validated = await handler(output)
         except BaseException as error:

@@ -1,4 +1,5 @@
 from autobench.instrumentation.config import (
+    AssetDiscoverySettings,
     AutoInstrumentation,
     HTTPXCaptureSettings,
     HTTPXInstrumentation,
@@ -17,6 +18,7 @@ from autobench.instrumentation.manager import (
 from autobench.instrumentation.models import (
     Compatibility,
     CompatibilityStatus,
+    InstrumentAssetSpec,
     InstrumentationError,
     InstrumentationHandle,
     InstrumentCall,
@@ -41,6 +43,7 @@ from autobench.instrumentation.registry import (
 )
 
 __all__ = (
+    "AssetDiscoverySettings",
     "AutoInstrumentation",
     "CallHandler",
     "CallLifecycle",
@@ -51,6 +54,7 @@ __all__ = (
     "InstrumentationConflictError",
     "InstrumentationError",
     "InstrumentationHandle",
+    "InstrumentAssetSpec",
     "InstrumentationManager",
     "InstrumentationRuntime",
     "InstrumentationConfig",

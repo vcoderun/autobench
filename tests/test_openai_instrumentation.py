@@ -13,15 +13,24 @@ from openai import AsyncOpenAI, InternalServerError, OpenAI
 from pydantic import BaseModel
 
 from autobench import Case, InstrumentationManager, RunContext, Variant
+from autobench.instrumentation.config import AssetDiscoverySettings
 from autobench.instrumentation.manager import InstrumentationRuntime
 from autobench.instrumentation.models import InstrumentCall
 from autobench.instrumentation.openai import OpenAIClient
 from autobench.instrumentation.openai import client as openai_instrumentation
+from autobench.instrumentation.openai.assets import AssetDiscovery
+from autobench.metrics.semantics import Semantic
 from autobench.protocol.signals import EndReason
 from autobench.protocol.traces import SpanRecord
 from autobench.runtime.context import Span
 from autobench.runtime.context import SpanRecord as RuntimeSpanRecord
 from autobench.runtime.instrumentation import reset_active_run_context, set_active_run_context
+from autobench.tracking import (
+    AssetCandidate,
+    AssetProvenance,
+    AssetRepresentation,
+    TrackingRegistry,
+)
 
 
 class _ParsedAnswer(BaseModel):
@@ -407,9 +416,13 @@ def _run_context() -> RunContext:
 
 
 @contextmanager
-def _instrument(ctx: RunContext) -> Iterator[None]:
+def _instrument(
+    ctx: RunContext,
+    *,
+    registry: TrackingRegistry | None = None,
+) -> Iterator[None]:
     manager = InstrumentationManager()
-    handle = manager.install(OpenAIClient())
+    handle = manager.install(OpenAIClient(registry=registry or TrackingRegistry()))
     token = set_active_run_context(ctx)
     try:
         yield
@@ -478,6 +491,400 @@ def test_openai_client_check_and_sync_chat_capture_provider_evidence() -> None:
             response_format=_ParsedAnswer,
         )
     assert parsed.choices[0].message.parsed == _ParsedAnswer(answer="done")
+
+
+def test_openai_client_discovers_only_semantic_request_assets() -> None:
+    registry = TrackingRegistry()
+    ctx = _run_context()
+    client = OpenAI(
+        api_key="test",
+        base_url="https://openai.test/v1",
+        http_client=httpx.Client(transport=_sync_transport()),
+    )
+
+    with _instrument(ctx, registry=registry):
+        client.chat.completions.create(
+            model="gpt-test",
+            messages=[
+                {"role": "system", "content": "Use records."},
+                {"role": "user", "content": "private user input"},
+            ],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup",
+                        "description": "Lookup a record",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+        )
+        client.chat.completions.parse(
+            model="gpt-test",
+            messages=[{"role": "user", "content": "return JSON"}],
+            response_format=_ParsedAnswer,
+        )
+
+    asset_ids = {version.asset_id for version in ctx.asset_versions}
+    assert asset_ids == {
+        "openai:chat:output_schema:output",
+        "openai:chat:prompt:system",
+        "openai:chat:tool:lookup",
+    }
+    assert all(use.representation.value == "effective" for use in ctx.asset_uses)
+    serialized = "\n".join(str(asset.model_dump(mode="json")) for asset in registry.definitions)
+    assert "Use records." not in serialized
+    assert "private user input" not in serialized
+    assert "sha256" in serialized
+
+
+def test_openai_responses_discovers_instructions_managed_prompt_and_tools() -> None:
+    registry = TrackingRegistry()
+    ctx = _run_context()
+    client = OpenAI(
+        api_key="test",
+        base_url="https://openai.test/v1",
+        http_client=httpx.Client(transport=_sync_transport()),
+    )
+
+    with _instrument(ctx, registry=registry):
+        client.responses.create(
+            model="gpt-test",
+            input=[
+                {"role": "developer", "content": "Apply policy."},
+                {"role": "user", "content": "private input"},
+            ],
+            instructions="Be precise.",
+            prompt={"id": "pmpt_policy", "version": "3"},
+            tools=[
+                {
+                    "type": "function",
+                    "name": "lookup",
+                    "description": "Lookup a record",
+                    "parameters": {"type": "object", "properties": {}},
+                    "strict": True,
+                }
+            ],
+        )
+
+    assert {version.asset_id for version in ctx.asset_versions} == {
+        "openai:responses:prompt:input_instructions",
+        "openai:responses:prompt:instructions",
+        "openai:responses:prompt:managed_prompt",
+        "openai:responses:tool:lookup",
+    }
+    serialized = "\n".join(str(asset.model_dump(mode="json")) for asset in registry.definitions)
+    assert "private input" not in serialized
+    assert "pmpt_policy" in serialized
+
+
+def test_openai_asset_discovery_supports_legacy_and_structured_request_forms() -> None:
+    class Message(BaseModel):
+        role: str
+        content: str
+
+    registry = TrackingRegistry()
+    context = _run_context()
+    instrumentor = OpenAIClient(registry=registry)
+    discovery = AssetDiscovery(
+        InstrumentationRuntime(registry=registry),
+        instrumentor.info,
+        target_version="2.52.0",
+        registry=registry,
+        settings=AssetDiscoverySettings(),
+    )
+    token = set_active_run_context(context)
+    try:
+        discovery.capture(
+            "openai.unknown",
+            InstrumentCall(instance=None, args=(), kwargs={}),
+            span_id="unknown",
+        )
+        discovery.capture(
+            "openai.chat.completions",
+            InstrumentCall(
+                instance=None,
+                args=(),
+                kwargs={
+                    "messages": [
+                        Message(role="developer", content="Use legacy lookup."),
+                    ],
+                    "functions": [
+                        {
+                            "name": "legacy_lookup",
+                            "description": "Legacy function",
+                            "parameters": {"type": "object"},
+                        },
+                        {"description": "missing name"},
+                        "invalid",
+                    ],
+                },
+            ),
+            span_id="chat",
+        )
+        discovery.capture(
+            "openai.responses",
+            InstrumentCall(
+                instance=None,
+                args=(),
+                kwargs={"input": "user evidence", "text_format": _ParsedAnswer},
+            ),
+            span_id="responses-type",
+        )
+        discovery.capture(
+            "openai.responses",
+            InstrumentCall(
+                instance=None,
+                args=(),
+                kwargs={"text": {"format": {"type": "json_object"}}},
+            ),
+            span_id="responses-mapping",
+        )
+    finally:
+        reset_active_run_context(token)
+
+    assert {use.source_locator for use in context.asset_uses} == {
+        "openai:chat:prompt:system",
+        "openai:chat:tool:legacy_lookup",
+        "openai:responses:output_schema:output",
+    }
+    output_versions = [
+        version
+        for version in registry.versions
+        if version.asset_id == "openai:responses:output_schema:output"
+    ]
+    assert len(output_versions) == 2
+
+
+def test_openai_asset_discovery_filters_and_correlates_framework_assets() -> None:
+    registry = TrackingRegistry()
+    context = _run_context()
+    runtime = InstrumentationRuntime(registry=registry)
+    instrumentor = OpenAIClient(registry=registry)
+    definition = AssetCandidate(
+        kind="tool",
+        local_id="lookup",
+        name="lookup",
+        source_locator="framework:tool:lookup",
+        canonical_content={"name": "lookup", "implementation": "source"},
+        semantic_type=Semantic.TOOL_VERSION,
+        scope="framework",
+        provenance=AssetProvenance(
+            system="framework",
+            key="lookup",
+            instrumentor="autobench.framework",
+        ),
+    )
+    effective = definition.model_copy(
+        update={
+            "source_locator": "framework:tool:lookup:effective",
+            "canonical_content": {"name": "lookup", "parameters": {}},
+            "representation": AssetRepresentation.EFFECTIVE,
+            "definition_locator": definition.source_locator,
+        }
+    )
+    discovery = AssetDiscovery(
+        runtime,
+        instrumentor.info,
+        target_version="2.52.0",
+        registry=registry,
+        settings=AssetDiscoverySettings(include=("tool",)),
+    )
+    token = set_active_run_context(context)
+    try:
+        source_registered = runtime.asset(instrumentor.info, definition)
+        effective_registered = runtime.asset(instrumentor.info, effective)
+        source_only = runtime.asset(
+            instrumentor.info,
+            definition.model_copy(
+                update={
+                    "local_id": "source_only",
+                    "name": "source_only",
+                    "source_locator": "framework:tool:source_only",
+                }
+            ),
+        )
+
+        @registry.tool
+        def exact(value: str) -> str:
+            return value
+
+        explicit_source = runtime.asset(
+            instrumentor.info,
+            definition.model_copy(
+                update={
+                    "local_id": "exact",
+                    "name": "exact",
+                    "source_locator": "framework:tool:exact",
+                    "python_target": exact,
+                }
+            ),
+        )
+        explicit_effective = runtime.asset(
+            instrumentor.info,
+            effective.model_copy(
+                update={
+                    "local_id": "exact:effective",
+                    "name": "exact",
+                    "source_locator": "framework:tool:exact:effective",
+                    "definition_locator": "framework:tool:exact",
+                }
+            ),
+        )
+        effective_only = runtime.asset(
+            instrumentor.info,
+            effective.model_copy(
+                update={
+                    "local_id": "effective_only",
+                    "name": "effective_only",
+                    "source_locator": "framework:tool:effective_only",
+                    "definition_locator": None,
+                }
+            ),
+        )
+        discovery.capture(
+            "openai.chat.completions",
+            InstrumentCall(
+                instance=None,
+                args=(),
+                kwargs={
+                    "messages": [{"role": "system", "content": "filtered"}],
+                    "tools": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "lookup",
+                                "parameters": {"type": "object"},
+                            },
+                        },
+                        {"type": "function", "function": {"name": "source_only"}},
+                        {"type": "function", "function": {"name": "exact"}},
+                        {"type": "function", "function": {"name": "effective_only"}},
+                    ],
+                },
+            ),
+            span_id="client",
+        )
+    finally:
+        reset_active_run_context(token)
+
+    assert source_registered is not None
+    assert effective_registered is not None
+    assert source_only is not None
+    assert explicit_source is not None
+    assert explicit_effective is not None
+    assert effective_only is not None
+    assert exact("ok") == "ok"
+    assert not any(use.kind == "prompt" for use in registry.definitions)
+    client_use = next(
+        use for use in context.asset_uses if use.source_locator == "openai:chat:tool:lookup"
+    )
+    assert client_use.asset_id == effective_registered.asset.id
+    assert client_use.definition_asset_id == source_registered.asset.id
+    source_only_use = next(
+        use for use in context.asset_uses if use.source_locator == "openai:chat:tool:source_only"
+    )
+    assert source_only_use.definition_asset_id == source_only.asset.id
+    exact_use = next(
+        use for use in context.asset_uses if use.source_locator == "openai:chat:tool:exact"
+    )
+    assert exact_use.asset_id == explicit_effective.asset.id
+    assert exact_use.definition_asset_id == explicit_source.asset.id
+    effective_only_use = next(
+        use for use in context.asset_uses if use.source_locator == "openai:chat:tool:effective_only"
+    )
+    assert effective_only_use.asset_id == effective_only.asset.id
+    assert effective_only_use.definition_asset_id is None
+    assert (
+        len([asset for asset in registry.definitions if asset.id == effective_registered.asset.id])
+        == 1
+    )
+
+
+def test_openai_asset_correlation_reports_ambiguous_framework_definitions() -> None:
+    registry = TrackingRegistry()
+    context = _run_context()
+    runtime = InstrumentationRuntime(registry=registry)
+    instrumentor = OpenAIClient(registry=registry)
+    discovery = AssetDiscovery(
+        runtime,
+        instrumentor.info,
+        target_version="2.52.0",
+        registry=registry,
+        settings=AssetDiscoverySettings(),
+    )
+    assert discovery._framework_match("tool", "lookup") == (None, None)
+
+    token = set_active_run_context(context)
+    try:
+        for scope in ("retrieval", "catalog"):
+            runtime.asset(
+                instrumentor.info,
+                AssetCandidate(
+                    kind="tool",
+                    local_id="lookup",
+                    name="lookup",
+                    source_locator=f"framework:{scope}:tool:lookup",
+                    canonical_content={"scope": scope},
+                    semantic_type=Semantic.TOOL_VERSION,
+                    scope=scope,
+                    provenance=AssetProvenance(
+                        system="framework",
+                        key="lookup",
+                        instrumentor="autobench.framework",
+                    ),
+                ),
+            )
+        context.asset_uses.append(
+            context.asset_uses[0].model_copy(update={"asset_id": "missing:asset"})
+        )
+        assert discovery._framework_match("tool", "lookup") == (None, None)
+        for scope in ("prepared", "resolved"):
+            runtime.asset(
+                instrumentor.info,
+                AssetCandidate(
+                    kind="tool",
+                    local_id="lookup",
+                    name="lookup",
+                    source_locator=f"framework:{scope}:tool:lookup",
+                    canonical_content={"scope": scope},
+                    representation=AssetRepresentation.EFFECTIVE,
+                    semantic_type=Semantic.TOOL_VERSION,
+                    scope=scope,
+                    provenance=AssetProvenance(
+                        system="framework",
+                        key="lookup",
+                        instrumentor="autobench.framework",
+                    ),
+                ),
+            )
+        discovery.capture(
+            "openai.chat.completions",
+            InstrumentCall(
+                instance=None,
+                args=(),
+                kwargs={
+                    "tools": [
+                        {
+                            "type": "function",
+                            "function": {"name": "lookup", "parameters": {}},
+                        }
+                    ]
+                },
+            ),
+            span_id="client",
+        )
+    finally:
+        reset_active_run_context(token)
+
+    assert any(
+        diagnostic.code == "asset_correlation_ambiguous" for diagnostic in context.trace.diagnostics
+    )
+    client_use = next(
+        use for use in context.asset_uses if use.source_locator == "openai:chat:tool:lookup"
+    )
+    assert client_use.definition_asset_id is None
 
 
 async def test_openai_client_async_chat_preserves_decorated_coroutine_behavior() -> None:

@@ -1,59 +1,70 @@
-# Examples
+# Example Projects
 
-The release examples are applications of the public framework, not alternate runtimes or mock-only
-snippets. Every offline example executes the complete `run -> record -> replay -> report -> export`
-workflow through `make examples`.
+The repository examples use the public Autobench runtime. They are ordered by the amount of
+framework surface they demonstrate, not by whether the subject is AI-based.
 
-## Minimal
+## Offline Release Matrix
 
-```bash
-uv run autobench run examples/minimal/autobench.yaml --record /tmp/autobench-minimal
-```
+These examples are credential-free and run in `make examples`:
 
-Demonstrates inline cases, deterministic variants, exact scoring, a case matrix, and comparison.
+| Example | Subject | Main features |
+| --- | --- | --- |
+| `minimal` | text transformation | inline cases, variants, exact score, matrix, comparison |
+| `basic` | support routing | file dataset, spans, checks, artifacts, Rich reports |
+| `mid` | response generation | semantic usage, pricing, cost, policies, distributions |
+| `advanced` | search implementations | repeated samples, noise, paired speedup |
+| `abp_manual` | ticket router | manual span plus method instrumentation |
+| `abp_concurrent` | async workers | task-local trace context and concurrent runs |
+| `automatic_assets` | Pydantic AI and custom SDK | automatic behavioral asset lineage |
 
-## Basic
-
-```bash
-uv run autobench run examples/basic/autobench.yaml --record /tmp/autobench-basic
-```
-
-Routes file-backed support tickets and records workflow spans plus decision artifacts. The second
-variant fixes an enterprise-outage routing failure, making the comparison visible in terminal tables.
-
-## Mid
+Run all offline examples:
 
 ```bash
-uv run autobench run examples/mid/autobench.yaml --record /tmp/autobench-mid
+make examples
 ```
 
-Records semantic token usage and latency, derives request cost from a local pricing DSL, applies
-success and cost policies, and renders cost distributions.
-
-## Advanced
+## Minimal: Learn The Matrix
 
 ```bash
-uv run autobench run examples/advanced/autobench.yaml --record /tmp/autobench-advanced
+autobench validate examples/minimal/autobench.yaml
+autobench run examples/minimal/autobench.yaml --record /tmp/autobench-minimal
+autobench replay /tmp/autobench-minimal
 ```
 
-Uses repeated measurements and sample artifacts, then derives per-case speedup with a paired baseline.
-Correctness remains a constraint while speed is the optimization objective.
+Read `examples/minimal/autobench.yaml` together with `minimal_benchmark.py`. This is the shortest
+complete `case x variant -> task -> score -> record -> report` implementation.
 
-## CodeMode
+## Basic: Application Evidence
 
 ```bash
-uv run python examples/codemode/run_benchmark.py --only parse_cron
+autobench run examples/basic/autobench.yaml --record /tmp/autobench-basic
 ```
 
-This is a live integration with the runtime that provides `vowel.codemode`. It generates evaluation
-specs with configured models, replays each generated spec against the source function, and records
-coverage, latency, generated specs, and exploration artifacts as Autobench evidence. It requires the
-external CodeMode runtime, an `OPENROUTER_API_KEY`, and network access.
+The task validates typed input, reads a factor, opens a workflow span, stores its output as an
+artifact, and lets declarative scorers evaluate correctness and handling. The candidate fixes a
+known routing failure, so the case matrix and comparison contain a visible behavioral delta.
 
-CodeMode-specific calls remain in the example task. Autobench core only owns the generic dataset,
-variant, task, observation, artifact, scoring, recording, replay, and reporting seams.
+## Mid: Quality, Cost, And Constraints
 
-## Pydantic AI
+```bash
+autobench run examples/mid/autobench.yaml --record /tmp/autobench-mid
+```
+
+This example records input/output tokens and latency, resolves a local model pricing table, derives
+`money.cost`, checks success and cost policies, and configures leaderboard and distribution views.
+It is the best starting point for an LLM benchmark that already has a task implementation.
+
+## Advanced: Measurement And Paired Baselines
+
+```bash
+autobench run examples/advanced/autobench.yaml --record /tmp/autobench-advanced
+```
+
+The task uses `measure_callable()` and `ctx.record_measurement()` instead of custom timing loops.
+The post-deriver matches runs by case and computes candidate speedup against the baseline while
+correctness remains a constraint.
+
+## Pydantic AI: Live Layered Instrumentation
 
 ```bash
 uv sync --extra instrumentation
@@ -63,35 +74,46 @@ uv run python examples/pydantic_ai/openrouter_instrument_all.py \
   --record /tmp/autobench-openrouter
 ```
 
-This live benchmark makes a real OpenRouter request through Pydantic AI's OpenAI-compatible model.
-It uses a tracked prompt, a catalog tool, streaming execution, and structured Pydantic output.
-`Benchmark.instrument_all()` discovers Pydantic AI, OpenAI, and HTTPX automatically, producing a
-layered framework/client/transport trace plus semantic token, model, latency, tool, validation,
-streaming, HTTP, scoring, and asset-version evidence. The task contains no manual `ctx.span()` or
-`ctx.metric()` calls. The complete experiment is recorded as replayable YAML under the supplied
-directory.
+The program makes a real OpenRouter request through Pydantic AI, uses a tool, streams structured
+output, and calls `Benchmark.instrument_all()`. The task has no manual metrics, spans, or tracking
+decorators. Autobench collects layered Pydantic AI, OpenAI client, and HTTPX evidence plus prompt,
+tool, output-schema, and agent versions.
 
-`agent_benchmark.py` remains the provider-neutral variant for any configured Pydantic AI model.
-
-## ABP Manual And Method
+Inspect it afterward:
 
 ```bash
-uv run autobench run examples/abp_manual/autobench.yaml --record /tmp/abp-manual
+autobench instrumentation trace /tmp/autobench-openrouter
+autobench replay /tmp/autobench-openrouter
 ```
 
-Combines a manual workflow span with automatic `TicketRouter.route` instrumentation. The method
-instrumentor emits a nested span, one metric, and one factor while preserving the method signature
-and result.
+`examples/pydantic_ai/agent_benchmark.py` is provider-neutral and accepts any configured Pydantic AI
+model identifier through `PYDANTIC_AI_MODEL`.
 
-## ABP Concurrent
+## Automatic Asset Discovery
 
 ```bash
-uv run autobench run examples/abp_concurrent/autobench.yaml --concurrency 2 \
+uv run python examples/automatic_assets/pydantic_ai_discovery.py \
+  --record /tmp/autobench-pydantic-assets
+
+uv run python examples/automatic_assets/custom_sdk_discovery.py \
+  --record /tmp/autobench-custom-assets
+```
+
+Both are offline. The first uses a real Pydantic AI `Agent`, `AbstractCapability`, tool, and Pydantic
+output model with no explicit tracking. The second adds prompt, tools, and output-schema extraction
+to an arbitrary method with `InstrumentAssetSpec`.
+
+## ABP Manual And Concurrent
+
+```bash
+autobench run examples/abp_manual/autobench.yaml --record /tmp/abp-manual
+autobench run examples/abp_concurrent/autobench.yaml \
+  --concurrency 2 \
   --record /tmp/abp-concurrent
 ```
 
-Runs asynchronous worker siblings under a workflow span. It demonstrates task-local ABP context,
-correct sibling parentage, and concurrent benchmark matrix execution.
+Use the manual example to learn `RunContext.span()` and `instrument_method()`. Use the concurrent
+example to inspect sibling span parentage and task-local context under async execution.
 
 ## OpenAI Streaming
 
@@ -100,9 +122,8 @@ uv sync --extra instrumentation
 uv run python examples/abp_openai/run_openai_streaming.py
 ```
 
-Uses the official OpenAI client with a real streaming parser and an offline HTTPX mock transport.
-The resulting trace contains client and transport spans, first-chunk evidence, and normal stream
-completion without network access or credentials.
+This uses the official OpenAI client and a real streaming parser over an offline HTTPX mock
+transport. It demonstrates first-chunk and stream-completion evidence without network access.
 
 ## OpenAI Agents
 
@@ -111,8 +132,8 @@ uv sync --extra openai-agents
 uv run python examples/abp_openai_agents/run_openai_agents.py
 ```
 
-Runs a real OpenAI Agents workflow, function span, and custom span through the native trace
-processor. No model or network call is required.
+The example sends real OpenAI Agents workflow/function/custom trace events through the Autobench
+trace processor. It requires no model request.
 
 ## Replay And Extraction
 
@@ -120,5 +141,32 @@ processor. No model or network call is required.
 uv run python examples/abp_replay/replay_and_extract.py /tmp/recorded-experiment
 ```
 
-Loads each recorded RunRecord and creates an immutable extraction-derived record with signal, span,
-and usage observations. The script imports no provider SDK.
+The script loads records without provider SDKs and creates extraction-derived records with explicit
+parent lineage.
+
+## CodeMode: Migrating A Real Benchmark Runner
+
+```bash
+export OPENROUTER_API_KEY=...
+uv run python examples/codemode/run_benchmark.py --only parse_cron \
+  --record /tmp/autobench-codemode
+```
+
+The CodeMode example replaces a bespoke benchmark script with cases, model-pair factors, a task,
+semantic coverage/success/latency evidence, generated-spec artifacts, recording, and reports. Its
+task still owns Vowel CodeMode calls; Autobench remains generic. The external CodeMode runtime and
+network credentials are required.
+
+## What To Copy
+
+Copy the pattern, not generated run directories:
+
+- task signature and typed input/output from `minimal` or `basic`;
+- pricing and policies from `mid`;
+- measurement and paired comparison from `advanced`;
+- automatic SDK setup from `pydantic_ai`;
+- custom instrumentation from `automatic_assets`;
+- replay processing from `abp_replay`.
+
+For combinations not represented by one project, use [Use Cases](use-cases.md) and the
+[Capability Map](capabilities.md).

@@ -1,125 +1,148 @@
 # CLI
 
-The CLI is human-first: validation, runs, replay, reports, and comparisons render Rich panels and
-tables. YAML, CSV, and Markdown are explicit file exports rather than raw terminal dumps.
+The CLI is human-first. Commands render Rich panels and tables; YAML, CSV, and Markdown are explicit
+file exports instead of raw terminal output.
 
-## Command Summary
+## Command Map
 
-| Command | Executes tasks? | Requires records? | Purpose |
+| Command | Executes subject? | Input | Purpose |
 | --- | --- | --- | --- |
-| `validate` | No | No | Parse, validate, resolve sources, and show the planned matrix |
-| `run` | Yes | No | Execute a benchmark, optionally persist it, and render results |
-| `replay` | No | Yes | Reconstruct and display the recorded experiment |
-| `report` | No | Yes | Render configured analysis views from records |
-| `export` | No | Yes | Write YAML, CSV, or Markdown and preview it |
-| `compare` | No | Yes | Compare two recorded variants without claiming causality |
-| `instrumentation doctor` | No | No | Inspect integration compatibility, capabilities, and capture defaults |
-| `instrumentation trace` | No | Yes | Summarize ABP trace composition and partial state |
+| `validate` | No | benchmark YAML | Resolve and validate the planned matrix |
+| `run` | Yes | benchmark YAML | Execute, record, and render an experiment |
+| `replay` | No | record directory | Reconstruct recorded results |
+| `report` | No | record directory | Render configured analysis views |
+| `compare` | No | record directory | Compare two variants without causal claims |
+| `export` | No | record directory | Write a YAML, CSV, or Markdown projection |
+| `instrumentation doctor` | No | environment | Inspect integration compatibility |
+| `instrumentation trace` | No | record directory | Summarize ABP traces and diagnostics |
 
-References inside a benchmark spec resolve relative to the spec file.
-
-## Commands
-
-### Validate
+## Validate
 
 ```bash
-uv run autobench validate path/to/spec.yaml
+autobench validate benchmarks/routing.yaml
 ```
 
-Validation loads external datasets and referenced configuration, checks duplicate IDs and task
-requirements, resolves source files, and renders case, variant, and planned-run counts. It does not
-execute the task target.
+Validation parses the DSL, loads file or glob datasets, resolves pricing and task sources relative
+to the spec, checks duplicate IDs and runnable requirements, and displays case, variant, and run
+counts. It does not invoke the task.
 
-### Run
+## Run
 
 ```bash
-uv run autobench run path/to/spec.yaml --record runs/example
+autobench run benchmarks/routing.yaml \
+  --concurrency 4 \
+  --record runs/routing-42
 ```
 
 Options:
 
-- `--concurrency INTEGER`: maximum active runs, default `1`, minimum `1`.
-- `--record DIRECTORY`: explicit immutable record directory.
-- `--no-record`: execute and report without persistence.
+| Option | Meaning |
+| --- | --- |
+| `--concurrency INTEGER` | Maximum active runs; default and minimum are `1` |
+| `--record DIRECTORY` | Write immutable evidence to this new directory |
+| `--no-record` | Execute and display without persistence |
 
-Without either recording flag, Autobench writes under
-`.autobench/<spec-name>/<experiment-id>/`.
+Without either recording flag, Autobench creates
+`.autobench/<spec-stem>/<experiment-id>/`. `--record` and `--no-record` are mutually exclusive.
 
-### Replay
+The CLI records the benchmark file and resolved referenced-source hashes so evidence can explain
+what was executed.
 
-```bash
-uv run autobench replay runs/example
-```
-
-Replay does not import tasks, scorers, or application modules. It reconstructs the experiment from
-the record directory and renders the recorded report configuration.
-
-### Report
+## Replay
 
 ```bash
-uv run autobench report runs/example
+autobench replay runs/routing-42
 ```
 
-`report` emphasizes status, variant configuration, leaderboards, per-run metrics, case matrices,
-comparisons, and distributions.
+Replay imports neither the task nor optional provider SDKs. It reconstructs normal result models
+from `experiment.yaml`, per-run records, and referenced artifacts.
 
-### Export
+## Report
 
 ```bash
-uv run autobench export runs/example --format yaml --path runs/example/report.yaml
-uv run autobench export runs/example --format csv --path runs/example/runs.csv
-uv run autobench export runs/example --format markdown --path runs/example/report.md
+autobench report runs/routing-42
 ```
 
-### Compare
+The report includes experiment status, variant configuration, leaderboard values, run metrics, case
+matrix, configured comparisons, and distributions. Missing metrics remain visible rather than being
+silently converted to zero.
+
+## Compare
 
 ```bash
-uv run autobench compare runs/example --baseline baseline --candidate optimized
+autobench compare runs/routing-42 \
+  --baseline current \
+  --candidate candidate
 ```
 
-Both IDs must exist in the recorded experiment. The command shows paired-run count, changed
-factors, aggregate metric deltas, and a confounding flag.
+Both IDs must exist. The view shows changed factors, aggregate metric values and deltas, paired run
+count, and whether several factors changed. `confounded=true` is a warning against causal
+attribution, not a failed comparison.
 
-### Instrumentation Diagnostics
+## Export
 
 ```bash
-uv run autobench instrumentation doctor
-uv run autobench instrumentation trace runs/example
+autobench export runs/routing-42 \
+  --format yaml \
+  --path analysis/routing-summary.yaml
+
+autobench export runs/routing-42 \
+  --format csv \
+  --path analysis/routing-runs.csv
+
+autobench export runs/routing-42 \
+  --format markdown \
+  --path analysis/routing-report.md
 ```
 
-`doctor` inspects every built-in integration without importing unavailable SDKs. Its Rich tables
-show target versions, supported status, abstraction layer, hook/patch mechanism,
-sync/async/streaming support, span and semantic families, capture defaults, extras, and degradation
-details.
+`--format` is required and accepts `yaml`, `csv`, or `markdown`. `--path` is also required. YAML
+exports include a versioned schema header; CSV is a run-level projection; Markdown is a portable
+report. The complete evidence remains the record directory.
 
-`trace` operates only on recorded evidence. It reports case/variant span counts, roots, partial
-state, diagnostics, span kinds, and instrumentor composition without importing the benchmark task
-or provider SDKs.
-
-## CLI Behavior
-
-- `run` executes the benchmark matrix, optionally records it, and renders Rich summary tables.
-- `replay`, `report`, `export`, and `compare` operate on recorded evidence.
-- `instrumentation trace` has the same replay-only dependency boundary.
-- `report` and `compare` render Rich terminal views instead of dumping Markdown or YAML.
-- `export` always writes a file and then shows a Rich preview of the exported projection.
-- default recording paths are placed under `.autobench/<spec-name>/<experiment-id>/`.
-
-## Exit And Error Behavior
-
-- Invalid YAML, schema errors, unresolved tasks, recording collisions, and missing records return a
-  nonzero exit code.
-- User-facing errors include the relevant file and YAML location when available.
-- A process may complete while individual runs are failed, errored, or skipped; the status table
-  makes those states explicit.
-- Replay and reporting never fall back to live benchmark execution.
-
-## Typical Workflow
+## Instrumentation Doctor
 
 ```bash
-autobench validate autobench.yaml
-autobench run autobench.yaml --concurrency 4 --record runs/candidate-42
-autobench report runs/candidate-42
-autobench compare runs/candidate-42 --baseline baseline --candidate candidate
-autobench export runs/candidate-42 --format csv --path analysis/runs.csv
+autobench instrumentation doctor
 ```
+
+The compatibility table shows distribution and version state, supported range, mechanism,
+abstraction layer, sync/async/streaming support, asset discovery, capture defaults, optional extra,
+and diagnostics for every built-in integration.
+
+Use it before enabling `strict=True` or when an SDK upgrade stops producing evidence.
+
+## Trace Inspection
+
+```bash
+autobench instrumentation trace runs/routing-42
+```
+
+This is replay-only. It summarizes span roots, kinds, instrumentors, partial state, and protocol
+diagnostics without loading the original SDK.
+
+## Exit And Failure Behavior
+
+- Invalid YAML, unresolved sources, schema errors, recording collisions, and missing records exit
+  nonzero.
+- YAML failures include the file and source location when available.
+- Task failures are isolated to their run; already collected evidence is preserved.
+- An experiment can finish with passed, failed, errored, and skipped runs. Inspect status tables and
+  policies rather than assuming process completion means every run passed.
+- Replay and reporting never fall back to live execution.
+
+## CI Workflow
+
+```bash
+set -e
+autobench validate benchmarks/release.yaml
+autobench run benchmarks/release.yaml \
+  --concurrency 4 \
+  --record artifacts/autobench
+autobench report artifacts/autobench
+autobench export artifacts/autobench \
+  --format csv \
+  --path artifacts/autobench-runs.csv
+```
+
+Upload the entire `artifacts/autobench` directory so replay, traces, asset histories, and source
+lineage remain available.

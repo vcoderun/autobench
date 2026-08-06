@@ -1,14 +1,19 @@
 from __future__ import annotations as _annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass as stdlib_dataclass
 from dataclasses import field as stdlib_field
 from pathlib import Path
+from threading import RLock
 from typing import Any, ParamSpec, TypeVar, cast, dataclass_transform, overload
+from uuid import uuid4
+
+from filelock import FileLock
 
 from autobench.io import dump_yaml, load_yaml
 from autobench.metrics.semantics import Semantic, SemanticType
 
+from .discovery import AssetCandidate, AssetUse, RegisteredAsset
 from .history import asset_index_to_yaml_view, asset_to_yaml_view
 from .introspection import (
     _build_tool_asset,
@@ -22,7 +27,15 @@ from .introspection import (
     _source_hash,
     _source_path,
 )
-from .models import AssetVersion, SerializedValue, TrackedAsset, TrackedPrompt, TypeDecorator
+from .models import (
+    AssetDefinition,
+    AssetRepresentation,
+    AssetVersion,
+    SerializedValue,
+    TrackedAsset,
+    TrackedPrompt,
+    TypeDecorator,
+)
 
 _T = TypeVar("_T")
 _TypeT = TypeVar("_TypeT", bound=type)
@@ -33,43 +46,282 @@ _ReturnT = TypeVar("_ReturnT")
 
 class TrackingRegistry:
     def __init__(self) -> None:
+        self._lock = RLock()
         self._versions_by_target_id: dict[int, AssetVersion] = {}
         self._assets_by_target_id: dict[int, TrackedAsset] = {}
         self._assets_by_name: dict[str, TrackedAsset] = {}
+        self._assets_by_id: dict[str, TrackedAsset] = {}
+        self._asset_ids_by_locator: dict[str, str] = {}
         self._latest_versions_by_asset_id: dict[str, AssetVersion] = {}
         self._version_history: list[AssetVersion] = []
 
     @property
     def assets(self) -> dict[str, TrackedAsset]:
-        return dict(self._assets_by_name)
+        with self._lock:
+            return dict(self._assets_by_name)
+
+    @property
+    def definitions(self) -> tuple[TrackedAsset, ...]:
+        with self._lock:
+            return tuple(self._assets_by_id.values())
 
     @property
     def versions(self) -> tuple[AssetVersion, ...]:
-        return tuple(self._version_history)
+        with self._lock:
+            return tuple(self._version_history)
 
-    def write_assets(self, directory: Path) -> None:
+    def write_assets(
+        self,
+        directory: Path,
+        *,
+        asset_ids: Collection[str] | None = None,
+    ) -> None:
         directory.mkdir(parents=True, exist_ok=True)
-        assets = sorted(self._assets_by_name.values(), key=lambda asset: asset.id)
-        versions = [self._version_for_asset_id(asset.id) for asset in assets]
-        for asset, version in zip(assets, versions, strict=True):
-            asset_path = directory / f"{_safe_filename(asset.id)}.yaml"
-            existing = load_yaml(asset_path) if asset_path.exists() else None
-            dump_yaml(
-                asset_to_yaml_view(asset, version, existing=existing),
-                asset_path,
-                schema_name="asset",
+        with self._lock:
+            selected_ids = None if asset_ids is None else set(asset_ids)
+            assets = sorted(
+                (
+                    asset
+                    for asset in self._assets_by_id.values()
+                    if selected_ids is None or asset.id in selected_ids
+                ),
+                key=lambda asset: asset.id,
             )
-        dump_yaml(
-            asset_index_to_yaml_view(assets, versions),
-            directory / "index.yaml",
-            schema_name="asset_index",
-        )
+            versions = [self._version_for_asset_id(asset.id) for asset in assets]
+        with FileLock(directory / ".write.lock"):
+            for asset, version in zip(assets, versions, strict=True):
+                asset_path = directory / f"{_safe_filename(asset.id)}.yaml"
+                existing = load_yaml(asset_path) if asset_path.exists() else None
+                _atomic_dump_yaml(
+                    asset_to_yaml_view(asset, version, existing=existing),
+                    asset_path,
+                    schema_name="asset",
+                )
+            index_path = directory / "index.yaml"
+            index_view = asset_index_to_yaml_view(assets, versions)
+            if index_path.exists():
+                existing_index = load_yaml(index_path)
+                if isinstance(existing_index, dict) and isinstance(
+                    existing_index.get("assets"), dict
+                ):
+                    index_view["assets"] = {
+                        **existing_index["assets"],
+                        **index_view["assets"],
+                    }
+            _atomic_dump_yaml(
+                index_view,
+                index_path,
+                schema_name="asset_index",
+            )
+
+    def has_asset(self, asset_id: str) -> bool:
+        with self._lock:
+            return asset_id in self._assets_by_id
 
     def _version_for_asset_id(self, asset_id: str) -> AssetVersion:
         try:
             return self._latest_versions_by_asset_id[asset_id]
         except KeyError as exc:
             raise KeyError(f"Asset version is missing for {asset_id}.") from exc
+
+    def asset_by_id(self, asset_id: str) -> TrackedAsset:
+        with self._lock:
+            try:
+                return self._assets_by_id[asset_id]
+            except KeyError as exc:
+                raise KeyError(f"Unknown Autobench asset: {asset_id}") from exc
+
+    def version_by_asset_id(self, asset_id: str) -> AssetVersion:
+        with self._lock:
+            return self._version_for_asset_id(asset_id)
+
+    def resolve_locator(self, locator: str) -> TrackedAsset:
+        with self._lock:
+            try:
+                asset_id = self._asset_ids_by_locator[locator]
+            except KeyError as exc:
+                raise KeyError(f"Unknown Autobench asset locator: {locator}") from exc
+            return self._assets_by_id[asset_id]
+
+    def register_candidate(
+        self,
+        candidate: AssetCandidate,
+        *,
+        span_id: str | None = None,
+    ) -> RegisteredAsset:
+        with self._lock:
+            resolved = self._resolve_candidate(candidate)
+            if resolved is None:
+                asset = self._asset_from_candidate(candidate)
+                identity = self._candidate_identity(candidate)
+                if identity is not None:
+                    asset = asset.model_copy(update={"id": identity.id})
+                    if isinstance(asset, AssetDefinition) and isinstance(identity, AssetDefinition):
+                        asset = asset.model_copy(
+                            update={
+                                "source_locators": tuple(
+                                    dict.fromkeys(
+                                        (
+                                            *identity.source_locators,
+                                            *asset.source_locators,
+                                        )
+                                    )
+                                ),
+                                "aliases": tuple(
+                                    dict.fromkeys((*identity.aliases, *asset.aliases))
+                                ),
+                            }
+                        )
+                asset_content = asset.model_dump(mode="python")
+                if isinstance(asset, AssetDefinition):
+                    for field_name in (
+                        "canonical_content",
+                        "source_locators",
+                        "aliases",
+                        "sensitivity",
+                    ):
+                        asset_content.pop(field_name)
+                content_hash = _hash_serialized(
+                    {
+                        "asset": asset_content,
+                        "content_fingerprint": (
+                            candidate.content_fingerprint
+                            or _hash_serialized(candidate.canonical_content)
+                        ),
+                    }
+                )
+                previous = self._latest_versions_by_asset_id.get(asset.id)
+                version = AssetVersion(
+                    asset_id=asset.id,
+                    version=content_hash[:12],
+                    content_hash=content_hash,
+                    source_hash=(
+                        None
+                        if candidate.python_target is None
+                        else _source_hash(candidate.python_target)
+                    ),
+                    source_path=(
+                        None
+                        if candidate.python_target is None
+                        else _source_path(candidate.python_target)
+                    ),
+                    parent_version=(
+                        None
+                        if previous is None or previous.version == content_hash[:12]
+                        else previous.version
+                    ),
+                    metadata={
+                        "representation": candidate.representation.value,
+                        "source_locator": candidate.source_locator,
+                    },
+                )
+                self._register(candidate.python_target, asset, version)
+            else:
+                asset, version = resolved
+
+            locators = (candidate.source_locator, *candidate.aliases)
+            for locator in locators:
+                self._asset_ids_by_locator[locator] = asset.id
+
+            definition_asset_id: str | None = None
+            definition_version: str | None = None
+            if candidate.definition_locator is not None:
+                definition = self._asset_for_locator(candidate.definition_locator)
+                if definition is not None:
+                    definition_asset_id = definition.id
+                    definition_version = self._version_for_asset_id(definition.id).version
+
+            return RegisteredAsset(
+                asset=asset,
+                version=version,
+                use=AssetUse(
+                    asset_id=asset.id,
+                    version=version.version,
+                    representation=candidate.representation,
+                    source_locator=candidate.source_locator,
+                    scope=candidate.scope,
+                    span_id=span_id,
+                    definition_asset_id=definition_asset_id,
+                    definition_version=definition_version,
+                    provenance=candidate.provenance,
+                    aliases=candidate.aliases,
+                ),
+            )
+
+    def _resolve_candidate(
+        self,
+        candidate: AssetCandidate,
+    ) -> tuple[TrackedAsset, AssetVersion] | None:
+        if candidate.representation is AssetRepresentation.DEFINITION:
+            target = candidate.python_target
+            if target is not None:
+                target_asset = self._assets_by_target_id.get(id(target))
+                if target_asset is not None:
+                    return target_asset, self._version_for_asset_id(target_asset.id)
+                python_locator = _python_locator(target)
+                if python_locator is not None:
+                    located = self._asset_for_locator(python_locator)
+                    if located is not None:
+                        return located, self._version_for_asset_id(located.id)
+        return None
+
+    def _candidate_identity(self, candidate: AssetCandidate) -> TrackedAsset | None:
+        if candidate.explicit_asset_id is not None:
+            explicit = self._assets_by_id.get(candidate.explicit_asset_id)
+            if explicit is not None:
+                return explicit
+        for locator in (candidate.source_locator, *candidate.aliases):
+            located = self._asset_for_locator(locator)
+            if located is not None:
+                return located
+        return None
+
+    def _asset_for_locator(self, locator: str) -> TrackedAsset | None:
+        asset_id = self._asset_ids_by_locator.get(locator)
+        return None if asset_id is None else self._assets_by_id[asset_id]
+
+    def _asset_from_candidate(self, candidate: AssetCandidate) -> TrackedAsset:
+        asset_id = candidate.explicit_asset_id or candidate.source_locator
+        target = candidate.python_target
+        metadata = dict(candidate.metadata)
+        metadata["discovered"] = True
+        if (
+            candidate.representation is AssetRepresentation.DEFINITION
+            and isinstance(target, type)
+            and candidate.kind in {"output_schema", "type"}
+        ):
+            return _build_type_asset(
+                target,
+                name=candidate.name,
+                semantic_type=candidate.semantic_type,
+                metadata=metadata,
+            ).model_copy(update={"id": asset_id})
+        if (
+            candidate.representation is AssetRepresentation.DEFINITION
+            and callable(target)
+            and candidate.kind == "tool"
+        ):
+            return _build_tool_asset(
+                target,
+                name=candidate.name,
+                semantic_type=candidate.semantic_type,
+                metadata=metadata,
+                registry=self,
+            ).model_copy(update={"id": asset_id})
+        return AssetDefinition(
+            id=asset_id,
+            kind=candidate.kind,
+            name=candidate.name,
+            semantic_type=candidate.semantic_type,
+            metadata=metadata,
+            representation=candidate.representation,
+            canonical_content=candidate.canonical_content,
+            scope=candidate.scope,
+            owner_locator=candidate.owner_locator,
+            source_locators=(candidate.source_locator,),
+            aliases=candidate.aliases,
+            sensitivity=candidate.sensitivity,
+        )
 
     def asset(
         self,
@@ -432,12 +684,42 @@ class TrackingRegistry:
             raise KeyError("Object is not tracked by Autobench.") from exc
 
     def _register(self, target: Any, asset: TrackedAsset, version: AssetVersion) -> None:
-        target_id = id(target)
-        self._assets_by_target_id[target_id] = asset
-        self._versions_by_target_id[target_id] = version
-        self._assets_by_name[asset.name] = asset
-        self._latest_versions_by_asset_id[asset.id] = version
-        self._version_history.append(version)
+        with self._lock:
+            if target is not None:
+                target_id = id(target)
+                self._assets_by_target_id[target_id] = asset
+                self._versions_by_target_id[target_id] = version
+                python_locator = _python_locator(target)
+                if python_locator is not None:
+                    self._asset_ids_by_locator[python_locator] = asset.id
+            self._assets_by_name[asset.name] = asset
+            self._assets_by_id[asset.id] = asset
+            self._asset_ids_by_locator[asset.id] = asset.id
+            self._latest_versions_by_asset_id[asset.id] = version
+            if not any(
+                item.asset_id == version.asset_id and item.version == version.version
+                for item in self._version_history
+            ):
+                self._version_history.append(version)
+
+
+def _python_locator(target: Any) -> str | None:
+    try:
+        module: str = target.__module__
+        qualname: str = target.__qualname__
+    except AttributeError:
+        return None
+    return f"python:{module}.{qualname}"
+
+
+def _atomic_dump_yaml(value: Any, path: Path, *, schema_name: str) -> None:
+    rendered = dump_yaml(value, schema_name=schema_name)
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(rendered, encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 __all__ = ("TrackingRegistry", "track")

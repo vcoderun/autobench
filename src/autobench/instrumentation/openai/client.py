@@ -37,6 +37,7 @@ from openai.types.responses import (
 from openai.types.responses.response_usage import ResponseUsage
 
 from autobench._version import __version__
+from autobench.instrumentation.config import AssetDiscoverySettings
 from autobench.instrumentation.manager import InstrumentationRuntime
 from autobench.instrumentation.models import (
     Compatibility,
@@ -46,10 +47,12 @@ from autobench.instrumentation.models import (
     InstrumentorCapabilities,
     InstrumentorInfo,
 )
+from autobench.instrumentation.openai.assets import AssetDiscovery
 from autobench.instrumentation.patching import CallLifecycle
 from autobench.metrics.semantics import Semantic
 from autobench.protocol.signals import AbstractionLayer, CaptureMechanism, EndReason
 from autobench.runtime.context import Span, SpanKind, active_run_context
+from autobench.tracking import TrackingRegistry, track
 
 RawAction = Literal["parse", "close"]
 RawResponse = APIResponse[Any] | AsyncAPIResponse[Any] | LegacyAPIResponse[Any]
@@ -381,11 +384,13 @@ class _EndpointHandler:
         runtime: InstrumentationRuntime,
         info: InstrumentorInfo,
         raw: _RawRegistry,
+        assets: AssetDiscovery | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.runtime = runtime
         self.info = info
         self.raw = raw
+        self.assets = assets
         self._scope = runtime.scope(info, target_version=version("openai"))
         self._active: set[_OpenAICall] = set()
 
@@ -423,6 +428,8 @@ class _EndpointHandler:
         )
         span.__enter__()
         span.set_attribute("abp.logical_operation_id", span.id)
+        if self.assets is not None:
+            self.assets.capture(self.endpoint.name, call, span_id=span.id)
         if input_payload:
             span.event("messages.input", input_payload, semantic_type=Semantic.MESSAGE_INPUT)
         active = _OpenAICall(self, call, span)
@@ -549,7 +556,14 @@ class _HelperStreamHandler:
 class OpenAIClient:
     """Install provider-level ABP capture for the official OpenAI Python SDK."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        discovery: AssetDiscoverySettings | None = None,
+        registry: TrackingRegistry = track,
+    ) -> None:
+        self._discovery = discovery or AssetDiscoverySettings()
+        self._registry = registry
         self._info = InstrumentorInfo(
             id="autobench.openai",
             version=__version__,
@@ -561,7 +575,13 @@ class OpenAIClient:
             semantic_families=("llm", "message", "tool", "stream"),
             source_convention="openai-python",
             source_convention_version="2.52",
-            capabilities=InstrumentorCapabilities(sync=True, async_=True, streaming=True),
+            capabilities=InstrumentorCapabilities(
+                sync=True,
+                async_=True,
+                streaming=True,
+                asset_discovery=True,
+                asset_kinds=("output_schema", "prompt", "tool"),
+            ),
         )
 
     @property
@@ -608,6 +628,14 @@ class OpenAIClient:
 
     def install(self, runtime: InstrumentationRuntime) -> InstrumentationHandle:
         raw = _RawRegistry()
+        target_version = version("openai")
+        assets = AssetDiscovery(
+            runtime,
+            self.info,
+            target_version=target_version,
+            registry=self._registry,
+            settings=self._discovery,
+        )
         endpoints = {
             "chat": _Endpoint(
                 name="openai.chat.completions",
@@ -634,25 +662,31 @@ class OpenAIClient:
         try:
             for target in (Completions, AsyncCompletions):
                 patch(
-                    target, "create", _EndpointHandler(endpoints["chat"], runtime, self.info, raw)
-                )
-                patch(target, "parse", _EndpointHandler(endpoints["chat"], runtime, self.info, raw))
-            for target in (Responses, AsyncResponses):
-                patch(
                     target,
                     "create",
-                    _EndpointHandler(endpoints["responses"], runtime, self.info, raw),
+                    _EndpointHandler(endpoints["chat"], runtime, self.info, raw, assets),
                 )
                 patch(
                     target,
                     "parse",
-                    _EndpointHandler(endpoints["responses"], runtime, self.info, raw),
+                    _EndpointHandler(endpoints["chat"], runtime, self.info, raw, assets),
+                )
+            for target in (Responses, AsyncResponses):
+                patch(
+                    target,
+                    "create",
+                    _EndpointHandler(endpoints["responses"], runtime, self.info, raw, assets),
+                )
+                patch(
+                    target,
+                    "parse",
+                    _EndpointHandler(endpoints["responses"], runtime, self.info, raw, assets),
                 )
             for target in (Embeddings, AsyncEmbeddings):
                 patch(
                     target,
                     "create",
-                    _EndpointHandler(endpoints["embeddings"], runtime, self.info, raw),
+                    _EndpointHandler(endpoints["embeddings"], runtime, self.info, raw, assets),
                 )
             patch(APIResponse, "parse", _RawHandler("parse", raw, runtime, self.info))
             patch(APIResponse, "close", _RawHandler("close", raw, runtime, self.info))

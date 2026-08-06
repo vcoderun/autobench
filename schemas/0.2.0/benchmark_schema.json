@@ -6,6 +6,97 @@
       "additionalProperties": {
         "additionalProperties": false,
         "properties": {
+          "capture": {
+            "additionalProperties": false,
+            "description": "Privacy and retention policy for evidence and discovered assets.",
+            "properties": {
+              "allow_paths": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "allow_semantics": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "default_level": {
+                "default": "metadata",
+                "enum": [
+                  "none",
+                  "metadata",
+                  "hash",
+                  "redacted",
+                  "full"
+                ],
+                "type": "string"
+              },
+              "deny_paths": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "deny_semantics": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "max_artifact_bytes": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_collection_items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_depth": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_inline_bytes": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_string_length": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "retain_source_attributes": {
+                "type": "boolean"
+              },
+              "secret_names": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "semantic_overrides": {
+                "additionalProperties": {
+                  "enum": [
+                    "none",
+                    "metadata",
+                    "hash",
+                    "redacted",
+                    "full"
+                  ],
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "store_binary": {
+                "type": "boolean"
+              },
+              "use_semantic_defaults": {
+                "default": true,
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
           "cases": {
             "oneOf": [
               {
@@ -41,6 +132,40 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
                       "enabled": {
                         "default": true,
                         "type": "boolean"
@@ -134,6 +259,40 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
                       "enabled": {
                         "default": true,
                         "type": "boolean"
@@ -152,6 +311,40 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
                       "enabled": {
                         "default": true,
                         "type": "boolean"
@@ -170,6 +363,40 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
                       "enabled": {
                         "default": true,
                         "type": "boolean"

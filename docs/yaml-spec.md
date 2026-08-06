@@ -25,7 +25,7 @@ named benchmark:
 ## Complete Authoring Example
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.2.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
@@ -211,6 +211,10 @@ benchmark:
       all:
         exclude: [httpx]
         strict: false
+        assets:
+          discover: true
+          representations: [definition, effective]
+          include: [prompt, tool, output_schema, capability]
       pydantic_ai: {}
       openai: {}
       openai_agents: false
@@ -237,6 +241,30 @@ section.
 The versioned `benchmark_schema.json` describes this surface, so YAML language servers complete
 integration names and capture settings. See [Native Instrumentation](native-instrumentation.md) for
 the lifecycle and privacy contract.
+
+## Capture Policy
+
+The benchmark-level `capture` section controls ABP evidence and discovered asset content for every
+case/variant run:
+
+```yaml
+benchmark:
+  private-agent:
+    capture:
+      default_level: hash
+      use_semantic_defaults: false
+      semantic_overrides:
+        tool: full
+        output_schema: full
+      deny_paths:
+        - assets.*:prompt:private_notes
+```
+
+Supported levels are `none`, `metadata`, `hash`, `redacted`, and `full`. Other fields include
+semantic/path allow and deny lists, secret names, inline/artifact limits, collection/string/depth
+limits, binary retention, and source-attribute retention. Unknown fields or levels fail validation.
+See [Automatic Asset Discovery](automatic-asset-discovery.md#privacy-and-capture-policy) for the
+content/version behavior.
 
 ## Safe Extensibility
 
@@ -325,9 +353,9 @@ trace:
       kind: task
       scope:
         instrumentor_name: autobench.manual
-        instrumentor_version: 0.2.0
+        instrumentor_version: 0.3.0
         package_name: autobench
-        package_version: 0.2.0
+        package_version: 0.3.0
         mechanism: manual
         layer: application
       status: ok

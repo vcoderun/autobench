@@ -12,6 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from autobench.metrics.observations import Direction, ObservationRole
 from autobench.metrics.semantics import SemanticType
 from autobench.protocol.signals import AbstractionLayer, CaptureMechanism
+from autobench.tracking import (
+    AssetRepresentation,
+    AssetSensitivity,
+    SerializedValue,
+)
 
 if TYPE_CHECKING:
     from autobench.instrumentation.manager import InstrumentationRuntime
@@ -36,6 +41,8 @@ class InstrumentorCapabilities(BaseModel):
     async_: bool = Field(default=False, alias="async")
     streaming: bool = False
     native_hooks: bool = False
+    asset_discovery: bool = False
+    asset_kinds: tuple[str, ...] = ()
 
 
 class InstrumentorInfo(BaseModel):
@@ -182,12 +189,47 @@ class InstrumentFactorSpec(BaseModel):
         return self
 
 
+class InstrumentAssetSpec(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    kind: str = Field(min_length=1)
+    local_id: str = Field(min_length=1)
+    name: str | None = Field(default=None, min_length=1)
+    source_locator: str | None = Field(default=None, min_length=1)
+    representation: AssetRepresentation = AssetRepresentation.DEFINITION
+    semantic_type: SemanticType | None = None
+    scope: str | None = Field(default=None, min_length=1)
+    owner_locator: str | None = Field(default=None, min_length=1)
+    definition_locator: str | None = Field(default=None, min_length=1)
+    aliases: tuple[str, ...] = ()
+    metadata: dict[str, SerializedValue] = Field(default_factory=dict)
+    sensitivity: AssetSensitivity = AssetSensitivity.INTERNAL
+    many: bool = False
+    value_path: str | None = None
+    value_factory: Callable[[InstrumentCall], Any] | None = None
+    extractor_target: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_extractor(self) -> InstrumentAssetSpec:
+        extractor_count = sum(
+            value is not None
+            for value in (self.value_path, self.value_factory, self.extractor_target)
+        )
+        if extractor_count != 1:
+            raise ValueError(
+                "instrument assets require exactly one of value_path, value_factory, "
+                "or extractor_target"
+            )
+        return self
+
+
 __all__ = (
     "Compatibility",
     "CompatibilityStatus",
     "InstrumentationError",
     "InstrumentationHandle",
     "InstrumentCall",
+    "InstrumentAssetSpec",
     "InstrumentFactorSpec",
     "InstrumentMetricSpec",
     "Instrumentor",

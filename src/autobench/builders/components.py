@@ -1,6 +1,6 @@
 from __future__ import annotations as _annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -11,6 +11,7 @@ from autobench.data.variants import Variant, normalize_variant_factors
 from autobench.evaluation.derivation import DeriverSpec
 from autobench.evaluation.scoring import ScoringSpec
 from autobench.instrumentation.config import (
+    AssetDiscoverySettings,
     AutoInstrumentation,
     HTTPXInstrumentation,
     InstrumentationConfig,
@@ -20,6 +21,7 @@ from autobench.instrumentation.config import (
     PydanticAIInstrumentation,
 )
 from autobench.instrumentation.models import Instrumentor
+from autobench.protocol.capture import CapturePolicy
 from autobench.runtime.awaitables import run_sync
 from autobench.runtime.pipeline import ExperimentResult
 from autobench.spec import BenchmarkInfo, BenchmarkSpec, TaskSpec
@@ -51,6 +53,7 @@ class BenchContext(BaseModel):
 class Benchmark:
     def __init__(self, benchmark_id: str) -> None:
         self._benchmark = BenchmarkInfo(id=benchmark_id)
+        self._capture: CapturePolicy | None = None
         self._dataset = DatasetSpec()
         self._task: TaskSpec | None = None
         self._variants: list[Variant] = []
@@ -61,6 +64,12 @@ class Benchmark:
 
     def description(self, value: str) -> Benchmark:
         self._benchmark = self._benchmark.model_copy(update={"description": value})
+        return self
+
+    def capture(self, policy: CapturePolicy | Mapping[str, Any]) -> Benchmark:
+        self._capture = (
+            policy if isinstance(policy, CapturePolicy) else CapturePolicy.model_validate(policy)
+        )
         return self
 
     def dataset(
@@ -134,10 +143,15 @@ class Benchmark:
         *,
         exclude: Collection[InstrumentorName] = (),
         strict: bool = False,
+        assets: AssetDiscoverySettings | Mapping[str, Any] | None = None,
     ) -> Benchmark:
         """Enable every compatible built-in instrumentor available at runtime."""
 
-        automatic = AutoInstrumentation(exclude=tuple(exclude), strict=strict)
+        automatic = AutoInstrumentation(
+            exclude=tuple(exclude),
+            strict=strict,
+            assets=(None if assets is None else AssetDiscoverySettings.model_validate(assets)),
+        )
         self._instrumentation = [
             automatic,
             *(
@@ -151,6 +165,7 @@ class Benchmark:
     def to_spec(self) -> BenchmarkSpec:
         return BenchmarkSpec(
             benchmark=self._benchmark,
+            capture=self._capture,
             dataset=self._dataset,
             task=self._task,
             variants=self._variants,

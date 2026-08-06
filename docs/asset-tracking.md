@@ -4,6 +4,11 @@ Benchmarks need to know which prompt, tool, schema, or configuration produced ea
 Autobench tracking assigns content-derived versions, captures structured metadata, persists history,
 and binds exact asset versions to RunRecords.
 
+Supported SDK instrumentors can discover these assets without decorators. Use explicit tracking on
+this page when the application owns a better logical identity or when the component never crosses an
+instrumented boundary. See [Automatic Asset Discovery](automatic-asset-discovery.md) for unannotated
+Pydantic AI, OpenAI, OpenAI Agents, capability scopes, privacy, and custom SDK extraction.
+
 ## Prompts And Text Assets
 
 Track inline text:

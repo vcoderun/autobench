@@ -137,13 +137,12 @@ Reusable SDK integrations implement the `Instrumentor` contract:
 
 ```python
 from autobench import (
-    AbstractionLayer,
-    CaptureMechanism,
     Compatibility,
     InstrumentationHandle,
     InstrumentationRuntime,
     InstrumentorInfo,
 )
+from autobench.protocol import AbstractionLayer, CaptureMechanism
 
 
 class ClientInstrumentor:
@@ -264,7 +263,7 @@ No manual span or metric calls are required. The instrumentor captures:
 
 The instrumentor composes with user event handlers and Pydantic AI's own
 `Instrumentation` capability. It does not configure, replace, or require
-OpenTelemetry. Supported Autobench 0.1.x builds pin the public integration seam
+OpenTelemetry. Autobench 0.2.x pins the public integration seam
 to Pydantic AI 2.22.x; `InstrumentationManager.check()` reports incompatible
 versions before installing hooks.
 
@@ -273,7 +272,7 @@ usage and direct model usage retain distinct accounting scopes, and cost remains
 downstream derivation. Replaying recorded ABP evidence does not require Pydantic AI
 to be installed.
 
-See the [live Pydantic AI example](examples.md#pydantic-ai) for a tool-using,
+See the [live Pydantic AI example](examples.md#pydantic-ai-live-layered-instrumentation) for a tool-using,
 structured-output, streaming benchmark with a retry path.
 
 ### Usage Bridge

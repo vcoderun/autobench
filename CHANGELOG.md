@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reorganized and expanded the documentation around installation, architecture, first-run workflow,
+  practical AI and non-AI use cases, current Python/CLI APIs, automatic asset discovery, and
+  troubleshooting.
+
 ## 0.2.0
 
 - Migrated the documentation build and GitHub Pages deployment to Zensical.
@@ -18,6 +22,9 @@
 - Added real offline ABP concurrency, OpenAI streaming, OpenAI Agents, and extraction examples.
 - Added a live Pydantic AI/OpenRouter example that uses `instrument_all()` to collect layered
   framework, client, and HTTPX transport evidence without manual task telemetry.
+- Added automatic behavioral asset discovery, versioning, source/effective lineage, capability
+  scopes, capture-aware persistence, and exact replay for Pydantic AI, OpenAI, OpenAI Agents, and
+  custom method instrumentors.
 - Extended the supported quality matrix through Python 3.14 and added built-wheel/no-extras smoke
   tests plus target-library compatibility CI.
 

@@ -175,6 +175,8 @@ def test_httpx_sync_redirect_hooks_and_opt_in_capture_are_preserved() -> None:
     body_artifacts = [artifact for artifact in ctx.artifacts if ".body" in artifact.name]
     assert body_artifacts
     assert all("secret" not in str(artifact.value) for artifact in body_artifacts)
+    assert ctx.asset_versions == []
+    assert ctx.asset_uses == []
 
 
 def test_httpx_default_capture_hashes_path_and_omits_headers_and_bodies() -> None:

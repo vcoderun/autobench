@@ -6,6 +6,7 @@ from importlib.util import find_spec
 from threading import Lock
 from typing import Any
 
+from agents import Agent, Runner
 from agents.tracing import (
     Span as AgentSpan,
 )
@@ -32,18 +33,56 @@ from agents.tracing.span_data import (
 )
 
 from autobench._version import __version__
+from autobench.instrumentation.config import AssetDiscoverySettings
 from autobench.instrumentation.manager import InstrumentationRuntime
 from autobench.instrumentation.models import (
     Compatibility,
     CompatibilityStatus,
     InstrumentationError,
     InstrumentationHandle,
+    InstrumentCall,
     InstrumentorCapabilities,
     InstrumentorInfo,
 )
+from autobench.instrumentation.openai_agents.assets import AssetDiscovery
 from autobench.metrics.semantics import Semantic
 from autobench.protocol.signals import AbstractionLayer, CaptureMechanism, EndReason
 from autobench.runtime.context import RunContext, Span, SpanKind, active_run_context
+from autobench.tracking import TrackingRegistry, track
+
+
+class _RunnerHandler:
+    def __init__(
+        self,
+        runtime: InstrumentationRuntime,
+        info: InstrumentorInfo,
+        assets: AssetDiscovery,
+    ) -> None:
+        self.runtime = runtime
+        self.info = info
+        self.assets = assets
+
+    @property
+    def suppression_keys(self) -> tuple[str, ...]:
+        return self.info.id, "openai_agents"
+
+    def begin(self, call: InstrumentCall) -> None:
+        starting_agent = call.kwargs.get("starting_agent")
+        if starting_agent is None and call.args:
+            starting_agent = call.args[0]
+        if isinstance(starting_agent, Agent):
+            self.assets.agent(starting_agent)
+        return None
+
+    def diagnose(self, stage: str, error: Exception) -> None:
+        self.runtime.diagnose(
+            self.info,
+            "openai_agents_asset_discovery_error",
+            f"{stage}: {type(error).__name__}: {error}",
+        )
+
+    def close(self) -> None:
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,7 +353,14 @@ def _remove_processor(provider: DefaultTraceProvider, processor: _Processor) -> 
 class OpenAIAgents:
     """Install native ABP capture through the OpenAI Agents tracing processor API."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        discovery: AssetDiscoverySettings | None = None,
+        registry: TrackingRegistry = track,
+    ) -> None:
+        self._discovery = discovery or AssetDiscoverySettings()
+        self._registry = registry
         self._info = InstrumentorInfo(
             id="autobench.openai_agents",
             version=__version__,
@@ -331,6 +377,17 @@ class OpenAIAgents:
                 async_=True,
                 streaming=True,
                 native_hooks=True,
+                asset_discovery=True,
+                asset_kinds=(
+                    "agent",
+                    "guardrail",
+                    "handoff",
+                    "output_schema",
+                    "policy",
+                    "prompt",
+                    "tool",
+                    "toolset",
+                ),
             ),
         )
 
@@ -346,6 +403,20 @@ class OpenAIAgents:
                     "OpenAI Agents is unavailable; install Autobench with the "
                     "'openai-agents' extra",
                 ),
+            )
+        missing_runner_methods = tuple(
+            method
+            for method in ("run", "run_sync", "run_streamed")
+            if not callable(getattr(Runner, method))
+        )
+        if missing_runner_methods:
+            return Compatibility(
+                status=CompatibilityStatus.UNSUPPORTED,
+                diagnostics=(
+                    "OpenAI Agents Runner methods are unavailable: "
+                    + ", ".join(missing_runner_methods),
+                ),
+                private_seam_supported=False,
             )
         provider = get_trace_provider()
         if not isinstance(provider, DefaultTraceProvider):
@@ -375,8 +446,30 @@ class OpenAIAgents:
             raise InstrumentationError("OpenAI Agents trace provider changed before installation")
         processor = _Processor(runtime, self.info)
         add_trace_processor(processor)
+        assets = AssetDiscovery(
+            runtime,
+            self.info,
+            target_version=version("openai-agents"),
+            registry=self._registry,
+            settings=self._discovery,
+        )
+        runner_handler = _RunnerHandler(runtime, self.info, assets)
+        runner_handles: list[InstrumentationHandle] = []
+        try:
+            for method in ("run", "run_sync", "run_streamed"):
+                runner_handles.append(
+                    runtime.patch_method(self.info, Runner, method, runner_handler)
+                )
+        except BaseException:
+            for handle in reversed(runner_handles):
+                handle.close()
+            processor.deactivate()
+            _remove_processor(provider, processor)
+            raise
 
         def close() -> None:
+            for handle in reversed(runner_handles):
+                handle.close()
             processor.deactivate()
             _remove_processor(provider, processor)
 

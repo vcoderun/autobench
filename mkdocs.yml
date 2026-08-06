@@ -72,22 +72,24 @@ plugins:
             - src
 nav:
   - Home: index.md
-  - Start:
-      - Getting Started: getting-started.md
-      - Examples: examples.md
-      - Complete Feature Guide: current-capabilities-guide.md
+  - Get Started:
+      - Installation: installation.md
+      - First Benchmark: getting-started.md
+      - Use Cases: use-cases.md
+      - Example Projects: examples.md
   - Foundations:
-      - Capability Map: capabilities.md
+      - Architecture: architecture.md
       - Core Concepts: concepts.md
       - Datasets And Variants: datasets-and-variants.md
       - Tasks And Runtime: tasks-and-runtime.md
       - Observations And Semantics: observations-and-semantics.md
-  - Workflows:
-      - Asset Tracking: asset-tracking.md
-      - Agentic Evaluation: agentic-evaluation.md
+  - Evaluation:
       - Scoring And Derivation: scoring-and-derivation.md
+      - Agentic Evaluation: agentic-evaluation.md
+  - Evidence And Lineage:
       - Recording And Reporting: recording-and-reporting.md
-      - CLI: cli.md
+      - Asset Tracking: asset-tracking.md
+      - Automatic Asset Discovery: automatic-asset-discovery.md
   - Autobench Protocol (ABP):
       - Protocol And Traces: instrumentation-and-traces.md
       - Native Instrumentation: native-instrumentation.md
@@ -95,7 +97,10 @@ nav:
   - Reference:
       - YAML Spec: yaml-spec.md
       - Python API: python-api.md
+      - CLI: cli.md
+      - Capability Map: capabilities.md
       - API Reference: api-reference.md
+      - Troubleshooting: troubleshooting.md
   - Project:
       - Development: development.md
       - Release Notes:

@@ -1,114 +1,132 @@
-# Concepts
+# Core Concepts
+
+Autobench models a benchmark as a deterministic experiment over cases and variants. The concepts
+below appear in both the YAML DSL and Python API.
 
 ## BenchmarkSpec
 
-The YAML source of truth. It defines:
+The canonical definition of one benchmark. It contains metadata, capture policy, dataset, task,
+variants, scoring, derivation, policies, instrumentation, report configuration, and a semantic
+registry.
 
-- benchmark metadata
-- dataset and cases
-- task target
-- variants and factors
-- scoring
-- derivation and post-derivation
-- report configuration
+## Case And Dataset
 
-## Case
+A `Case` is one input and its optional expectation:
 
-A single benchmark input with optional expected output, metadata, tags, and attachments.
+```python
+from autobench import Case
 
-Cases are the unit of replay and comparison.
+case = Case(
+    id="refund-request",
+    input={"message": "Refund order 42"},
+    expected={"route": "billing"},
+    tags=["regression", "routing"],
+    metadata={"language": "en"},
+)
+```
 
-## Variant
+A `DatasetSpec` adds identity, version, defaults, source provenance, and attachments to a case
+collection.
 
-A concrete factor set for a run. Variants represent the changing parts of the system:
+## Variant And Factor
 
-- prompt version
-- model
-- provider
-- policy
-- tool version
+A variant is one concrete configuration of the subject. Factors are independent variables such as
+model, prompt version, implementation strategy, or feature flag.
+
+```text
+case: refund-request
+variant: candidate
+factors: model=gpt-x, prompt=refund-v4, temperature=0
+```
+
+Autobench records factors and their semantics. It does not assume that changing several factors at
+once proves which one caused a metric delta.
+
+## Task
+
+The task adapts a case and variant to the system being benchmarked:
+
+```python
+def run(ctx, case):
+    model = ctx.factor("model")
+    return application.execute(case.input, model=model)
+```
+
+The task owns application calls. Autobench owns invocation, timing context, evidence preservation,
+and status classification.
 
 ## Observation
 
-The atomic evidence unit recorded during execution. Observations can be:
+An `Observation` is a typed fact produced during a run. It has a kind, name, value, optional
+semantic type and unit, source, role, direction, and provenance.
 
-- metrics
-- factors
-- events
-- artifacts
+Kinds include metrics, factors, events, diagnostics, outcomes, checks, and artifacts. Sources let
+projection distinguish a task-emitted metric from a scorer or derived value with the same semantic
+type.
 
-Observations may carry a semantic type such as `quality.correctness`, `money.cost`, or `llm.tokens.input`.
+## Semantic Type
 
-## Trace Envelope
+A semantic type is a stable string such as `quality.correctness`, `llm.tokens.input`, or
+`time.latency`. It lets generic components consume meaning rather than application-local names.
 
-A structured trace attached to a run. Trace envelopes preserve agent/workflow spans without making OpenTelemetry or any hosted tracing platform a core dependency.
-
-Trace spans can be typed as:
-
-- `agent`
-- `llm`
-- `tool`
-- `retriever`
-- `parser`
-- `workflow`
-- `custom`
-
-Autobench converts useful trace fields into semantic observations, such as token usage, model/provider factors, duration, and span errors. Large raw trace payloads should be stored as artifacts instead of being embedded directly into `run.yaml`.
-
-## Expected Action
-
-An expected action describes behavior a system should perform during a run. It is generic enough for agent tools, retrievers, workflow steps, or other component calls.
-
-Expected actions support:
-
-- target matching
-- input subset matching
-- output matching
-- ordered sequence checks
-- optional vs required actions
-
-The built-in `expected_action` scorer can emit `agent.tool.selection.correctness`, `agent.tool.argument.correctness`, and `agent.tool.sequence.correctness` style metrics without requiring an LLM judge.
-
-## Metric Pack
-
-A metric pack is an optional bundle of semantic registry entries, scorer defaults, report metrics, and feedback extractors.
-
-Metric packs keep Autobench from becoming a large class-per-metric catalog. Core owns evidence, records, and execution; packs provide domain defaults such as `agentic`, `structured_output`, `llm_usage`, and `performance`.
+The registry carries aliases, parent relationships, aggregation hints, cardinality, privacy, and
+stability metadata. Applications may extend it without replacing built-ins.
 
 ## Score
 
-A score is a structured evaluation result produced by the scoring layer and projected into observations with score precedence.
+A `ScoreRecord` is evaluator output. Scores can be objectives, constraints, or diagnostics and can
+include reasons, errors, and selected span provenance. They are projected into observations with
+score precedence for reporting and policies.
 
-## Derived Metric
+## Derivation
 
-A metric computed from observed inputs. Example: token usage plus model/provider factors become `money.cost`.
+A deriver computes a metric from evidence:
 
-## Post-Derivation
+- per-run derivation uses one run, such as tokens + model pricing -> cost;
+- post-derivation uses the experiment, such as matched baseline/candidate latency -> speedup.
 
-Cross-run derivation that needs the full experiment result. Example: paired-baseline latency speedup.
+Derived observations preserve their input references and source.
 
-## Run Record
+## Policy
 
-An immutable YAML snapshot of one case x variant execution, including:
+A policy is a pass/fail requirement over semantic metrics. Operators are explicit fields such as
+`must_equal`, `must_greater_equal`, `must_less_equal`, and `must_be_between`. Policies affect
+evaluation status without hiding the underlying metric.
 
-- task output
-- observations
-- spans
-- scores
-- factors
-- tracked asset versions
-- artifacts
-- errors
+## ABP Trace
+
+The Autobench Protocol (ABP) is the native execution evidence model. Instrumentors and manual spans
+emit immutable signals that materialize into a trace containing spans, measurements, events, links,
+references, errors, stream state, and diagnostics.
+
+ABP is not an OpenTelemetry wrapper. Optional bridges may export it later, but Autobench controls
+its semantic, replay, accounting, and optimization contracts.
+
+## Tracked Asset
+
+A tracked asset is a behavioral component whose exact version matters to a run: prompt, tool,
+output schema, type, capability, agent, guardrail, handoff, policy, toolset, or arbitrary config.
+
+Assets have stable logical IDs and content-addressed versions. Their history records normalized
+state, source hashes, parent versions, changed fields, and diffs. An `AssetUse` binds the version and
+representation actually used to a run and optional span.
+
+## RunRecord And ExperimentRecord
+
+`RunRecord` is the immutable evidence for one case x variant execution. `ExperimentRecord` describes
+the plan, source hashes, environment, report configuration, run paths, and aggregate statuses for
+the whole matrix.
+
+Records are human-readable YAML views backed by strict typed models and versioned JSON Schemas.
 
 ## Report
 
-A replay-time view over recorded runs. Reports aggregate semantic metrics into:
-
-- leaderboards
-- case matrices
-- comparisons
-- metric distributions
+A report is a replay-time projection, not the source of truth. Leaderboards, case matrices,
+comparisons, distributions, and run tables all derive from RunRecords. New report configuration can
+therefore analyze existing evidence without running the subject.
 
 ## Optimization Feedback
 
-Autobench can compact failed scores, task errors, span errors, policy violations, factors, and asset versions into feedback records. These records are designed for optimization systems such as pydantic-gepa and autoptimize, so they do not need to scrape raw reports or infer failure categories from terminal output.
+Feedback records compact failed scores, policy violations, task and span errors, factors, and asset
+versions. They give optimizers structured evidence without forcing them to scrape terminal output or
+infer semantics from metric names.

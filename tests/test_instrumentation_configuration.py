@@ -15,8 +15,12 @@ from rich.console import Console
 import autobench.instrumentation.registry as registry_module
 import autobench.runtime.pipeline as pipeline_module
 from autobench import (
+    AssetDiscoverySettings,
+    AssetRepresentation,
     AutoInstrumentation,
     Benchmark,
+    CaptureLevel,
+    CapturePolicy,
     Case,
     Compatibility,
     CompatibilityStatus,
@@ -162,6 +166,89 @@ def test_instrument_all_replaces_its_previous_configuration() -> None:
         AutoInstrumentation(exclude=("httpx", "pydantic_ai"), strict=True),
         OpenAIInstrumentation(enabled=False),
     ]
+
+
+def test_asset_discovery_settings_normalize_filter_and_serialize() -> None:
+    settings = AssetDiscoverySettings(
+        representations=(
+            AssetRepresentation.EFFECTIVE,
+            AssetRepresentation.DEFINITION,
+            AssetRepresentation.EFFECTIVE,
+        ),
+        include=(" tool ", "prompt", "tool"),
+    )
+    benchmark = Benchmark("assets").instrument_all(assets=settings)
+
+    assert settings.representations == (
+        AssetRepresentation.EFFECTIVE,
+        AssetRepresentation.DEFINITION,
+    )
+    assert settings.include == ("prompt", "tool")
+    assert settings.allows("tool", AssetRepresentation.EFFECTIVE)
+    assert not settings.allows("output_schema", AssetRepresentation.EFFECTIVE)
+    assert not AssetDiscoverySettings(discover=False).allows("tool", AssetRepresentation.DEFINITION)
+    assert not AssetDiscoverySettings(representations=(AssetRepresentation.DEFINITION,)).allows(
+        "tool", AssetRepresentation.EFFECTIVE
+    )
+    assert benchmark_spec_to_yaml_view(benchmark.to_spec())["benchmark"]["assets"][
+        "instrumentation"
+    ] == {
+        "all": {
+            "assets": {
+                "representations": ["effective", "definition"],
+                "include": ["prompt", "tool"],
+            }
+        }
+    }
+    with pytest.raises(ValidationError, match="asset kind names cannot be empty"):
+        AssetDiscoverySettings(include=(" ",))
+
+
+def test_fluent_and_yaml_capture_policies_share_one_typed_contract(
+    tmp_path: Path,
+) -> None:
+    policy = CapturePolicy.hashed(
+        semantic_overrides={"tool": CaptureLevel.FULL},
+        deny_paths=("prompt.secret",),
+    )
+    fluent = Benchmark("private-assets").capture(policy).to_spec()
+    mapped = (
+        Benchmark("mapped-assets")
+        .capture(
+            {
+                "default_level": "hash",
+                "use_semantic_defaults": False,
+                "semantic_overrides": {"tool": "full"},
+                "deny_paths": ["prompt.secret"],
+            }
+        )
+        .to_spec()
+    )
+    path = tmp_path / "autobench.yaml"
+    path.write_text(
+        """benchmark:
+  private-assets:
+    capture:
+      default_level: hash
+      use_semantic_defaults: false
+      semantic_overrides:
+        tool: full
+      deny_paths: [prompt.secret]
+""",
+        encoding="utf-8",
+    )
+
+    loaded = load_benchmark_spec(path)
+
+    assert loaded.capture == policy
+    assert mapped.capture == policy
+    assert loaded == fluent
+    assert benchmark_spec_to_yaml_view(loaded)["benchmark"]["private-assets"]["capture"] == {
+        "default_level": "hash",
+        "use_semantic_defaults": False,
+        "semantic_overrides": {"tool": "full"},
+        "deny_paths": ["prompt.secret"],
+    }
 
 
 @pytest.mark.parametrize(
@@ -343,6 +430,50 @@ def test_disabled_auto_instrumentation_does_not_discover_integrations() -> None:
 
     assert selected == ()
     assert skipped == ()
+
+
+def test_auto_instrumentation_propagates_asset_discovery_to_semantic_integrations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = AssetDiscoverySettings(include=("prompt",))
+    observed: list[BuiltinInstrumentationConfig] = []
+
+    def inspect(
+        config: BuiltinInstrumentationConfig,
+        *,
+        manager: InstrumentationManager,
+    ) -> tuple[Instrumentor | None, InstrumentorStatus]:
+        assert isinstance(manager, InstrumentationManager)
+        observed.append(config)
+        status = InstrumentorStatus(
+            name=config.kind,
+            extra=config.kind.replace("_", "-"),
+            info=registry_module._INFO[config.kind],
+            compatibility=Compatibility(status=CompatibilityStatus.UNAVAILABLE),
+            capture_mode="test",
+        )
+        return None, status
+
+    monkeypatch.setattr(registry_module, "_inspect_instrumentor", inspect)
+    selected, skipped = registry_module.resolve_instrumentors(
+        [AutoInstrumentation(assets=settings)]
+    )
+
+    assert selected == ()
+    assert len(skipped) == 4
+    assert [
+        config.assets
+        for config in observed
+        if isinstance(
+            config,
+            (
+                PydanticAIInstrumentation,
+                OpenAIInstrumentation,
+                OpenAIAgentsInstrumentation,
+            ),
+        )
+    ] == [settings, settings, settings]
+    assert isinstance(observed[-1], HTTPXInstrumentation)
 
 
 def test_automatically_selected_instrumentor_uses_the_benchmark_lifecycle(
@@ -547,6 +678,9 @@ def test_benchmark_schema_exposes_typed_instrumentation_completion() -> None:
     checked_in_instrumentation = checked_in["properties"]["benchmark"]["additionalProperties"][
         "properties"
     ]["instrumentation"]
+    checked_in_capture = checked_in["properties"]["benchmark"]["additionalProperties"][
+        "properties"
+    ]["capture"]
 
     assert checked_in == generated
     assert generated_instrumentation["additionalProperties"] is False
@@ -568,6 +702,29 @@ def test_benchmark_schema_exposes_typed_instrumentation_completion() -> None:
         "httpx",
     ]
     assert all_properties["strict"]["default"] is False
+    assert all_properties["assets"]["properties"]["representations"]["items"]["enum"] == [
+        "definition",
+        "effective",
+    ]
+    assert (
+        checked_in_instrumentation["properties"]["pydantic_ai"]["oneOf"][1]["properties"]["assets"][
+            "properties"
+        ]["discover"]["default"]
+        is True
+    )
+    assert (
+        "assets" not in checked_in_instrumentation["properties"]["httpx"]["oneOf"][1]["properties"]
+    )
+    assert checked_in_capture["properties"]["default_level"]["enum"] == [
+        "none",
+        "metadata",
+        "hash",
+        "redacted",
+        "full",
+    ]
+    assert checked_in_capture["properties"]["semantic_overrides"]["additionalProperties"][
+        "enum"
+    ] == ["none", "metadata", "hash", "redacted", "full"]
 
 
 def test_cli_doctor_and_trace_render_professional_tables(

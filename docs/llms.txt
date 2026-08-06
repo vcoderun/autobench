@@ -1,44 +1,54 @@
 # Autobench
 
-> Autobench is a YAML-first Python framework for collecting semantic, replayable benchmark evidence from AI and non-AI systems. It provides datasets, variants, tasks, instrumentation, scoring, derivation, immutable records, replay, reporting, and tracked asset lineage without making OpenTelemetry or a specific evaluation runtime part of its core.
+> Autobench is a YAML-first Python framework for evaluating AI and non-AI systems as semantic, replayable experiments. It owns case/variant execution, ABP instrumentation, scoring, derivation, immutable records, reports, and behavioral asset lineage without making OpenTelemetry or one evaluation runtime part of its core.
 
-Use this index to select the smallest relevant documentation page. Use the full bundle when broad context is required.
+Use this index to load the smallest relevant page. Use the full bundle when broad context is required.
 
-## Start
+## Get Started
 
-- [Getting Started](https://vcoderun.github.io/autobench/_markdown/getting-started.txt): Install Autobench, define a first YAML benchmark, validate it, run it, and replay the recorded experiment.
-- [Examples](https://vcoderun.github.io/autobench/_markdown/examples.txt): Offline and live benchmark, ABP instrumentation, replay, and CodeMode integrations.
-- [Complete Feature Guide](https://vcoderun.github.io/autobench/_markdown/current-capabilities-guide.txt): End-to-end guide to the complete supported feature set.
-- [Full Documentation](https://vcoderun.github.io/autobench/llms-full.txt): All public documentation pages concatenated as Markdown.
+- [Installation](https://vcoderun.github.io/autobench/_markdown/installation.txt): Python support, package extras, editor schemas, credentials, and development setup.
+- [First Benchmark](https://vcoderun.github.io/autobench/_markdown/getting-started.txt): Build, validate, run, record, replay, compare, and export a complete benchmark.
+- [Use Cases](https://vcoderun.github.io/autobench/_markdown/use-cases.txt): Generic regressions, performance, LLM cost, agents, production data, custom SDKs, CI, and optimizer handoff.
+- [Example Projects](https://vcoderun.github.io/autobench/_markdown/examples.txt): Offline and live repository examples from minimal through CodeMode and Pydantic AI.
+- [Full Documentation](https://vcoderun.github.io/autobench/llms-full.txt): Every public documentation page in navigation order.
 
 ## Foundations
 
-- [Capability Map](https://vcoderun.github.io/autobench/_markdown/capabilities.txt): Ownership boundaries and a complete capability inventory.
-- [Core Concepts](https://vcoderun.github.io/autobench/_markdown/concepts.txt): Benchmark, case, variant, factor, metric, observation, span, record, and asset terminology.
-- [Datasets and Variants](https://vcoderun.github.io/autobench/_markdown/datasets-and-variants.txt): Inline and file-backed cases, matrix expansion, factor semantics, and identity rules.
-- [Tasks and Runtime](https://vcoderun.github.io/autobench/_markdown/tasks-and-runtime.txt): Callable resolution, sync and async tasks, run context, lifecycle, concurrency, retries, and failures.
-- [Observations and Semantics](https://vcoderun.github.io/autobench/_markdown/observations-and-semantics.txt): Semantic types, projections, queries, duplicate resolution, provenance, and typed evidence.
+- [Architecture](https://vcoderun.github.io/autobench/_markdown/architecture.txt): Layer ownership, execution lifecycle, evidence flow, extension seams, immutability, and optimization boundary.
+- [Core Concepts](https://vcoderun.github.io/autobench/_markdown/concepts.txt): Cases, variants, observations, semantics, scores, ABP traces, assets, records, and reports.
+- [Datasets and Variants](https://vcoderun.github.io/autobench/_markdown/datasets-and-variants.txt): Inline/file/glob datasets, defaults, factors, generated cases, production samples, and reproducibility.
+- [Tasks and Runtime](https://vcoderun.github.io/autobench/_markdown/tasks-and-runtime.txt): Callable resolution, sync/async tasks, context, lifecycle, concurrency, statuses, and failure isolation.
+- [Observations and Semantics](https://vcoderun.github.io/autobench/_markdown/observations-and-semantics.txt): Semantic types, registry, aliases, projection, source precedence, queries, and metric packs.
 
-## Workflows
+## Evaluation
 
-- [Instrumentation and Traces](https://vcoderun.github.io/autobench/_markdown/instrumentation-and-traces.txt): Manual spans, method instrumentation, extractors, trace attachment, and Pydantic AI usage capture.
-- [Native Instrumentation](https://vcoderun.github.io/autobench/_markdown/native-instrumentation.txt): Typed/YAML Pydantic AI, OpenAI, OpenAI Agents, and HTTPX instrumentation, privacy, diagnostics, and layering.
-- [Asset Tracking](https://vcoderun.github.io/autobench/_markdown/asset-tracking.txt): Prompt, tool, Pydantic model, dataclass, and class versioning with hashes, history, and diffs.
-- [Agentic Evaluation](https://vcoderun.github.io/autobench/_markdown/agentic-evaluation.txt): Tool-call, argument, plan, policy, and trace evaluation primitives.
-- [Scoring and Derivation](https://vcoderun.github.io/autobench/_markdown/scoring-and-derivation.txt): Built-in and Python scorers, derived metrics, pricing, policies, repeated measurement, and paired baselines.
-- [Recording and Reporting](https://vcoderun.github.io/autobench/_markdown/recording-and-reporting.txt): Immutable RunRecords, artifacts, replay, comparison, leaderboard, matrix, distribution, and export behavior.
-- [CLI](https://vcoderun.github.io/autobench/_markdown/cli.txt): Validate, run, replay, report, compare, export, and ABP instrumentation diagnostics.
+- [Scoring and Derivation](https://vcoderun.github.io/autobench/_markdown/scoring-and-derivation.txt): Built-in and Python scorers, pricing, policies, measurements, and paired baselines.
+- [Agentic Evaluation](https://vcoderun.github.io/autobench/_markdown/agentic-evaluation.txt): Expected actions, tool selection, arguments, sequence, span selectors, and feedback.
+
+## Evidence And Lineage
+
+- [Recording and Reporting](https://vcoderun.github.io/autobench/_markdown/recording-and-reporting.txt): Immutable records, artifacts, replay, leaderboards, matrices, comparisons, distributions, and exports.
+- [Asset Tracking](https://vcoderun.github.io/autobench/_markdown/asset-tracking.txt): Explicit prompt, tool, Pydantic model, dataclass, class, config, version, hash, history, and diff tracking.
+- [Automatic Asset Discovery](https://vcoderun.github.io/autobench/_markdown/automatic-asset-discovery.txt): Decorator-free SDK asset lineage, definition/effective representations, capability scopes, privacy, persistence, and custom extraction.
+
+## Autobench Protocol (ABP)
+
+- [Protocol and Traces](https://vcoderun.github.io/autobench/_markdown/instrumentation-and-traces.txt): Manual spans, method instrumentation, signals, extraction, accounting, and adapter boundaries.
+- [Native Instrumentation](https://vcoderun.github.io/autobench/_markdown/native-instrumentation.txt): Pydantic AI, OpenAI, OpenAI Agents, HTTPX, `instrument_all`, privacy, streaming, diagnostics, and replay.
+- [Compatibility Contract](https://vcoderun.github.io/autobench/_markdown/abp-compatibility.txt): Stable protocol boundary, concurrency and performance contracts, and optional integration targets.
 
 ## Reference
 
-- [YAML Specification](https://vcoderun.github.io/autobench/_markdown/yaml-spec.txt): Complete YAML-first benchmark DSL and resolution rules.
-- [Python API](https://vcoderun.github.io/autobench/_markdown/python-api.txt): Typed builder, runtime, instrumentation, recording, replay, and reporting APIs.
-- [API Reference](https://vcoderun.github.io/autobench/_markdown/api-reference.txt): Generated public Python API signatures and members.
-- [Development](https://vcoderun.github.io/autobench/_markdown/development.txt): Repository setup, quality gates, and contribution workflow.
-- [Release Notes 0.2.0](https://vcoderun.github.io/autobench/_markdown/release-notes/0.2.0.txt): ABP, native instrumentation, compatibility, and stability guarantees.
-- [Release Notes 0.1.0](https://vcoderun.github.io/autobench/_markdown/release-notes/0.1.0.txt): Initial release scope and guarantees.
+- [YAML Specification](https://vcoderun.github.io/autobench/_markdown/yaml-spec.txt): Complete DSL, schema headers, resolution rules, instrumentation, capture, and exported YAML views.
+- [Python API](https://vcoderun.github.io/autobench/_markdown/python-api.txt): Builder, spec, runtime, instrumentation, tracking, records, reports, and extension rules.
+- [CLI](https://vcoderun.github.io/autobench/_markdown/cli.txt): Validate, run, replay, report, compare, export, and instrumentation diagnostics.
+- [Capability Map](https://vcoderun.github.io/autobench/_markdown/capabilities.txt): Complete shipped feature inventory and ownership boundaries.
+- [API Reference](https://vcoderun.github.io/autobench/_markdown/api-reference.txt): Generated public Python signatures and model fields.
+- [Troubleshooting](https://vcoderun.github.io/autobench/_markdown/troubleshooting.txt): Task imports, YAML, datasets, metrics, pricing, instrumentation, assets, traces, capture, and replay failures.
 
-## Optional
+## Project
 
-- [GitHub Repository](https://github.com/vcoderun/autobench): Source code, issues, and releases.
-- [Changelog](https://github.com/vcoderun/autobench/blob/main/CHANGELOG.md): Unreleased and released changes.
+- [Development](https://vcoderun.github.io/autobench/_markdown/development.txt): Repository setup, quality gates, docs, examples, and release artifacts.
+- [Release Notes 0.2.0](https://vcoderun.github.io/autobench/_markdown/release-notes/0.2.0.txt): ABP, native instrumentation, automatic assets, compatibility, and stability.
+- [Release Notes 0.1.0](https://vcoderun.github.io/autobench/_markdown/release-notes/0.1.0.txt): Initial benchmark core scope.
+- [GitHub Repository](https://github.com/vcoderun/autobench): Source, issues, and releases.

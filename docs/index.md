@@ -1,10 +1,11 @@
 # Autobench
 
-**Turn one-off benchmark scripts into replayable semantic experiment data.**
+**Build benchmarks once. Keep the evidence, semantics, lineage, and replay.**
 
-Autobench is a YAML-first benchmark and evidence framework. It runs deterministic case and
-variant matrices, records typed observations and artifacts, and lets you replay or compare the
-evidence without executing the subject again.
+Autobench is a YAML-first Python framework for evaluating AI and non-AI systems. It replaces
+one-off benchmark runners with a reusable runtime that expands datasets across variants, executes
+application-owned tasks, collects semantic evidence, evaluates outcomes, and writes immutable run
+records.
 
 ```bash
 uv add autobench
@@ -12,73 +13,97 @@ autobench validate autobench.yaml
 autobench run autobench.yaml --record runs/latest
 ```
 
-The core loop is:
+The same recorded experiment can then be inspected without executing the application again:
 
-```text
-Dataset / Cases
-  x Variants / Factors
-    -> Task executes the subject
-    -> Context and spans collect observations
-    -> Scorers evaluate outputs
-    -> Derivers add semantic metrics
-    -> Recorder writes immutable YAML evidence
-    -> Replay, report, export, and compare operate on recorded runs
+```bash
+autobench replay runs/latest
+autobench report runs/latest
+autobench compare runs/latest --baseline current --candidate proposed
+autobench export runs/latest --format csv --path analysis/runs.csv
 ```
 
-Autobench is designed for AI-heavy systems, but the runtime itself is generic. If you can express
-a case, a variant, a task, and semantic outcomes, Autobench can benchmark it.
+## The Framework Loop
 
-## Why It Exists
+```text
+BenchmarkSpec
+  Dataset[Case] x Variant[Factor]
+    -> task(ctx, case)
+    -> observations + ABP trace + artifacts + asset versions
+    -> scorers + per-run derivation
+  -> cross-run derivation + policies
+  -> immutable RunRecords
+  -> replay + Rich reports + comparison + exports + optimization feedback
+```
 
-Most benchmark codebases keep re-implementing the same machinery:
+The task is the only application-specific part. Autobench owns the repeated infrastructure around
+it: matrix planning, context propagation, instrumentation, scoring, derivation, persistence,
+reporting, and replay.
 
-- scenario loading
-- case x variant expansion
-- task orchestration
-- metrics and derived metrics
-- artifacts and replay
-- comparison and reporting
+## Why Semantic Evidence Matters
 
-Autobench provides those utilities as framework primitives so users describe the benchmark instead of rebuilding the runner.
+Raw names such as `prompt_tokens`, `input_tokens`, `accuracy`, and `answer_quality` are local
+conventions. Autobench observations can also declare stable meaning:
 
-## What Autobench Owns
+```text
+llm.tokens.input
+llm.tokens.output
+llm.model.name
+quality.correctness
+time.latency
+money.cost
+agent.tool.argument.correctness
+```
 
-Autobench is more than a matrix runner. It owns the evidence lifecycle from benchmark definition
-to optimization-ready records:
+That semantic layer lets reports, pricing derivation, policy checks, and optimization systems use
+evidence from different applications without guessing what every local metric name means.
 
-| Layer | Capabilities |
+## What You Can Benchmark
+
+Autobench is optimized for AI systems but does not require one:
+
+| System | Cases | Variants | Evidence |
+| --- | --- | --- | --- |
+| LLM application | prompts and expected answers | model, prompt, temperature | quality, tokens, latency, cost |
+| Agent | user goals and expected actions | instructions, tools, model | action selection, arguments, sequence, completion |
+| Search or retrieval | queries and relevant items | index, reranker, limits | recall, precision, latency |
+| Service/API | requests and expected responses | release, configuration | correctness, errors, throughput, SLA |
+| Algorithm | input fixtures | implementation | correctness, repeated timings, speedup |
+| Data pipeline | source batches | parser or policy | coverage, validity, loss, runtime |
+
+See [Use Cases](use-cases.md) for complete patterns.
+
+## Core Capabilities
+
+| Area | Included |
 | --- | --- |
-| Definition | YAML DSL, Python builder, datasets, case defaults, variants, factors, schema hints |
-| Execution | deterministic matrix planning, sync/async tasks, concurrency, failure isolation, progress events |
-| Evidence | semantic observations, spans, artifacts, checks, diagnostics, errors, trace envelopes |
-| Evaluation | six scorer kinds, expected-action evaluation, policies, metric packs, custom scorers |
-| Derivation | token cost, tiered pricing, paired baselines, verdicts, measurement statistics |
-| Lineage | prompt/tool/type/config tracking, structured schemas, source hashes, versions, diffs |
-| Persistence | immutable YAML RunRecords, source hashes, environment metadata, portable artifacts |
-| Analysis | replay, Rich reports, leaderboards, case matrices, comparisons, distributions, exports |
-| Optimization | compact feedback records and semantic evidence for pydantic-gepa and autoptimize |
+| Definition | Human-readable YAML DSL, typed Python builder, JSON Schema completion |
+| Data | Inline/file/glob datasets, defaults, attachments, generated and production cases |
+| Execution | Sync/async tasks, deterministic matrices, bounded concurrency, failure isolation |
+| Evidence | Semantic observations, checks, events, artifacts, measurements, ABP traces |
+| Evaluation | Built-in and custom scorers, expected actions, policies, metric packs |
+| Derivation | Token cost, tiered pricing, paired baselines, comparison verdicts |
+| Instrumentation | Manual spans, method instrumentation, Pydantic AI, OpenAI, Agents, HTTPX |
+| Lineage | Explicit and automatic prompt/tool/schema/capability/agent asset versioning |
+| Persistence | Immutable YAML records, source hashes, environment metadata, portable artifacts |
+| Analysis | Replay, Rich reports, leaderboards, matrices, distributions, comparisons, exports |
 
-See the [Capability Map](capabilities.md) for the complete feature inventory and ownership
-boundaries.
+## Choose A Starting Point
 
-## Choose A Path
-
-| Goal | Start here |
+| Goal | Read |
 | --- | --- |
-| Run the smallest complete benchmark | [Getting Started](getting-started.md) |
-| See everything Autobench supports | [Capability Map](capabilities.md) |
-| Learn the evidence model | [Core Concepts](concepts.md) |
-| Adapt a working integration | [Examples](examples.md) |
-| Define a benchmark declaratively | [YAML Spec](yaml-spec.md) |
-| Instrument an existing application | [Instrumentation And Traces](instrumentation-and-traces.md) |
-| Track prompts, tools, and schemas | [Asset Tracking](asset-tracking.md) |
-| Evaluate agent behavior | [Agentic Evaluation](agentic-evaluation.md) |
-| Replay and compare recorded evidence | [Recording And Reporting](recording-and-reporting.md) |
+| Install the right extras | [Installation](installation.md) |
+| Run a complete benchmark | [First Benchmark](getting-started.md) |
+| Find a pattern for your system | [Use Cases](use-cases.md) |
+| Understand ownership and data flow | [Architecture](architecture.md) |
+| Author the full DSL | [YAML Spec](yaml-spec.md) |
+| Compose benchmarks in Python | [Python API](python-api.md) |
+| Instrument an existing SDK application | [Native Instrumentation](native-instrumentation.md) |
+| Collect prompt/tool/schema lineage automatically | [Automatic Asset Discovery](automatic-asset-discovery.md) |
+| Inspect all shipped features | [Capability Map](capabilities.md) |
 
-## Start Here
+## Project Boundaries
 
-- [Getting Started](getting-started.md)
-- [Capability Map](capabilities.md)
-- [Examples](examples.md)
-- [YAML Spec](yaml-spec.md)
-- [Python API](python-api.md)
+Autobench records and evaluates evidence. It does not own your application, make causal claims from
+confounded runs, keep provider pricing permanently current, or choose an optimization algorithm.
+Those boundaries keep the core usable for arbitrary systems while allowing pydantic-gepa,
+autoptimize, or another consumer to build on stable experiment records.

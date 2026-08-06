@@ -17,6 +17,7 @@ classifiers = [
 keywords = ["benchmarks", "evals", "agents", "experiments", "yaml"]
 dependencies = [
     "click>=8.1.8",
+    "filelock>=3.16",
     "packaging>=24",
     "pydantic>=2.7",
     "PyYAML>=6.0.2",

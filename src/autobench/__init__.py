@@ -123,11 +123,13 @@ from autobench.evaluation.scoring import (
 )
 from autobench.evaluation.spans import SpanSelector, select_spans
 from autobench.instrumentation import (
+    AssetDiscoverySettings,
     AutoInstrumentation,
     Compatibility,
     CompatibilityStatus,
     HTTPXCaptureSettings,
     HTTPXInstrumentation,
+    InstrumentAssetSpec,
     InstrumentationConfig,
     InstrumentationConflictError,
     InstrumentationError,
@@ -216,7 +218,9 @@ from autobench.metrics.semantics import (
     semantic_registry_payload_from_yaml_view,
     semantic_registry_to_yaml_view,
 )
+from autobench.protocol.capture import CapturePolicy
 from autobench.protocol.context import suppress_instrumentation
+from autobench.protocol.signals import CaptureLevel
 from autobench.records.artifacts import ArtifactRef
 from autobench.records.recording import (
     RECORD_VERSION,
@@ -326,6 +330,11 @@ from autobench.spec import (
 )
 
 from .tracking import (
+    AssetDefinition,
+    AssetProvenance,
+    AssetRepresentation,
+    AssetSensitivity,
+    AssetUse,
     AssetVersion,
     FieldAsset,
     ParamAsset,
@@ -346,6 +355,12 @@ __all__ = (
     "AggregationFn",
     "ActionMatchResult",
     "ArtifactRef",
+    "AssetDefinition",
+    "AssetDiscoverySettings",
+    "AssetProvenance",
+    "AssetRepresentation",
+    "AssetSensitivity",
+    "AssetUse",
     "AssetVersion",
     "AutobenchError",
     "BenchContext",
@@ -361,6 +376,8 @@ __all__ = (
     "CaseMatrix",
     "CaseMatrixReportSpec",
     "CaseDefaults",
+    "CaptureLevel",
+    "CapturePolicy",
     "CheckResult",
     "Component",
     "Compatibility",
@@ -400,6 +417,7 @@ __all__ = (
     "HTTPXInstrumentation",
     "INSTRUMENTOR_TAG",
     "InstrumentCall",
+    "InstrumentAssetSpec",
     "InstrumentFactorSpec",
     "InstrumentationConflictError",
     "InstrumentationError",

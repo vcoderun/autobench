@@ -14,6 +14,8 @@ from autobench import (
     DEFAULT_SEMANTIC_REGISTRY,
     RECORD_VERSION,
     ArtifactRef,
+    AssetProvenance,
+    AssetSensitivity,
     AssetVersion,
     BenchmarkInfo,
     BenchmarkPlan,
@@ -24,6 +26,7 @@ from autobench import (
     ErrorRecord,
     EvaluationStatus,
     ExperimentRecord,
+    ExperimentResult,
     RecordingError,
     RunRecord,
     RunResult,
@@ -54,6 +57,7 @@ from autobench.records.recording import (
     run_record_to_yaml_view,
 )
 from autobench.runtime.context import SpanRecord
+from autobench.tracking import AssetCandidate, TrackingRegistry
 
 
 class _OpaqueValue:
@@ -134,6 +138,78 @@ async def test_record_experiment_writes_successful_and_failed_run_records(
     assert raw_failed["spans"][failed.spans[0].id]["name"] == "task"
     assert raw_failed["artifacts"]["payload"]["path"].startswith("artifacts/")
     assert "record_version" not in raw_failed
+
+
+def test_recording_persists_and_replays_exact_discovered_asset_uses(
+    tmp_path: Path,
+) -> None:
+    registry = TrackingRegistry()
+    registered = registry.register_candidate(
+        AssetCandidate(
+            kind="prompt",
+            local_id="instructions",
+            name="instructions",
+            source_locator="custom_sdk:agent:prompt:instructions",
+            canonical_content="Use the lookup tool.",
+            semantic_type=Semantic.PROMPT_VERSION,
+            scope="agent",
+            provenance=AssetProvenance(
+                system="custom_sdk",
+                key="instructions",
+                instrumentor="autobench.custom_sdk",
+                instrumented_library_version="1.2.3",
+            ),
+            sensitivity=AssetSensitivity.PUBLIC,
+        ),
+        span_id="span_prompt",
+    )
+    case = Case(id="case_asset")
+    run = RunResult(
+        run_id="run_asset",
+        benchmark_id="asset-recording",
+        experiment_id="exp_asset",
+        case_id=case.id,
+        variant_id="default",
+        status=RunStatus.PASSED,
+        evaluation_status=EvaluationStatus.PASSED,
+        case=case,
+        task_result=TaskResult(output="done", status=TaskStatus.PASSED),
+        asset_versions=[registered.version],
+        asset_uses=[registered.use],
+    )
+    result = ExperimentResult(
+        experiment_id="exp_asset",
+        benchmark_id="asset-recording",
+        plan=BenchmarkPlan(
+            benchmark_id="asset-recording",
+            case_ids=(case.id,),
+            case_count=1,
+            variant_count=1,
+            planned_run_count=1,
+        ),
+        runs=[run],
+        environment=EnvironmentMetadata(
+            python_version="3.11",
+            platform="test",
+            cwd=str(tmp_path),
+        ),
+    )
+    record_dir = tmp_path / "recorded-assets"
+
+    record_experiment(result, record_dir, asset_registry=registry)
+
+    asset_index = load_yaml(record_dir / "assets" / "index.yaml")
+    asset_entry = asset_index["assets"][registered.asset.id]
+    asset_history = load_yaml(record_dir / "assets" / asset_entry["file"])
+    recorded_run = load_run_record(record_dir / "cases" / case.id / "default" / "run.yaml")
+    replayed = replay_experiment(record_dir)
+
+    assert asset_history["asset"]["content"] == "Use the lookup tool."
+    assert asset_history["asset"]["current_version"] == registered.version.version
+    assert asset_history["versions"][0]["version"] == registered.version.version
+    assert recorded_run.asset_uses == (registered.use,)
+    assert replayed.runs[0].asset_versions == [registered.version]
+    assert replayed.runs[0].asset_uses == [registered.use]
 
 
 def test_experiment_record_yaml_view_round_trips_and_rejects_bad_spec() -> None:

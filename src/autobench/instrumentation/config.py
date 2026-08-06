@@ -4,6 +4,44 @@ from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from autobench.tracking import AssetRepresentation
+
+
+class AssetDiscoverySettings(BaseModel):
+    """Select automatically discovered asset representations and families."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    discover: bool = True
+    representations: tuple[AssetRepresentation, ...] = (
+        AssetRepresentation.DEFINITION,
+        AssetRepresentation.EFFECTIVE,
+    )
+    include: tuple[str, ...] = ()
+
+    @field_validator("representations")
+    @classmethod
+    def normalize_representations(
+        cls,
+        values: tuple[AssetRepresentation, ...],
+    ) -> tuple[AssetRepresentation, ...]:
+        return tuple(dict.fromkeys(values))
+
+    @field_validator("include")
+    @classmethod
+    def normalize_includes(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(sorted({value.strip() for value in values}))
+        if any(not value for value in normalized):
+            raise ValueError("asset kind names cannot be empty")
+        return normalized
+
+    def allows(self, kind: str, representation: AssetRepresentation) -> bool:
+        return (
+            self.discover
+            and representation in self.representations
+            and (not self.include or kind in self.include)
+        )
+
 
 class InstrumentationSettings(BaseModel):
     """Shared configuration for one native Autobench instrumentor."""
@@ -27,6 +65,10 @@ class AutoInstrumentation(InstrumentationSettings):
     kind: Literal["all"] = "all"
     exclude: tuple[InstrumentorName, ...] = ()
     strict: bool = False
+    assets: AssetDiscoverySettings | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
     @field_validator("exclude")
     @classmethod
@@ -41,18 +83,30 @@ class PydanticAIInstrumentation(InstrumentationSettings):
     """Capture Pydantic AI agent, model, tool, and validation activity."""
 
     kind: Literal["pydantic_ai"] = "pydantic_ai"
+    assets: AssetDiscoverySettings | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
 
 class OpenAIInstrumentation(InstrumentationSettings):
     """Capture official OpenAI Python client calls and streams."""
 
     kind: Literal["openai"] = "openai"
+    assets: AssetDiscoverySettings | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
 
 class OpenAIAgentsInstrumentation(InstrumentationSettings):
     """Capture OpenAI Agents workflows through its native trace processor."""
 
     kind: Literal["openai_agents"] = "openai_agents"
+    assets: AssetDiscoverySettings | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
 
 class HTTPXCaptureSettings(BaseModel):
@@ -101,6 +155,7 @@ InstrumentationConfig: TypeAlias = Annotated[
 
 
 __all__ = (
+    "AssetDiscoverySettings",
     "AutoInstrumentation",
     "HTTPXCaptureSettings",
     "HTTPXInstrumentation",

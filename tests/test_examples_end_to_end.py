@@ -208,3 +208,51 @@ def test_offline_openai_agents_and_replay_examples_use_real_integrations(
     assert "autobench.httpx" in openai_scopes
     assert "autobench.openai_agents" in agent_scopes
     assert "__extraction_" in replay.stdout
+
+
+def test_automatic_asset_examples_persist_and_replay_sdk_lineage(
+    tmp_path: Path,
+) -> None:
+    pydantic_record = tmp_path / "pydantic-assets"
+    custom_record = tmp_path / "custom-assets"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(EXAMPLES_ROOT / "automatic_assets" / "pydantic_ai_discovery.py"),
+            "--record",
+            str(pydantic_record),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(EXAMPLES_ROOT / "automatic_assets" / "custom_sdk_discovery.py"),
+            "--record",
+            str(custom_record),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    pydantic_result = replay_experiment(pydantic_record)
+    custom_result = replay_experiment(custom_record)
+    pydantic_uses = pydantic_result.runs[0].asset_uses
+    custom_uses = custom_result.runs[0].asset_uses
+
+    assert pydantic_result.failed_count == 0
+    assert custom_result.failed_count == 0
+    assert any(use.scope == "retrieval" for use in pydantic_uses)
+    assert any(use.representation.value == "effective" for use in pydantic_uses)
+    assert any(use.definition_asset_id is not None for use in pydantic_uses)
+    assert {use.source_locator for use in custom_uses} == {
+        "python:workflow_client.execute:prompt:instructions",
+        "python:workflow_client.execute:tool:tools:lookup_incident",
+        "python:workflow_client.execute:output_schema:output",
+    }
+    assert (pydantic_record / "assets" / "index.yaml").is_file()
+    assert (custom_record / "assets" / "index.yaml").is_file()

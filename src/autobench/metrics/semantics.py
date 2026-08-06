@@ -180,6 +180,18 @@ PromptSemanticType: TypeAlias = Literal["prompt.version"]
 
 DatasetSemanticType: TypeAlias = Literal["dataset.version"]
 
+AssetSemanticType: TypeAlias = Literal[
+    "output_schema.version",
+    "capability.version",
+    "guardrail.version",
+    "handoff.version",
+    "policy.version",
+    "toolset.version",
+    "asset.rendering.version",
+    "asset.external.version",
+    "asset.deployment.label",
+]
+
 KnownSemanticType: TypeAlias = (
     LLMSemanticType
     | CostSemanticType
@@ -198,6 +210,7 @@ KnownSemanticType: TypeAlias = (
     | RuntimeSemanticType
     | PromptSemanticType
     | DatasetSemanticType
+    | AssetSemanticType
     | OperationEvidenceSemanticType
     | WorkflowEvidenceSemanticType
     | EvidenceReferenceSemanticType
@@ -269,6 +282,15 @@ class Semantic:
     AGENT_OUTPUT_STRUCTURE_VALIDITY: Final[str] = "agent.output.structure.validity"
     PROMPT_VERSION: Final[str] = "prompt.version"
     DATASET_VERSION: Final[str] = "dataset.version"
+    OUTPUT_SCHEMA_VERSION: Final[str] = "output_schema.version"
+    CAPABILITY_VERSION: Final[str] = "capability.version"
+    GUARDRAIL_VERSION: Final[str] = "guardrail.version"
+    HANDOFF_VERSION: Final[str] = "handoff.version"
+    POLICY_VERSION: Final[str] = "policy.version"
+    TOOLSET_VERSION: Final[str] = "toolset.version"
+    ASSET_RENDERING_VERSION: Final[str] = "asset.rendering.version"
+    ASSET_EXTERNAL_VERSION: Final[str] = "asset.external.version"
+    ASSET_DEPLOYMENT_LABEL: Final[str] = "asset.deployment.label"
     TOOL_NAME: Final[str] = "tool.name"
     TOOL_TYPE: Final[str] = "tool.type"
     TOOL_VERSION: Final[str] = "tool.version"
@@ -806,6 +828,42 @@ class SemanticRegistry(BaseModel):
             ),
             Semantic.DATASET_VERSION: SemanticTypeInfo(
                 id=Semantic.DATASET_VERSION,
+                value_shape="string",
+            ),
+            Semantic.OUTPUT_SCHEMA_VERSION: SemanticTypeInfo(
+                id=Semantic.OUTPUT_SCHEMA_VERSION,
+                value_shape="string",
+            ),
+            Semantic.CAPABILITY_VERSION: SemanticTypeInfo(
+                id=Semantic.CAPABILITY_VERSION,
+                value_shape="string",
+            ),
+            Semantic.GUARDRAIL_VERSION: SemanticTypeInfo(
+                id=Semantic.GUARDRAIL_VERSION,
+                value_shape="string",
+            ),
+            Semantic.HANDOFF_VERSION: SemanticTypeInfo(
+                id=Semantic.HANDOFF_VERSION,
+                value_shape="string",
+            ),
+            Semantic.POLICY_VERSION: SemanticTypeInfo(
+                id=Semantic.POLICY_VERSION,
+                value_shape="string",
+            ),
+            Semantic.TOOLSET_VERSION: SemanticTypeInfo(
+                id=Semantic.TOOLSET_VERSION,
+                value_shape="string",
+            ),
+            Semantic.ASSET_RENDERING_VERSION: SemanticTypeInfo(
+                id=Semantic.ASSET_RENDERING_VERSION,
+                value_shape="string",
+            ),
+            Semantic.ASSET_EXTERNAL_VERSION: SemanticTypeInfo(
+                id=Semantic.ASSET_EXTERNAL_VERSION,
+                value_shape="string",
+            ),
+            Semantic.ASSET_DEPLOYMENT_LABEL: SemanticTypeInfo(
+                id=Semantic.ASSET_DEPLOYMENT_LABEL,
                 value_shape="string",
             ),
             Semantic.TOOL_NAME: SemanticTypeInfo(

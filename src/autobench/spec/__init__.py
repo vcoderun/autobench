@@ -24,6 +24,7 @@ from autobench.evaluation.scoring import (
 from autobench.instrumentation.config import InstrumentationConfig
 from autobench.io import load_yaml, resolve_file_ref
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
+from autobench.protocol.capture import CapturePolicy
 from autobench.reports.reporting import ReportSpec
 from autobench.runtime.pipeline import BenchmarkPlan
 
@@ -46,6 +47,7 @@ class TaskSpec(BaseModel):
 
 class BenchmarkSpec(BaseModel):
     benchmark: BenchmarkInfo
+    capture: CapturePolicy | None = None
     dataset: DatasetSpec = Field(default_factory=DatasetSpec)
     task: TaskSpec | None = None
     variants: list[Variant] = Field(default_factory=list)

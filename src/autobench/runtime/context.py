@@ -44,7 +44,19 @@ from autobench.protocol.signals import (
 from autobench.protocol.traces import Trace
 from autobench.protocol.values import EvidenceRef, ReferenceKind, ReferenceStore, SerializedValue
 from autobench.records.artifacts import ArtifactRef
-from autobench.tracking import AssetVersion, TrackingRegistry, track
+from autobench.tracking import (
+    AssetCandidate,
+    AssetProvenance,
+    AssetRepresentation,
+    AssetSensitivity,
+    AssetUse,
+    AssetVersion,
+    RegisteredAsset,
+    TrackedAsset,
+    TrackingRegistry,
+    canonical_asset_hash,
+    track,
+)
 
 _RUN_CONTEXTS: WeakValueDictionary[str, RunContext] = WeakValueDictionary()
 
@@ -129,6 +141,7 @@ class RunContext:
         self.artifacts: list[ArtifactRef] = []
         self.errors: list[ErrorRecord] = []
         self.asset_versions: list[AssetVersion] = []
+        self.asset_uses: list[AssetUse] = []
         self.source_snapshots: list[SourceSnapshot] = []
         self._collector = LocalCollector()
         self._capture = CaptureSession(capture_policy)
@@ -176,6 +189,7 @@ class RunContext:
         self._span_index = 0
         self._artifact_index = 0
         self._asset_version_keys: set[tuple[str, str]] = set()
+        self._asset_use_keys: set[tuple[str, str, str, str | None]] = set()
         _RUN_CONTEXTS[self._emitter.trace_id] = self
 
     @property
@@ -595,11 +609,84 @@ class RunContext:
     ) -> AssetVersion:
         active_registry = registry or track
         asset_version = active_registry.asset_version_of(target)
+        asset = active_registry.asset_of(target)
+        self._attach_asset_reference(asset, asset_version, span_id=span_id)
+        source_locator = asset.id
+        use_key = (asset.id, asset_version.version, source_locator, span_id)
+        if use_key not in self._asset_use_keys:
+            self.asset_uses.append(
+                AssetUse(
+                    asset_id=asset.id,
+                    version=asset_version.version,
+                    representation=AssetRepresentation.DEFINITION,
+                    source_locator=source_locator,
+                    span_id=span_id,
+                    provenance=AssetProvenance(
+                        system="autobench",
+                        key=asset.id,
+                        instrumentor="autobench.tracking",
+                    ),
+                )
+            )
+            self._asset_use_keys.add(use_key)
+        return asset_version
+
+    def attach_discovered_asset(self, registered: RegisteredAsset) -> AssetUse:
+        use = registered.use
+        self._attach_asset_reference(registered.asset, registered.version, span_id=use.span_id)
+        use_key = (use.asset_id, use.version, use.source_locator, use.span_id)
+        if use_key not in self._asset_use_keys:
+            self.asset_uses.append(use)
+            self._asset_use_keys.add(use_key)
+        return use
+
+    def prepare_discovered_asset(
+        self,
+        candidate: AssetCandidate,
+        *,
+        span_id: str | None,
+    ) -> AssetCandidate:
+        fingerprint = canonical_asset_hash(candidate.canonical_content)
+        level = self.capture_policy.level_for(
+            candidate.semantic_type,
+            candidate.canonical_content,
+        )
+        if candidate.sensitivity is AssetSensitivity.SENSITIVE and level is CaptureLevel.METADATA:
+            level = CaptureLevel.HASH
+        elif candidate.sensitivity is AssetSensitivity.PUBLIC and level is CaptureLevel.METADATA:
+            level = CaptureLevel.FULL
+        captured = self._capture_value(
+            candidate.canonical_content,
+            semantic_type=candidate.semantic_type,
+            path=f"assets.{candidate.source_locator}",
+            span_id=self._abp_span_id(span_id),
+            level=level,
+        )
+        content: SerializedValue
+        if captured.omitted:
+            content = {"omitted": True, "sha256": fingerprint}
+        elif captured.reference is not None:
+            content = captured.reference.model_dump(mode="json")
+        else:
+            content = captured.value
+        return candidate.model_copy(
+            update={
+                "canonical_content": content,
+                "content_fingerprint": fingerprint,
+            }
+        )
+
+    def _attach_asset_reference(
+        self,
+        asset: TrackedAsset,
+        asset_version: AssetVersion,
+        *,
+        span_id: str | None,
+    ) -> None:
         asset_key = (asset_version.asset_id, asset_version.version)
         if asset_key not in self._asset_version_keys:
             self.asset_versions.append(asset_version)
             self._asset_version_keys.add(asset_key)
-            asset = active_registry.asset_of(target)
             reference_kind = ReferenceKind.ASSET
             if asset.kind == "prompt":
                 reference_kind = ReferenceKind.PROMPT
@@ -625,7 +712,6 @@ class RunContext:
                     name=asset.name,
                     attributes={"kind": asset.kind},
                 )
-        return asset_version
 
     def _append_observation(
         self,

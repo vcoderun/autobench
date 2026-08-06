@@ -39,7 +39,7 @@ from autobench.records.storage import EnvironmentMetadata, capture_environment
 from autobench.runtime.awaitables import run_sync
 from autobench.runtime.context import RunContext
 from autobench.runtime.tasks import TaskResult, TaskStatus, run_python_task
-from autobench.tracking import AssetVersion, track
+from autobench.tracking import AssetUse, AssetVersion, track
 
 if TYPE_CHECKING:  # pragma: no cover
     from autobench.spec import BenchmarkSpec
@@ -95,6 +95,7 @@ class RunResult(BaseModel):
     scores: list[ScoreRecord] = Field(default_factory=list)
     factors: list[FactorValue] = Field(default_factory=list)
     asset_versions: list[AssetVersion] = Field(default_factory=list)
+    asset_uses: list[AssetUse] = Field(default_factory=list)
     parent_run_id: str | None = None
     error: ErrorRecord | None = None
     trace: Trace | None = None
@@ -311,6 +312,7 @@ async def _run_matrix_item(
         variant=run_spec.variant,
         run_id=run_spec.run_id,
         experiment_id=run_spec.experiment_id,
+        capture_policy=spec.capture,
     )
     _seed_variant_evidence(ctx)
     for status in instrumentation_diagnostics:
@@ -513,6 +515,7 @@ def _build_run_result(
         scores=active_scores,
         factors=list(run_spec.variant.factors),
         asset_versions=asset_versions or [],
+        asset_uses=list(ctx.asset_uses),
         error=error,
         trace=ctx.trace,
         source_snapshots=tuple(ctx.source_snapshots),

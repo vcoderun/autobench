@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../../schemas/0.2.0/dataset_schema.json
+# yaml-language-server: $schema=../../../schemas/0.3.0/dataset_schema.json
 dataset:
   reply-cases:
     version: "2026-08-02"

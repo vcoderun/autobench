@@ -12,6 +12,7 @@ import autobench.runtime.pipeline as pipeline_module
 from autobench import (
     BenchmarkInfo,
     BenchmarkSpec,
+    CapturePolicy,
     Case,
     DatasetSpec,
     EvaluationStatus,
@@ -98,6 +99,38 @@ async def test_run_benchmark_spec_executes_full_matrix_in_deterministic_order(
         "run_0002_0002_case_2__variant_2",
     ]
     assert result.plan.planned_run_count == build_benchmark_plan(spec).planned_run_count
+
+
+async def test_benchmark_capture_policy_reaches_each_run_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_module(
+        tmp_path,
+        "capture_policy_task.py",
+        """
+        def run(ctx, case):
+            return {
+                "level": ctx.capture_policy.default_level,
+                "semantic_defaults": ctx.capture_policy.use_semantic_defaults,
+            }
+        """,
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="capture-policy"),
+        capture=CapturePolicy.full(),
+        dataset=DatasetSpec(cases=[Case(id="case_1")]),
+        task=TaskSpec(kind="python", target="capture_policy_task:run"),
+        variants=[Variant(id="variant_1")],
+    )
+
+    result = await run_benchmark_spec(spec, experiment_id="exp_fixed")
+
+    assert result.runs[0].task_result.output == {
+        "level": "full",
+        "semantic_defaults": False,
+    }
 
 
 async def test_pipeline_failure_isolation_keeps_later_runs(

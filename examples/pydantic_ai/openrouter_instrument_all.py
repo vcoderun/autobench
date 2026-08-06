@@ -26,9 +26,7 @@ from autobench import (
     RunResult,
     Semantic,
     record_experiment,
-    track,
 )
-from autobench.instrumentation.pydantic_ai import PydanticAI
 
 
 @dataclass(frozen=True)
@@ -36,7 +34,6 @@ class Catalog:
     prices: dict[str, int]
 
 
-@track.type
 class ShoppingAnswer(BaseModel):
     product: str = Field(description="The exact product returned by the catalog tool.")
     price_usd: int = Field(description="The integer catalog price in US dollars.")
@@ -44,7 +41,6 @@ class ShoppingAnswer(BaseModel):
     reason: str = Field(description="A short reason grounded in the catalog result.")
 
 
-@track.tool
 def lookup_price(ctx: AgentRunContext[Catalog], product: str) -> int:
     """Look up the current catalog price for a product."""
     price = ctx.deps.prices.get(product.lower())
@@ -53,12 +49,9 @@ def lookup_price(ctx: AgentRunContext[Catalog], product: str) -> int:
     return price
 
 
-INSTRUCTIONS = track.prompt(
-    name="shopping_advisor",
-    text=(
-        "You are a shopping advisor. Always call lookup_price before answering. "
-        "Recommend buy only when the exact catalog price is at most the user's budget."
-    ),
+INSTRUCTIONS = (
+    "You are a shopping advisor. Always call lookup_price before answering. "
+    "Recommend buy only when the exact catalog price is at most the user's budget."
 )
 
 
@@ -212,7 +205,6 @@ def main(model: str, record_dir: Path) -> None:
                 )
             ]
         )
-        .instrument(PydanticAI(assets=[INSTRUCTIONS]))
         .instrument_all()
     )
     experiment = benchmark.run()

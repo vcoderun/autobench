@@ -3,10 +3,23 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
+from inspect import getattr_static
 from typing import Any
 
 import httpx
 import pytest
+from agents import (
+    Agent,
+    GuardrailFunctionOutput,
+    InputGuardrail,
+    OutputGuardrail,
+    RunContextWrapper,
+    WebSearchTool,
+    function_tool,
+    handoff,
+)
+from agents.items import TResponseInputItem
+from agents.mcp import MCPServerStdio
 from agents.tracing import (
     Span as AgentSpan,
 )
@@ -33,18 +46,28 @@ from agents.tracing import (
 from agents.tracing.provider import DefaultTraceProvider
 from openai import OpenAI
 from openai.types.responses import Response
+from pydantic import BaseModel
 
 from autobench import Case, InstrumentationManager, RunContext, Variant
 from autobench.evaluation.extraction import ExtractionContext, UsageExtractor
+from autobench.instrumentation.config import AssetDiscoverySettings
 from autobench.instrumentation.manager import InstrumentationRuntime
-from autobench.instrumentation.models import InstrumentationError
+from autobench.instrumentation.models import (
+    InstrumentationError,
+    InstrumentationHandle,
+    InstrumentorInfo,
+)
 from autobench.instrumentation.openai import OpenAIClient
 from autobench.instrumentation.openai_agents import OpenAIAgents
+from autobench.instrumentation.openai_agents import assets as agent_assets
 from autobench.instrumentation.openai_agents import instrumentor as agents_instrumentation
+from autobench.instrumentation.openai_agents.assets import AssetDiscovery
+from autobench.instrumentation.patching import CallHandler
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, Semantic
 from autobench.protocol.signals import EndReason
 from autobench.runtime.context import Span
 from autobench.runtime.instrumentation import reset_active_run_context, set_active_run_context
+from autobench.tracking import TrackingRegistry
 
 
 class _Recorder(TracingProcessor):
@@ -222,6 +245,166 @@ def test_openai_agents_maps_native_trace_span_types_and_preserves_processors() -
         assert len(existing.events) > existing_count
         assert len(late.events) > late_count
         assert len(ctx.spans) == 16
+
+
+def test_openai_agents_discovers_public_agent_definitions_without_running_callbacks() -> None:
+    class Answer(BaseModel):
+        value: str
+
+    callback_calls = {"instructions": 0, "input_guardrail": 0, "output_guardrail": 0}
+
+    async def instructions(
+        context: RunContextWrapper[None],
+        agent: Agent[None],
+    ) -> str:
+        del context, agent
+        callback_calls["instructions"] += 1
+        return "Do not execute during discovery."
+
+    async def input_guardrail(
+        context: RunContextWrapper[None],
+        agent: Agent[Any],
+        input_value: str | list[TResponseInputItem],
+    ) -> GuardrailFunctionOutput:
+        del context, agent, input_value
+        callback_calls["input_guardrail"] += 1
+        return GuardrailFunctionOutput(output_info=None, tripwire_triggered=False)
+
+    async def output_guardrail(
+        context: RunContextWrapper[None],
+        agent: Agent[Any],
+        output: Any,
+    ) -> GuardrailFunctionOutput:
+        del context, agent, output
+        callback_calls["output_guardrail"] += 1
+        return GuardrailFunctionOutput(output_info=None, tripwire_triggered=False)
+
+    @function_tool
+    def lookup(query: str) -> str:
+        return query
+
+    writer = Agent[None](name="writer", instructions="Write the final answer.")
+    reviewer = Agent[None](name="reviewer", instructions="Review the answer.")
+    mcp_server = MCPServerStdio(
+        params={"command": "echo", "args": ["mcp"]},
+        name="local-mcp",
+    )
+    planner = Agent[None](
+        name="planner",
+        instructions=instructions,
+        prompt={"id": "pmpt_planner", "version": "2"},
+        tools=[lookup, WebSearchTool()],
+        mcp_servers=[mcp_server],
+        handoffs=[writer, writer, handoff(reviewer)],
+        output_type=Answer,
+        input_guardrails=[InputGuardrail(input_guardrail)],
+        output_guardrails=[OutputGuardrail(output_guardrail)],
+    )
+    registry = TrackingRegistry()
+    runtime = InstrumentationRuntime(registry=registry)
+    instrumentor = OpenAIAgents(registry=registry)
+    discovery = AssetDiscovery(
+        runtime,
+        instrumentor.info,
+        target_version="0.19.2",
+        registry=registry,
+        settings=AssetDiscoverySettings(),
+    )
+    handler = agents_instrumentation._RunnerHandler(runtime, instrumentor.info, discovery)
+    assert handler.suppression_keys == (
+        "autobench.openai_agents",
+        "openai_agents",
+    )
+    context = _run_context()
+    token = set_active_run_context(context)
+    try:
+        handler.begin(
+            agents_instrumentation.InstrumentCall(
+                instance=None,
+                args=(planner, "hello"),
+                kwargs={},
+            )
+        )
+        handler.begin(
+            agents_instrumentation.InstrumentCall(
+                instance=None,
+                args=(),
+                kwargs={"starting_agent": planner},
+            )
+        )
+        handler.begin(
+            agents_instrumentation.InstrumentCall(
+                instance=None,
+                args=("not-an-agent",),
+                kwargs={},
+            )
+        )
+        handler.diagnose("test", RuntimeError("discovery callback"))
+        handler.close()
+    finally:
+        reset_active_run_context(token)
+
+    assert callback_calls == {
+        "instructions": 0,
+        "input_guardrail": 0,
+        "output_guardrail": 0,
+    }
+    assert {
+        "openai_agents:agent:planner:agent:self",
+        "openai_agents:agent:planner:guardrail:input:input_guardrail",
+        "openai_agents:agent:planner:guardrail:output:output_guardrail",
+        "openai_agents:agent:planner:handoff:transfer_to_reviewer",
+        "openai_agents:agent:planner:handoff:writer",
+        "openai_agents:agent:planner:output_schema:output",
+        "openai_agents:agent:planner:policy:tool_use",
+        "openai_agents:agent:planner:prompt:instructions",
+        "openai_agents:agent:planner:prompt:prompt",
+        "openai_agents:agent:planner:tool:lookup",
+        "openai_agents:agent:planner:tool:web_search",
+        "openai_agents:agent:planner:toolset:mcp:MCPServerStdio",
+        "openai_agents:agent:writer:agent:self",
+    } <= {version.asset_id for version in context.asset_versions}
+    assert any(
+        diagnostic.code == "openai_agents_asset_discovery_error"
+        for diagnostic in context.trace.diagnostics
+    )
+    assert agent_assets._public_dataclass("plain") == "plain"
+
+    class TypeNamedTool:
+        type = "type_named"
+
+    class NamelessTool:
+        pass
+
+    class InvalidTypeTool:
+        type = None
+
+    assert agent_assets._tool_name(TypeNamedTool()) == "type_named"
+    assert agent_assets._tool_name(NamelessTool()) == "NamelessTool"
+    assert agent_assets._tool_name(InvalidTypeTool()) == "InvalidTypeTool"
+
+
+def test_openai_agents_asset_discovery_can_select_only_agent_composites() -> None:
+    registry = TrackingRegistry()
+    runtime = InstrumentationRuntime(registry=registry)
+    instrumentor = OpenAIAgents(registry=registry)
+    discovery = AssetDiscovery(
+        runtime,
+        instrumentor.info,
+        target_version="0.19.2",
+        registry=registry,
+        settings=AssetDiscoverySettings(include=("agent",)),
+    )
+    context = _run_context()
+    token = set_active_run_context(context)
+    try:
+        discovery.agent(Agent[None](name="filtered", instructions="Do not persist this prompt."))
+        discovery.agent(Agent[None](name="empty"))
+    finally:
+        reset_active_run_context(token)
+
+    assert [asset.kind for asset in registry.definitions] == ["agent", "agent"]
+    assert context.asset_uses[0].source_locator == "openai_agents:agent:filtered:agent:self"
 
 
 async def test_openai_agents_parallel_tools_keep_the_agent_parent() -> None:
@@ -464,6 +647,12 @@ def test_openai_agents_compatibility_rejects_unowned_provider_shapes(
         assert instrumentor.check().available is False
 
     with monkeypatch.context() as patch:
+        patch.setattr(agents_instrumentation.Runner, "run", None)
+        compatibility = instrumentor.check()
+        assert compatibility.supported is False
+        assert "run" in compatibility.diagnostics[0]
+
+    with monkeypatch.context() as patch:
         patch.setattr(agents_instrumentation, "get_trace_provider", lambda: None)
         compatibility = instrumentor.check()
         assert compatibility.supported is False
@@ -478,3 +667,40 @@ def test_openai_agents_compatibility_rejects_unowned_provider_shapes(
         compatibility = instrumentor.check()
         assert compatibility.supported is False
         assert compatibility.private_seam_supported is False
+
+
+def test_openai_agents_install_rolls_back_processor_and_runner_patches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _isolated_provider() as provider:
+        runtime = InstrumentationRuntime()
+        original_run = getattr_static(agents_instrumentation.Runner, "run")
+        patch_method = runtime.patch_method
+
+        def fail_second_patch(
+            info: InstrumentorInfo,
+            target: type[Any],
+            attribute: str,
+            handler: CallHandler,
+            *,
+            expected_descriptor: Any = None,
+        ) -> InstrumentationHandle:
+            if attribute == "run_sync":
+                raise RuntimeError("runner patch failed")
+            return patch_method(
+                info,
+                target,
+                attribute,
+                handler,
+                expected_descriptor=expected_descriptor,
+            )
+
+        monkeypatch.setattr(runtime, "patch_method", fail_second_patch)
+        with pytest.raises(RuntimeError, match="runner patch failed"):
+            OpenAIAgents().install(runtime)
+
+        assert getattr_static(agents_instrumentation.Runner, "run") is original_run
+        processors = provider._multi_processor._processors  # pyright: ignore[reportPrivateUsage]
+        assert not any(
+            isinstance(processor, agents_instrumentation._Processor) for processor in processors
+        )

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../schemas/0.2.0/benchmark_schema.json
+# yaml-language-server: $schema=../../schemas/0.3.0/benchmark_schema.json
 benchmark:
   abp-manual-method:
     description: Combine an explicit workflow span with automatic method instrumentation.

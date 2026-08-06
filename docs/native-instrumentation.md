@@ -31,6 +31,12 @@ from autobench import Benchmark
 benchmark = Benchmark("support-agent").instrument_all()
 ```
 
+Semantic instrumentors also discover SDK-visible behavioral assets by default. The application does
+not need tracking decorators for prompts, tools, output schemas, capabilities, agents, guardrails,
+handoffs, or policies already visible at those boundaries. See
+[Automatic Asset Discovery](automatic-asset-discovery.md) for identity, source/effective links,
+privacy, persistence, and custom SDK extraction.
+
 Unavailable or unsupported integrations are skipped by default and recorded on each run as
 `instrumentation.skipped` diagnostic evidence. Use `strict=True` when the environment must support
 the complete selected set:
@@ -61,16 +67,12 @@ uv run python examples/pydantic_ai/openrouter_instrument_all.py \
 The benchmark itself only opts in once:
 
 ```python
-benchmark = (
-    Benchmark("openrouter-shopping-agent")
-    .instrument(PydanticAI(assets=[INSTRUCTIONS]))
-    .instrument_all()
-)
+benchmark = Benchmark("openrouter-shopping-agent").instrument_all()
 ```
 
-The explicit Pydantic AI instrumentor contributes tracked prompt metadata. Automatic discovery
-recognizes its instrumentor ID and does not install a duplicate, then adds the OpenAI client and
-HTTPX transport instrumentors. One real request therefore records agent, model, tool, output
+The example uses plain instructions, a plain tool function, and an undecorated Pydantic output type.
+Automatic discovery adds Pydantic AI, OpenAI client, and HTTPX transport instrumentors. One real
+request therefore records agent, model, tool, output
 validation, stream, client request, and transport spans with their native parentage. It also records
 model identity, token usage, durations, HTTP method/host/path/status, score observations, asset
 versions, capture diagnostics, and replayable source provenance. HTTP bodies and credentials remain
@@ -85,7 +87,7 @@ rather than hand-authored benchmark telemetry.
 Instrumentation belongs to the named benchmark:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.2.0/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.3.0/benchmark_schema.json
 benchmark:
   support-agent:
     dataset:
@@ -100,6 +102,9 @@ benchmark:
       all:
         exclude: [httpx]
         strict: false
+        assets:
+          representations: [definition, effective]
+          include: [prompt, tool, output_schema, capability]
       pydantic_ai: {}
       openai: {}
       httpx:
@@ -165,9 +170,9 @@ ownership when a typed setting and a custom instance configure the same integrat
 
 | Integration | Layer | Collection seam | Evidence |
 | --- | --- | --- | --- |
-| Pydantic AI | framework | public agent capability | agent/model/tool/validation spans, messages, structured output, usage, stream lifecycle |
-| OpenAI Python | client | reviewed public client methods and stream types | chat, responses, embeddings, raw responses, model identity, direct usage, stream lifecycle |
-| OpenAI Agents | framework | native trace processor | workflow, agent, generation, tool, handoff, guardrail, and custom spans |
+| Pydantic AI | framework | public agent capability | spans plus agent/capability/prompt/tool/toolset/output-schema lineage |
+| OpenAI Python | client | reviewed public client methods and stream types | spans plus effective prompt/tool/output-schema lineage |
+| OpenAI Agents | framework | native trace processor and public Runner surface | spans plus agent/prompt/tool/output-schema/guardrail/handoff/policy lineage |
 | HTTPX | transport | public transport methods | request method/host/path policy, status, selected headers, body metadata, stream lifecycle |
 
 Run compatibility diagnostics before a benchmark:
