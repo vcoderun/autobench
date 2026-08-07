@@ -318,6 +318,17 @@ The pipeline owns `open`, `stage`, `finish` or `abort`, and `close`; application
 open a live session just to run a normal benchmark. `ExperimentStart`, `ExecutionSnapshot`, and
 `PartialRunSnapshot` are frozen transfer models. Recovery never imports the task or optional SDKs.
 
+A custom session exposes immediate file and stream storage explicitly through
+`artifact_sink: ArtifactSink | None`. The session may return itself, as `FileRecordSession` does,
+or delegate to a separate local, remote, or composite sink. Returning `None` is valid, but a task
+that calls `ctx.artifact_file()` or `ctx.artifact_stream()` then receives
+`ArtifactSinkRequiredError` before Autobench consumes the source. The lifecycle session does not
+need to proxy the complete sink protocol merely to delegate storage.
+
+`ArtifactSink` provides synchronous file/stream methods, `prepare_file_async()`, and
+`prepare_stream_async()`. Async implementations own in-flight transfers after caller cancellation
+and must settle them before the associated session closes or publishes its final record.
+
 Load one exact record when building an audit or optimizer adapter:
 
 ```python

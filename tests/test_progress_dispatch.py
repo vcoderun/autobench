@@ -46,7 +46,6 @@ from autobench import (
 )
 from autobench.instrumentation.config import InstrumentationConfig
 from autobench.instrumentation.registry import InstrumentorStatus
-from autobench.records.staging import RecordSession
 
 
 def benchmark_spec(*, cases: tuple[str, ...] = ("one", "two")) -> BenchmarkSpec:
@@ -487,9 +486,9 @@ async def test_internal_run_crash_pairs_started_run_with_errored_terminal(
         run_spec: MatrixRunSpec,
         *,
         instrumentation_diagnostics: Sequence[InstrumentorStatus] = (),
-        record_session: RecordSession | None = None,
+        recording: pipeline_module._RecordOperations | None = None,
     ) -> RunResult:
-        del spec, run_spec, instrumentation_diagnostics, record_session
+        del spec, run_spec, instrumentation_diagnostics, recording
         raise RuntimeError("runtime crashed")
 
     monkeypatch.setattr(pipeline_module, "_run_matrix_item", crash)

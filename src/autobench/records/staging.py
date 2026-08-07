@@ -6,12 +6,12 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import AsyncIterable, AsyncIterator, Collection, Iterable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Collection, Coroutine, Iterable, Iterator
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from threading import RLock
-from typing import Any, BinaryIO, Literal, Protocol, runtime_checkable
+from typing import Any, BinaryIO, Literal, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -25,6 +25,7 @@ from autobench.protocol.traces import Trace
 from autobench.records.artifacts import (
     ArtifactOverflow,
     ArtifactRef,
+    ArtifactSink,
     ArtifactSource,
     ArtifactState,
     ArtifactTransferError,
@@ -69,6 +70,7 @@ from autobench.records.views import (
     manifest_to_yaml_view,
     run_record_payload_from_yaml_view,
 )
+from autobench.runtime.awaitables import settle_task
 from autobench.runtime.context import SpanRecord
 from autobench.runtime.lifecycle import RunPhase
 from autobench.runtime.models import (
@@ -88,6 +90,10 @@ from autobench.tracking import AssetUse, AssetVersion, TrackingRegistry, track
 STAGING_VERSION = 1
 STAGING_STATE_PATH = "staging.yaml"
 STAGING_MANIFEST_PATH = "staging-manifest.yaml"
+
+OperationResultT = TypeVar("OperationResultT")
+
+_SESSION_OPERATION_SETTLE_SECONDS = 5.0
 
 
 @runtime_checkable
@@ -292,6 +298,9 @@ class Recorder(Protocol):
 
 
 class RecordSession(Protocol):
+    @property
+    def artifact_sink(self) -> ArtifactSink | None: ...
+
     async def stage(self, snapshot: ExecutionSnapshot) -> None: ...
 
     async def checkpoint(self, snapshot: PartialRunSnapshot) -> None: ...
@@ -403,8 +412,59 @@ class FileRecordSession:
         self.run_locks = {run.run_id: asyncio.Lock() for run in start.runs}
         self.prepared_artifacts: dict[tuple[str, str], tuple[ArtifactRef, Path]] = {}
         self.prepared_artifacts_lock = RLock()
+        self.operations: set[asyncio.Task[Any]] = set()
+        self.artifact_transfers: set[asyncio.Task[ArtifactRef]] = set()
         self.closed = False
         self.finished = False
+
+    @property
+    def artifact_sink(self) -> FileRecordSession:
+        return self
+
+    def _start_operation(
+        self,
+        operation: Coroutine[Any, Any, OperationResultT],
+    ) -> asyncio.Task[OperationResultT]:
+        task = asyncio.create_task(operation)
+        self.operations.add(task)
+        task.add_done_callback(self.operations.discard)
+        return task
+
+    async def _execute_operation(
+        self,
+        operation: Coroutine[Any, Any, OperationResultT],
+        *,
+        description: str,
+    ) -> OperationResultT:
+        task = self._start_operation(operation)
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError as cancellation:
+            error = await settle_task(
+                task,
+                timeout_seconds=_SESSION_OPERATION_SETTLE_SECONDS,
+                cancel_on_timeout=False,
+                description=description,
+            )
+            if error is not None:
+                cancellation.add_note(f"{description.lower()} did not settle: {error}")
+            raise
+
+    async def _settle_operations(self) -> None:
+        while self.operations:
+            active = tuple(self.operations)
+            await asyncio.gather(
+                *(asyncio.shield(task) for task in active),
+                return_exceptions=True,
+            )
+
+    async def _settle_artifact_transfers(self) -> None:
+        while self.artifact_transfers:
+            active = tuple(self.artifact_transfers)
+            await asyncio.gather(
+                *(asyncio.shield(task) for task in active),
+                return_exceptions=True,
+            )
 
     def prepare_file(
         self,
@@ -456,6 +516,48 @@ class FileRecordSession:
                 symlink_followed=followed,
                 close_source=False,
             )
+
+    async def prepare_file_async(
+        self,
+        *,
+        run_id: str,
+        artifact_id: str,
+        name: str,
+        source: Path,
+        media_type: str | None,
+        max_bytes: int,
+        overflow: ArtifactOverflow,
+        symlinks: SymlinkPolicy,
+        filename: str | None,
+        span_id: str | None,
+        tags: dict[str, Any],
+    ) -> ArtifactRef:
+        self.require_open()
+        transfer = asyncio.create_task(
+            asyncio.to_thread(
+                self.prepare_file,
+                run_id=run_id,
+                artifact_id=artifact_id,
+                name=name,
+                source=source,
+                media_type=media_type,
+                max_bytes=max_bytes,
+                overflow=overflow,
+                symlinks=symlinks,
+                filename=filename,
+                span_id=span_id,
+                tags=tags,
+            )
+        )
+        self.artifact_transfers.add(transfer)
+
+        def observe(completed: asyncio.Task[ArtifactRef]) -> None:
+            self.artifact_transfers.discard(completed)
+            if not completed.cancelled():
+                completed.exception()
+
+        transfer.add_done_callback(observe)
+        return await asyncio.shield(transfer)
 
     def prepare_stream(
         self,
@@ -728,7 +830,14 @@ class FileRecordSession:
         return chunk
 
     async def stage(self, snapshot: ExecutionSnapshot) -> None:
+        await self._execute_operation(
+            self._stage(snapshot),
+            description=f"Run {snapshot.run.run_id} staging",
+        )
+
+    async def _stage(self, snapshot: ExecutionSnapshot) -> None:
         self.require_open()
+        await self._settle_artifact_transfers()
         run = snapshot.run
         try:
             run_lock = self.run_locks[run.run_id]
@@ -790,7 +899,14 @@ class FileRecordSession:
                 self.manifest = manifest
 
     async def checkpoint(self, snapshot: PartialRunSnapshot) -> None:
+        await self._execute_operation(
+            self._checkpoint(snapshot),
+            description=f"Checkpoint {snapshot.run_id}:{snapshot.name}",
+        )
+
+    async def _checkpoint(self, snapshot: PartialRunSnapshot) -> None:
         self.require_open()
+        await self._settle_artifact_transfers()
         if snapshot.run_id not in self.run_locks:
             raise RecordingError(f"Run is not part of the experiment plan: {snapshot.run_id}")
         run_spec = next(item for item in self.start.runs if item.run_id == snapshot.run_id)
@@ -942,7 +1058,14 @@ class FileRecordSession:
         )
 
     async def finish(self, result: ExperimentResult) -> ExperimentRecord:
+        return await self._execute_operation(
+            self._finish(result),
+            description="Recording finalization",
+        )
+
+    async def _finish(self, result: ExperimentResult) -> ExperimentRecord:
         self.require_open()
+        await self._settle_artifact_transfers()
         if result.experiment_id != self.start.experiment_id:
             raise RecordingError("Experiment result does not belong to the recording session.")
         staged_ids = {item.run_id for item in self.manifest.runs}
@@ -968,6 +1091,10 @@ class FileRecordSession:
     async def abort(self, termination: ExperimentTermination) -> None:
         if self.closed or self.finished:
             return
+        await self._settle_operations()
+        await self._settle_artifact_transfers()
+        if self.closed or self.finished:
+            return
         async with self.state_lock:
             state = self.state.model_copy(
                 update={
@@ -980,6 +1107,8 @@ class FileRecordSession:
             self.state = state
 
     async def close(self) -> None:
+        await self._settle_operations()
+        await self._settle_artifact_transfers()
         self.closed = True
 
     def require_open(self) -> None:

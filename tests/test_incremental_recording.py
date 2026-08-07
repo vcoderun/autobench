@@ -15,6 +15,7 @@ from rich.console import Console
 
 import autobench.cli as cli_module
 import autobench.records.staging as staging_module
+import autobench.runtime.pipeline as pipeline_module
 from autobench import (
     BenchmarkInfo,
     BenchmarkSpec,
@@ -33,11 +34,13 @@ from autobench import (
     MatrixRunSpec,
     PartialRunSnapshot,
     RecordingError,
+    RunContext,
     RunPhase,
     RunStatus,
     StagingHealth,
     StagingManifest,
     StagingStatus,
+    TaskResult,
     TaskSpec,
     TaskStatus,
     Variant,
@@ -1026,6 +1029,10 @@ class FaultingSession:
         self.fail_close = fail_close
         self.stage_count = 0
 
+    @property
+    def artifact_sink(self) -> FileRecordSession:
+        return self.delegate.artifact_sink
+
     async def stage(self, snapshot: ExecutionSnapshot) -> None:
         self.stage_count += 1
         if self.fail_at == "stage" and self.stage_count == self.stage_number:
@@ -1049,6 +1056,42 @@ class FaultingSession:
         if self.fail_close:
             raise RecordingError("injected close failure")
         await self.delegate.close()
+
+
+async def test_record_session_can_delegate_artifacts_without_implementing_sink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "payload.txt"
+    source.write_text("durable payload", encoding="utf-8")
+
+    async def artifact_task(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        artifact = ctx.artifact_file("payload", source)
+        return TaskResult(output={"artifact_id": artifact.id}, status=TaskStatus.PASSED)
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", artifact_task)
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="delegated-artifacts"),
+        dataset=DatasetSpec(cases=[Case(id="case")]),
+        task=TaskSpec(kind="python", target="unused:run"),
+        variants=[Variant(id="baseline")],
+    )
+    output = tmp_path / "record"
+    recorder = FaultingRecorder(FileRecorder(output), fail_at="never")
+
+    result = await run_benchmark_spec(spec, experiment_id="exp_delegate", recorder=recorder)
+
+    assert result.runs[0].task_result.status is TaskStatus.PASSED
+    assert len(result.runs[0].task_result.artifacts) == 1
+    assert any(
+        path.is_file() and path.suffix == ".txt" for path in (output / "artifacts").rglob("*")
+    )
 
 
 def durable_spec(

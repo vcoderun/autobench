@@ -134,6 +134,20 @@ On cooperative cancellation Autobench:
 4. cancels active concurrent siblings and gives each bounded time to perform the same cleanup;
 5. marks staging cancelled, closes the record session, and re-raises the original cancellation.
 
+Recorder commits are cancellation-safe boundaries. Once a run has produced its complete
+`RunResult`, cancellation does not discard it while `stage()` is publishing the payload or
+manifest revision. Autobench keeps ownership of that commit, waits for its terminal state within
+the cleanup bound, and computes `recorded_run_ids` only after outstanding recorder operations have
+settled. `abort()` and `close()` are ordered after stage and checkpoint work, so they never race a
+surviving file-system worker.
+
+The same rule applies to final publication. If cancellation arrives after `finish()` has begun,
+the finalization remains owned until it either commits or fails; Autobench does not report an
+untracked publication and let a final directory appear later. A non-cooperative third-party
+cleanup may outlive the public wait bound because Python cannot forcibly terminate an arbitrary
+coroutine. Such a task is retained, its eventual exception is delivered to the event-loop exception
+handler, and the cancellation receives a diagnostic that cleanup is still active.
+
 If cancellation happens during scoring or derivation, a task output already produced by the
 application remains in the partial snapshot. Recorder failures are attached to the cancellation as
 notes and never replace its identity. A task timeout remains a timeout and is not reclassified as
@@ -149,6 +163,12 @@ survives a hard kill.
 Autobench does not write on every signal and does not resume application code from a checkpoint.
 The application owns executable workflow state; Autobench owns durable evidence. Automatic
 periodic checkpoint policy is intentionally outside this release.
+
+Async file artifacts use the same ownership model. `artifact_file_async()` returns cancellation
+within a bounded interval even when a filesystem read is blocked. The run retains a partial
+artifact reference, while the session owns the underlying transfer and settles it before
+checkpoint, abort, final publication, or close. A late transfer cannot be mistaken for a complete
+artifact before its payload is available.
 
 ## Inspect And Recover Staging
 

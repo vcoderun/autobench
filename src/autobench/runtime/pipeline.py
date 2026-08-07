@@ -30,9 +30,8 @@ from autobench.metrics.observations import (
 )
 from autobench.metrics.semantics import Semantic, SemanticRegistry
 from autobench.protocol import EndReason, SpanStatus
-from autobench.records.artifacts import ArtifactSink
 from autobench.records.storage import capture_environment
-from autobench.runtime.awaitables import run_sync
+from autobench.runtime.awaitables import run_sync, settle_task
 from autobench.runtime.context import ContextEvidence, RunContext
 from autobench.runtime.lifecycle import RunPhase
 from autobench.runtime.models import (
@@ -63,8 +62,55 @@ if TYPE_CHECKING:  # pragma: no cover
     from autobench.spec import BenchmarkSpec
 
 CleanupResultT = TypeVar("CleanupResultT")
+RecordResultT = TypeVar("RecordResultT")
 
 _CANCELLATION_CLEANUP_TIMEOUT_SECONDS = 5.0
+_CANCELLATION_GRACE_SECONDS = 0.1
+
+
+class _RecordOperations:
+    def __init__(self, session: RecordSession) -> None:
+        self.session = session
+        self.tasks: set[asyncio.Task[Any]] = set()
+
+    def start(
+        self,
+        operation: Coroutine[Any, Any, RecordResultT],
+    ) -> asyncio.Task[RecordResultT]:
+        task = asyncio.create_task(operation)
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+        return task
+
+    async def execute(
+        self,
+        operation: Coroutine[Any, Any, RecordResultT],
+        *,
+        description: str,
+    ) -> RecordResultT:
+        task = self.start(operation)
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError as cancellation:
+            error = await _finish_cleanup_task(
+                task,
+                cancel_on_timeout=False,
+                description=description,
+            )
+            if error is not None:
+                cancellation.add_note(f"{description.lower()} did not settle: {error}")
+            raise
+
+    async def drain(self) -> tuple[BaseException, ...]:
+        errors: list[BaseException] = []
+        while self.tasks:
+            active = tuple(self.tasks)
+            results = await asyncio.gather(
+                *(asyncio.shield(task) for task in active),
+                return_exceptions=True,
+            )
+            errors.extend(result for result in results if isinstance(result, BaseException))
+        return tuple(errors)
 
 
 def expand_matrix(
@@ -135,6 +181,7 @@ async def run_benchmark_spec(
     )
     environment = capture_environment()
     session: RecordSession | None = None
+    recording: _RecordOperations | None = None
     staged_run_ids: list[str] = []
     started_run_ids: list[str] = []
     completed_runs: dict[str, RunResult] = {}
@@ -166,6 +213,7 @@ async def run_benchmark_spec(
                 correlation=active_correlation,
             )
         )
+        recording = _RecordOperations(session)
 
     try:
         await dispatcher.emit(
@@ -208,7 +256,7 @@ async def run_benchmark_spec(
                         completed_runs=completed_runs,
                         cancelled_run_ids=cancelled_run_ids,
                         instrumentation_diagnostics=instrumentation_diagnostics,
-                        record_session=session,
+                        recording=recording,
                         staged_run_ids=staged_run_ids,
                     )
                     runs.append(run)
@@ -225,7 +273,7 @@ async def run_benchmark_spec(
                             completed_runs=completed_runs,
                             cancelled_run_ids=cancelled_run_ids,
                             instrumentation_diagnostics=instrumentation_diagnostics,
-                            record_session=session,
+                            recording=recording,
                             staged_run_ids=staged_run_ids,
                         )
                         for run_spec in run_specs
@@ -290,36 +338,33 @@ async def run_benchmark_spec(
             }
         )
         completed_runs.update((run.run_id, run) for run in result.runs)
-        if session is not None:
-            await session.finish(result)
-            await session.close()
-    except BaseException as exc:
-        if session is not None:
-            planned_ids = tuple(run_spec.run_id for run_spec in run_specs)
-            recorded = tuple(run_id for run_id in planned_ids if run_id in staged_run_ids)
-            missing = tuple(run_id for run_id in planned_ids if run_id not in staged_run_ids)
-            termination = ExperimentTermination(
-                status=(
-                    ExperimentStatus.CANCELLED
-                    if isinstance(exc, asyncio.CancelledError)
-                    else ExperimentStatus.ABORTED
-                ),
-                partial=True,
-                cross_run_derivation_complete=cross_run_derivation_complete,
-                policies_complete=policies_complete,
-                planned_run_ids=planned_ids,
-                recorded_run_ids=recorded,
-                missing_run_ids=missing,
-                error=ErrorRecord.from_exception(exc),
+        if recording is not None:
+            await recording.execute(
+                recording.session.finish(result),
+                description="Recording finalization",
             )
+            await recording.execute(
+                recording.session.close(),
+                description="Recording close",
+            )
+    except BaseException as exc:
+        if recording is not None:
             abort_error = await _finish_cleanup_task(
-                asyncio.create_task(session.abort(termination))
+                asyncio.create_task(
+                    _abort_recording(
+                        recording,
+                        run_specs=run_specs,
+                        staged_run_ids=staged_run_ids,
+                        cross_run_derivation_complete=cross_run_derivation_complete,
+                        policies_complete=policies_complete,
+                        failure=exc,
+                    )
+                ),
+                cancel_on_timeout=False,
+                description="Recording abort and close",
             )
             if abort_error is not None:
                 exc.add_note(f"recording abort failed: {abort_error}")
-            close_error = await _finish_cleanup_task(asyncio.create_task(session.close()))
-            if close_error is not None:
-                exc.add_note(f"recording close failed: {close_error}")
         progress_error = await _finish_cleanup_task(
             asyncio.create_task(
                 _emit_completion_progress(
@@ -401,7 +446,7 @@ async def _run_matrix_item_limited(
     completed_runs: dict[str, RunResult],
     cancelled_run_ids: set[str],
     instrumentation_diagnostics: Sequence[InstrumentorStatus] = (),
-    record_session: RecordSession | None,
+    recording: _RecordOperations | None,
     staged_run_ids: list[str],
 ) -> RunResult:
     async with semaphore:
@@ -413,7 +458,7 @@ async def _run_matrix_item_limited(
             completed_runs=completed_runs,
             cancelled_run_ids=cancelled_run_ids,
             instrumentation_diagnostics=instrumentation_diagnostics,
-            record_session=record_session,
+            recording=recording,
             staged_run_ids=staged_run_ids,
         )
 
@@ -427,7 +472,7 @@ async def _run_matrix_item_observed(
     completed_runs: dict[str, RunResult],
     cancelled_run_ids: set[str],
     instrumentation_diagnostics: Sequence[InstrumentorStatus],
-    record_session: RecordSession | None,
+    recording: _RecordOperations | None,
     staged_run_ids: list[str],
 ) -> RunResult:
     started_run_ids.append(run_spec.run_id)
@@ -445,17 +490,34 @@ async def _run_matrix_item_observed(
             spec,
             run_spec,
             instrumentation_diagnostics=instrumentation_diagnostics,
-            record_session=record_session,
+            recording=recording,
         )
     except asyncio.CancelledError:
         cancelled_run_ids.add(run_spec.run_id)
         raise
     completed_runs[run.run_id] = run
-    if record_session is not None:
+    if recording is not None:
         from autobench.records.staging import ExecutionSnapshot
 
-        await record_session.stage(ExecutionSnapshot.from_result(run))
-        staged_run_ids.append(run.run_id)
+        stage_task = recording.start(recording.session.stage(ExecutionSnapshot.from_result(run)))
+
+        def retain_staged_run(completed: asyncio.Task[None]) -> None:
+            if completed.cancelled() or completed.exception() is not None:
+                return
+            staged_run_ids.append(run.run_id)
+
+        stage_task.add_done_callback(retain_staged_run)
+        try:
+            await asyncio.shield(stage_task)
+        except asyncio.CancelledError as cancellation:
+            stage_error = await _finish_cleanup_task(
+                stage_task,
+                cancel_on_timeout=False,
+                description=f"Run {run.run_id} staging",
+            )
+            if stage_error is not None:
+                cancellation.add_note(f"run staging did not settle: {stage_error}")
+            raise
     return run
 
 
@@ -464,7 +526,7 @@ async def _run_matrix_item(
     run_spec: MatrixRunSpec,
     *,
     instrumentation_diagnostics: Sequence[InstrumentorStatus] = (),
-    record_session: RecordSession | None = None,
+    recording: _RecordOperations | None = None,
 ) -> RunResult:
     ctx = RunContext(
         benchmark_id=run_spec.benchmark_id,
@@ -474,9 +536,9 @@ async def _run_matrix_item(
         experiment_id=run_spec.experiment_id,
         capture_policy=spec.capture,
     )
-    if isinstance(record_session, ArtifactSink):
-        ctx.bind_artifact_sink(record_session)
-    if record_session is not None:
+    if recording is not None and recording.session.artifact_sink is not None:
+        ctx.bind_artifact_sink(recording.session.artifact_sink)
+    if recording is not None:
 
         async def persist_checkpoint(
             name: str,
@@ -491,7 +553,7 @@ async def _run_matrix_item(
                 task_output=task_output,
                 evidence=evidence,
             )
-            await _persist_explicit_checkpoint(record_session, snapshot)
+            await _persist_explicit_checkpoint(recording, snapshot)
 
         ctx.bind_checkpoint(persist_checkpoint)
     _seed_variant_evidence(ctx)
@@ -561,7 +623,7 @@ async def _run_matrix_item(
         await _propagate_run_cancellation(
             ctx,
             run_spec,
-            record_session=record_session,
+            recording=recording,
             cancellation=exc,
         )
     except Exception as exc:
@@ -599,7 +661,7 @@ async def _run_matrix_item(
         await _propagate_run_cancellation(
             ctx,
             run_spec,
-            record_session=record_session,
+            recording=recording,
             cancellation=exc,
         )
     except Exception as exc:
@@ -624,7 +686,7 @@ async def _run_matrix_item(
         await _propagate_run_cancellation(
             ctx,
             run_spec,
-            record_session=record_session,
+            recording=recording,
             cancellation=exc,
         )
     except Exception as exc:
@@ -737,26 +799,20 @@ def _build_partial_snapshot(
 
 
 async def _persist_explicit_checkpoint(
-    record_session: RecordSession,
+    recording: _RecordOperations,
     snapshot: PartialRunSnapshot,
 ) -> None:
-    checkpoint_task = asyncio.create_task(record_session.checkpoint(snapshot))
-    try:
-        await asyncio.shield(checkpoint_task)
-    except asyncio.CancelledError as cancellation:
-        if checkpoint_task.done():
-            raise
-        cleanup_error = await _finish_cleanup_task(checkpoint_task)
-        if cleanup_error is not None:
-            cancellation.add_note(f"checkpoint persistence failed: {cleanup_error}")
-        raise cancellation
+    await recording.execute(
+        recording.session.checkpoint(snapshot),
+        description=f"Checkpoint {snapshot.run_id}:{snapshot.name}",
+    )
 
 
 async def _propagate_run_cancellation(
     ctx: RunContext,
     run_spec: MatrixRunSpec,
     *,
-    record_session: RecordSession | None,
+    recording: _RecordOperations | None,
     cancellation: asyncio.CancelledError,
 ) -> NoReturn:
     cancelled_phase = ctx.phase
@@ -769,7 +825,7 @@ async def _propagate_run_cancellation(
         partial=True,
         output=task_output,
     )
-    if record_session is not None:
+    if recording is not None:
         evidence = ctx.snapshot_evidence()
         snapshot = _build_partial_snapshot(
             run_spec,
@@ -779,7 +835,9 @@ async def _propagate_run_cancellation(
             evidence=evidence,
         )
         cleanup_error = await _finish_cleanup_task(
-            asyncio.create_task(record_session.checkpoint(snapshot))
+            recording.start(recording.session.checkpoint(snapshot)),
+            cancel_on_timeout=False,
+            description=f"Cancellation checkpoint {snapshot.run_id}",
         )
         if cleanup_error is not None:
             cancellation.add_note(f"cancellation checkpoint failed: {cleanup_error}")
@@ -801,6 +859,50 @@ async def _run_concurrent_matrix(
             if cleanup_error is not None and not isinstance(cleanup_error, asyncio.CancelledError):
                 exc.add_note(f"concurrent run cleanup failed: {cleanup_error}")
         raise
+
+
+async def _abort_recording(
+    recording: _RecordOperations,
+    *,
+    run_specs: Sequence[MatrixRunSpec],
+    staged_run_ids: list[str],
+    cross_run_derivation_complete: bool,
+    policies_complete: bool,
+    failure: BaseException,
+) -> None:
+    for operation_error in await recording.drain():
+        failure.add_note(f"recording operation failed before abort: {operation_error}")
+    planned_ids = tuple(run_spec.run_id for run_spec in run_specs)
+    recorded = tuple(run_id for run_id in planned_ids if run_id in staged_run_ids)
+    missing = tuple(run_id for run_id in planned_ids if run_id not in staged_run_ids)
+    termination = ExperimentTermination(
+        status=(
+            ExperimentStatus.CANCELLED
+            if isinstance(failure, asyncio.CancelledError)
+            else ExperimentStatus.ABORTED
+        ),
+        partial=True,
+        cross_run_derivation_complete=cross_run_derivation_complete,
+        policies_complete=policies_complete,
+        planned_run_ids=planned_ids,
+        recorded_run_ids=recorded,
+        missing_run_ids=missing,
+        error=ErrorRecord.from_exception(failure),
+    )
+    abort_error: BaseException | None = None
+    close_error: BaseException | None = None
+    try:
+        await recording.session.abort(termination)
+    except BaseException as error:
+        abort_error = error
+    try:
+        await recording.session.close()
+    except BaseException as error:
+        close_error = error
+    if abort_error is not None:
+        failure.add_note(f"recording abort failed: {abort_error}")
+    if close_error is not None:
+        failure.add_note(f"recording close failed: {close_error}")
 
 
 async def _emit_completion_progress(
@@ -876,27 +978,20 @@ async def _emit_completion_progress(
 async def _finish_cleanup_task(
     task: asyncio.Task[CleanupResultT],
     *,
-    timeout_seconds: float = _CANCELLATION_CLEANUP_TIMEOUT_SECONDS,
+    timeout_seconds: float | None = None,
+    cancellation_grace_seconds: float = _CANCELLATION_GRACE_SECONDS,
+    cancel_on_timeout: bool = True,
+    description: str = "Cleanup",
 ) -> BaseException | None:
-    deadline = asyncio.get_running_loop().time() + timeout_seconds
-    while not task.done():
-        remaining = max(deadline - asyncio.get_running_loop().time(), 0)
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
-        except asyncio.CancelledError:
-            pass
-        except TimeoutError:
-            task.cancel()
-            return TimeoutError(f"Cleanup did not finish within {timeout_seconds:g} seconds.")
-        except BaseException as error:
-            return error
-    if task.cancelled():
-        return asyncio.CancelledError()
-    try:
-        task.result()
-    except BaseException as error:
-        return error
-    return None
+    return await settle_task(
+        task,
+        timeout_seconds=(
+            _CANCELLATION_CLEANUP_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
+        ),
+        cancellation_grace_seconds=cancellation_grace_seconds,
+        cancel_on_timeout=cancel_on_timeout,
+        description=description,
+    )
 
 
 def _build_run_result(

@@ -1964,6 +1964,13 @@ Progress is not persistence. The recorder stages evidence through its own lifecy
 progress handler fails. A hard process death cannot emit terminal events; inspect durable staging
 to recover the last committed evidence.
 
+Cooperative cancellation cannot interrupt a completed run halfway through its durable stage.
+Recorder operations are shielded and session-owned; cancellation is propagated only after the
+commit reaches a terminal state or is retained as explicitly active cleanup. Abort and close run
+after outstanding stages, checkpoints, artifact transfers, and final publication work, never in
+parallel with them. Cleanup callbacks that ignore cancellation remain tracked and their eventual
+exceptions are reported through the event loop instead of becoming unobserved task warnings.
+
 ## Python Builder
 
 The builder compiles to the same `BenchmarkSpec` used by YAML:
@@ -2682,6 +2689,20 @@ On cooperative cancellation Autobench:
 4. cancels active concurrent siblings and gives each bounded time to perform the same cleanup;
 5. marks staging cancelled, closes the record session, and re-raises the original cancellation.
 
+Recorder commits are cancellation-safe boundaries. Once a run has produced its complete
+`RunResult`, cancellation does not discard it while `stage()` is publishing the payload or
+manifest revision. Autobench keeps ownership of that commit, waits for its terminal state within
+the cleanup bound, and computes `recorded_run_ids` only after outstanding recorder operations have
+settled. `abort()` and `close()` are ordered after stage and checkpoint work, so they never race a
+surviving file-system worker.
+
+The same rule applies to final publication. If cancellation arrives after `finish()` has begun,
+the finalization remains owned until it either commits or fails; Autobench does not report an
+untracked publication and let a final directory appear later. A non-cooperative third-party
+cleanup may outlive the public wait bound because Python cannot forcibly terminate an arbitrary
+coroutine. Such a task is retained, its eventual exception is delivered to the event-loop exception
+handler, and the cancellation receives a diagnostic that cleanup is still active.
+
 If cancellation happens during scoring or derivation, a task output already produced by the
 application remains in the partial snapshot. Recorder failures are attached to the cancellation as
 notes and never replace its identity. A task timeout remains a timeout and is not reclassified as
@@ -2697,6 +2718,12 @@ survives a hard kill.
 Autobench does not write on every signal and does not resume application code from a checkpoint.
 The application owns executable workflow state; Autobench owns durable evidence. Automatic
 periodic checkpoint policy is intentionally outside this release.
+
+Async file artifacts use the same ownership model. `artifact_file_async()` returns cancellation
+within a bounded interval even when a filesystem read is blocked. The run retains a partial
+artifact reference, while the session owns the underlying transfer and settles it before
+checkpoint, abort, final publication, or close. A late transfer cannot be mistaken for a complete
+artifact before its payload is available.
 
 ## Inspect And Recover Staging
 
@@ -5952,6 +5979,17 @@ if inspection.recoverable and inspection.missing_run_ids:
 The pipeline owns `open`, `stage`, `finish` or `abort`, and `close`; application code should not
 open a live session just to run a normal benchmark. `ExperimentStart`, `ExecutionSnapshot`, and
 `PartialRunSnapshot` are frozen transfer models. Recovery never imports the task or optional SDKs.
+
+A custom session exposes immediate file and stream storage explicitly through
+`artifact_sink: ArtifactSink | None`. The session may return itself, as `FileRecordSession` does,
+or delegate to a separate local, remote, or composite sink. Returning `None` is valid, but a task
+that calls `ctx.artifact_file()` or `ctx.artifact_stream()` then receives
+`ArtifactSinkRequiredError` before Autobench consumes the source. The lifecycle session does not
+need to proxy the complete sink protocol merely to delegate storage.
+
+`ArtifactSink` provides synchronous file/stream methods, `prepare_file_async()`, and
+`prepare_stream_async()`. Async implementations own in-flight transfers after caller cancellation
+and must settle them before the associated session closes or publishes its final record.
 
 Load one exact record when building an audit or optimizer adapter:
 

@@ -130,6 +130,13 @@ Progress is not persistence. The recorder stages evidence through its own lifecy
 progress handler fails. A hard process death cannot emit terminal events; inspect durable staging
 to recover the last committed evidence.
 
+Cooperative cancellation cannot interrupt a completed run halfway through its durable stage.
+Recorder operations are shielded and session-owned; cancellation is propagated only after the
+commit reaches a terminal state or is retained as explicitly active cleanup. Abort and close run
+after outstanding stages, checkpoints, artifact transfers, and final publication work, never in
+parallel with them. Cleanup callbacks that ignore cancellation remain tracked and their eventual
+exceptions are reported through the event loop instead of becoming unobserved task warnings.
+
 ## Python Builder
 
 The builder compiles to the same `BenchmarkSpec` used by YAML:

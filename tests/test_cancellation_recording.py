@@ -5,6 +5,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
@@ -15,6 +16,7 @@ import pytest
 from click.testing import CliRunner
 
 import autobench.cli as cli_module
+import autobench.runtime.awaitables as awaitables_module
 import autobench.runtime.pipeline as pipeline_module
 from autobench import (
     BenchmarkInfo,
@@ -29,6 +31,7 @@ from autobench import (
     ExperimentStatus,
     ExperimentTermination,
     FileRecorder,
+    FileRecordSession,
     PartialRunSnapshot,
     RecordingError,
     RunContext,
@@ -36,10 +39,14 @@ from autobench import (
     RunResult,
     RunStatus,
     Semantic,
+    StagedRun,
+    StagingManifest,
+    StagingState,
     TaskResult,
     TaskSpec,
     TaskStatus,
     Variant,
+    expand_matrix,
     finalize_staging,
     inspect_staging,
     recover_staging,
@@ -81,6 +88,10 @@ class MemorySession:
         self.termination: ExperimentTermination | None = None
         self.closed = False
 
+    @property
+    def artifact_sink(self) -> None:
+        return None
+
     async def stage(self, snapshot: ExecutionSnapshot) -> None:
         self.staged.append(snapshot)
 
@@ -105,6 +116,30 @@ class MemorySession:
 class CancellingSession(MemorySession):
     async def checkpoint(self, snapshot: PartialRunSnapshot) -> None:
         raise asyncio.CancelledError("session cancelled")
+
+
+class BlockingStageSession(MemorySession):
+    def __init__(self) -> None:
+        super().__init__()
+        self.stage_started = asyncio.Event()
+        self.release_stage = asyncio.Event()
+
+    async def stage(self, snapshot: ExecutionSnapshot) -> None:
+        self.stage_started.set()
+        await self.release_stage.wait()
+        self.staged.append(snapshot)
+
+
+class BlockingAbortSession(MemorySession):
+    def __init__(self) -> None:
+        super().__init__()
+        self.abort_started = asyncio.Event()
+        self.release_abort = asyncio.Event()
+
+    async def abort(self, termination: ExperimentTermination) -> None:
+        self.abort_started.set()
+        await self.release_abort.wait()
+        await super().abort(termination)
 
 
 def one_run_spec() -> BenchmarkSpec:
@@ -239,6 +274,199 @@ async def test_task_cancellation_preserves_original_exception_and_execution_phas
     assert session.snapshots[0].end_reason is EndReason.CANCELLED
     assert session.snapshots[0].trace is not None
     assert session.snapshots[0].trace.partial is True
+
+
+async def test_cancellation_after_run_completion_waits_for_durable_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def passing_task(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        return TaskResult(output={"answer": 42}, status=TaskStatus.PASSED)
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", passing_task)
+    session = BlockingStageSession()
+    execution = asyncio.create_task(
+        run_benchmark_spec(
+            one_run_spec(),
+            experiment_id="exp_stage_cancel",
+            recorder=MemoryRecorder(session),
+        )
+    )
+    await session.stage_started.wait()
+
+    execution.cancel()
+    await asyncio.sleep(0)
+    assert execution.done() is False
+    session.release_stage.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await execution
+    assert [snapshot.run.run_id for snapshot in session.staged] == [
+        "run_0001_0001_case_1__variant_1"
+    ]
+    assert session.termination is not None
+    assert session.termination.recorded_run_ids == ("run_0001_0001_case_1__variant_1",)
+    assert session.termination.missing_run_ids == ()
+
+
+async def test_file_stage_cancellation_commits_payload_and_manifest_before_abort(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def passing_task(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        return TaskResult(output={"answer": 42}, status=TaskStatus.PASSED)
+
+    started = threading.Event()
+    release = threading.Event()
+    original = FileRecordSession.write_execution_snapshot
+
+    def blocked_snapshot_write(
+        session: FileRecordSession,
+        snapshot: ExecutionSnapshot,
+        snapshot_hash: str,
+    ) -> StagedRun:
+        started.set()
+        release.wait()
+        return original(session, snapshot, snapshot_hash)
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", passing_task)
+    monkeypatch.setattr(FileRecordSession, "write_execution_snapshot", blocked_snapshot_write)
+    recorder = FileRecorder(tmp_path / "record")
+    execution = asyncio.create_task(
+        run_benchmark_spec(
+            one_run_spec(),
+            experiment_id="exp_snapshot_cancel",
+            recorder=recorder,
+        )
+    )
+    assert await asyncio.to_thread(started.wait, 2)
+
+    execution.cancel()
+    await asyncio.sleep(0)
+    assert execution.done() is False
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await execution
+    inspection = inspect_staging(recorder.staging_dir)
+    assert inspection.complete_run_ids == ("run_0001_0001_case_1__variant_1",)
+    assert inspection.orphaned_files == ()
+    recovered = recover_staging(recorder.staging_dir)
+    assert recovered.state.revision == recovered.manifest.revision
+    assert recovered.state.status.value == "aborted"
+
+
+async def test_file_manifest_cancellation_finishes_revision_before_abort(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def passing_task(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        return TaskResult(output={"answer": 42}, status=TaskStatus.PASSED)
+
+    started = threading.Event()
+    release = threading.Event()
+    original = FileRecordSession.write_state_and_manifest
+
+    def blocked_manifest_write(
+        session: FileRecordSession,
+        state: StagingState,
+        manifest: StagingManifest,
+    ) -> None:
+        if manifest.runs and state.status.value == "active":
+            started.set()
+            release.wait()
+        original(session, state, manifest)
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", passing_task)
+    monkeypatch.setattr(FileRecordSession, "write_state_and_manifest", blocked_manifest_write)
+    recorder = FileRecorder(tmp_path / "record")
+    execution = asyncio.create_task(
+        run_benchmark_spec(
+            one_run_spec(),
+            experiment_id="exp_manifest_cancel",
+            recorder=recorder,
+        )
+    )
+    assert await asyncio.to_thread(started.wait, 2)
+
+    execution.cancel()
+    await asyncio.sleep(0)
+    assert execution.done() is False
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await execution
+    recovered = recover_staging(recorder.staging_dir)
+    assert recovered.inspection.complete_run_ids == ("run_0001_0001_case_1__variant_1",)
+    assert recovered.state.revision == recovered.manifest.revision
+    assert recovered.state.termination is not None
+    assert recovered.state.termination.recorded_run_ids == ("run_0001_0001_case_1__variant_1",)
+
+
+async def test_final_publication_cancellation_remains_owned_until_terminal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def passing_task(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        return TaskResult(output={"answer": 42}, status=TaskStatus.PASSED)
+
+    started = threading.Event()
+    release = threading.Event()
+    original = FileRecordSession.publish_result
+
+    def blocked_publication(
+        session: FileRecordSession,
+        result: ExperimentResult,
+    ) -> ExperimentRecord:
+        started.set()
+        release.wait()
+        return original(session, result)
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", passing_task)
+    monkeypatch.setattr(FileRecordSession, "publish_result", blocked_publication)
+    output = tmp_path / "record"
+    execution = asyncio.create_task(
+        run_benchmark_spec(
+            one_run_spec(),
+            experiment_id="exp_publish_cancel",
+            recorder=FileRecorder(output),
+        )
+    )
+    assert await asyncio.to_thread(started.wait, 2)
+
+    execution.cancel()
+    await asyncio.sleep(0)
+    assert execution.done() is False
+    assert output.exists() is False
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await execution
+    assert output.is_dir()
+    assert replay_experiment(output).termination.status is ExperimentStatus.COMPLETED
 
 
 async def test_scoring_cancellation_preserves_completed_task_output(
@@ -400,7 +628,10 @@ async def test_explicit_checkpoint_failure_during_cancellation_is_attached_as_no
         phase=RunPhase.EXECUTING,
     )
     persistence = asyncio.create_task(
-        pipeline_module._persist_explicit_checkpoint(session, snapshot)
+        pipeline_module._persist_explicit_checkpoint(
+            pipeline_module._RecordOperations(session),
+            snapshot,
+        )
     )
     await session.checkpoint_started.wait()
 
@@ -429,7 +660,10 @@ async def test_explicit_checkpoint_propagates_session_cancellation() -> None:
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await pipeline_module._persist_explicit_checkpoint(session, snapshot)
+        await pipeline_module._persist_explicit_checkpoint(
+            pipeline_module._RecordOperations(session),
+            snapshot,
+        )
 
 
 async def test_timeout_is_a_failed_partial_run_not_an_explicit_cancellation(
@@ -480,6 +714,34 @@ async def test_cleanup_wait_is_bounded_and_reports_child_cancellation() -> None:
     assert isinstance(error, RuntimeError)
 
 
+async def test_settle_task_validates_bounds_and_tracks_a_cancelled_timeout() -> None:
+    task = asyncio.create_task(asyncio.Event().wait())
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        await awaitables_module.settle_task(task, timeout_seconds=-1)
+    with pytest.raises(ValueError, match="cancellation_grace_seconds"):
+        await awaitables_module.settle_task(
+            task,
+            timeout_seconds=1,
+            cancellation_grace_seconds=-1,
+        )
+
+    error = await awaitables_module.settle_task(
+        task,
+        timeout_seconds=0,
+        cancel_on_timeout=False,
+        description="Pending operation",
+    )
+    assert isinstance(error, TimeoutError)
+    assert task in awaitables_module._retained_tasks
+
+    awaitables_module.retain_task(task, description="Duplicate owner")
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0)
+    assert task not in awaitables_module._retained_tasks
+
+
 async def test_cleanup_wait_survives_repeated_parent_cancellation() -> None:
     release = asyncio.Event()
     child = asyncio.create_task(release.wait())
@@ -493,6 +755,178 @@ async def test_cleanup_wait_survives_repeated_parent_cancellation() -> None:
     release.set()
 
     assert await cleanup is None
+
+
+async def test_cleanup_wait_observes_cancellation_resistant_late_failure() -> None:
+    release = asyncio.Event()
+    reported: list[dict[str, Any]] = []
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: reported.append(context))
+
+    async def resistant_cleanup() -> None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError as cancellation:
+            await release.wait()
+            raise RuntimeError("late cleanup failure") from cancellation
+
+    task = asyncio.create_task(resistant_cleanup())
+    try:
+        error = await pipeline_module._finish_cleanup_task(
+            task,
+            timeout_seconds=0.001,
+            cancellation_grace_seconds=0.001,
+        )
+        assert isinstance(error, TimeoutError)
+        assert "remains active" in str(error)
+        assert task.done() is False
+        assert task in awaitables_module._retained_tasks
+
+        release.set()
+        await asyncio.wait_for(asyncio.shield(task), timeout=1)
+    except RuntimeError as error:
+        assert str(error) == "late cleanup failure"
+    finally:
+        await asyncio.sleep(0)
+        loop.set_exception_handler(previous_handler)
+
+    assert task not in awaitables_module._retained_tasks
+    assert len(reported) == 1
+    assert isinstance(reported[0]["exception"], RuntimeError)
+
+
+async def test_cleanup_wait_returns_failure_raised_during_cancellation_grace() -> None:
+    async def fail_after_cancellation() -> None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError as cancellation:
+            raise RuntimeError("grace failure") from cancellation
+
+    error = await pipeline_module._finish_cleanup_task(
+        asyncio.create_task(fail_after_cancellation()),
+        timeout_seconds=0.001,
+        cancellation_grace_seconds=1,
+    )
+
+    assert isinstance(error, RuntimeError)
+    assert str(error) == "grace failure"
+
+
+async def test_record_operation_drain_reports_failure_before_abort() -> None:
+    session = MemorySession()
+    recording = pipeline_module._RecordOperations(session)
+    release = asyncio.Event()
+
+    async def fail_recording_operation() -> None:
+        await release.wait()
+        raise RecordingError("staging write failed")
+
+    recording.start(fail_recording_operation())
+    failure = RuntimeError("benchmark failed")
+    abort = asyncio.create_task(
+        pipeline_module._abort_recording(
+            recording,
+            run_specs=expand_matrix(one_run_spec(), experiment_id="exp_drain"),
+            staged_run_ids=[],
+            cross_run_derivation_complete=False,
+            policies_complete=False,
+            failure=failure,
+        )
+    )
+    await asyncio.sleep(0)
+    assert abort.done() is False
+
+    release.set()
+    await abort
+
+    assert any("staging write failed" in note for note in failure.__notes__)
+    assert session.termination is not None
+    assert session.termination.status is ExperimentStatus.ABORTED
+    assert session.closed is True
+
+
+async def test_stage_and_abort_timeouts_remain_owned_and_observable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def passing_task(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        return TaskResult(output={"answer": 42}, status=TaskStatus.PASSED)
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", passing_task)
+    monkeypatch.setattr(pipeline_module, "_CANCELLATION_CLEANUP_TIMEOUT_SECONDS", 0.001)
+    session = BlockingStageSession()
+    execution = asyncio.create_task(
+        run_benchmark_spec(
+            one_run_spec(),
+            experiment_id="exp_owned_stage",
+            recorder=MemoryRecorder(session),
+        )
+    )
+    await session.stage_started.wait()
+
+    execution.cancel()
+    with pytest.raises(asyncio.CancelledError) as raised:
+        await asyncio.wait_for(execution, timeout=1)
+
+    assert any("run staging did not settle" in note for note in raised.value.__notes__)
+    assert any("recording abort failed" in note for note in raised.value.__notes__)
+    assert session.closed is False
+
+    session.release_stage.set()
+    for _ in range(100):
+        if session.closed:
+            break
+        await asyncio.sleep(0.001)
+    assert session.closed is True
+    assert session.termination is not None
+    assert session.termination.recorded_run_ids == ("run_0001_0001_case_1__variant_1",)
+
+
+async def test_abort_timeout_is_reported_while_abort_remains_owned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = asyncio.CancelledError("stop task")
+
+    async def cancel_task(
+        target: str,
+        *,
+        ctx: RunContext,
+        case: Case,
+        search_paths: tuple[str, ...] = (),
+    ) -> TaskResult:
+        raise original
+
+    monkeypatch.setattr(pipeline_module, "run_python_task", cancel_task)
+    monkeypatch.setattr(pipeline_module, "_CANCELLATION_CLEANUP_TIMEOUT_SECONDS", 0.001)
+    session = BlockingAbortSession()
+
+    with pytest.raises(asyncio.CancelledError) as raised:
+        await asyncio.wait_for(
+            run_benchmark_spec(
+                one_run_spec(),
+                experiment_id="exp_owned_abort",
+                recorder=MemoryRecorder(session),
+            ),
+            timeout=1,
+        )
+
+    assert raised.value is original
+    assert session.abort_started.is_set()
+    assert any("recording abort failed" in note for note in original.__notes__)
+    assert session.closed is False
+
+    session.release_abort.set()
+    for _ in range(100):
+        if session.closed:
+            break
+        await asyncio.sleep(0.001)
+    assert session.closed is True
 
 
 async def test_concurrent_cleanup_error_is_attached_to_original_failure() -> None:

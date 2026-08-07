@@ -14,6 +14,7 @@ import pytest
 from pydantic import ValidationError
 
 import autobench.records.staging as staging_module
+import autobench.runtime.context as context_module
 from autobench import (
     ArtifactOverflow,
     ArtifactRef,
@@ -25,6 +26,8 @@ from autobench import (
     BenchmarkSpec,
     Case,
     DatasetSpec,
+    ExperimentStatus,
+    ExperimentTermination,
     FileRecorder,
     PartialRunSnapshot,
     RecordDurability,
@@ -683,6 +686,203 @@ async def test_async_file_cancellation_waits_for_snapshot_and_retains_evidence(
         )
         == ctx.artifacts[0]
     )
+
+
+async def test_async_file_cancellation_is_bounded_while_session_owns_transfer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx, session, _ = await open_artifact_context(tmp_path)
+    source = tmp_path / "blocked.bin"
+    source.write_bytes(b"snapshot")
+    started = threading.Event()
+    release = threading.Event()
+    original = FileRecordSession.prepare_file
+
+    def blocked_prepare_file(
+        active_session: FileRecordSession,
+        *,
+        run_id: str,
+        artifact_id: str,
+        name: str,
+        source: Path,
+        media_type: str | None,
+        max_bytes: int,
+        overflow: ArtifactOverflow,
+        symlinks: SymlinkPolicy,
+        filename: str | None,
+        span_id: str | None,
+        tags: dict[str, Any],
+    ) -> ArtifactRef:
+        started.set()
+        release.wait()
+        return original(
+            active_session,
+            run_id=run_id,
+            artifact_id=artifact_id,
+            name=name,
+            source=source,
+            media_type=media_type,
+            max_bytes=max_bytes,
+            overflow=overflow,
+            symlinks=symlinks,
+            filename=filename,
+            span_id=span_id,
+            tags=tags,
+        )
+
+    monkeypatch.setattr(FileRecordSession, "prepare_file", blocked_prepare_file)
+    monkeypatch.setattr(context_module, "_ARTIFACT_TRANSFER_SETTLE_SECONDS", 0.001)
+    capture = asyncio.create_task(ctx.artifact_file_async("blocked", source))
+    assert await asyncio.to_thread(started.wait, 2)
+
+    capture.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(capture, timeout=1)
+
+    assert len(ctx.artifacts) == 1
+    assert ctx.artifacts[0].state is ArtifactState.PARTIAL
+    close = asyncio.create_task(session.close())
+    await asyncio.sleep(0)
+    assert close.done() is False
+
+    release.set()
+    await asyncio.wait_for(close, timeout=1)
+    assert session.closed is True
+    prepared = session.prepared_artifact(
+        run_id=ctx.run_id,
+        artifact_id=ctx.artifacts[0].id,
+    )
+    assert prepared is not None
+    assert prepared.state is ArtifactState.COMPLETE
+
+
+async def test_direct_session_checkpoint_cancellation_has_bounded_ownership(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, session, _ = await open_artifact_context(tmp_path)
+    run_spec = session.start.runs[0]
+    first_started = asyncio.Event()
+    first_release = asyncio.Event()
+    second_started = asyncio.Event()
+    second_release = asyncio.Event()
+    original = FileRecordSession._checkpoint
+
+    async def controlled_checkpoint(
+        active_session: FileRecordSession,
+        snapshot: PartialRunSnapshot,
+    ) -> None:
+        if snapshot.name == "settled-after-cancel":
+            first_started.set()
+            await first_release.wait()
+        if snapshot.name == "owned-after-timeout":
+            second_started.set()
+            await second_release.wait()
+        await original(active_session, snapshot)
+
+    monkeypatch.setattr(FileRecordSession, "_checkpoint", controlled_checkpoint)
+    first_snapshot = PartialRunSnapshot(
+        run_id=run_spec.run_id,
+        experiment_id=run_spec.experiment_id,
+        benchmark_id=run_spec.benchmark_id,
+        case_id=run_spec.case.id,
+        variant_id=run_spec.variant.id,
+        name="settled-after-cancel",
+        phase=RunPhase.EXECUTING,
+    )
+    first = asyncio.create_task(session.checkpoint(first_snapshot))
+    await first_started.wait()
+    first.cancel()
+    await asyncio.sleep(0)
+    first_release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    assert {item.name for item in session.manifest.checkpoints} == {"settled-after-cancel"}
+
+    monkeypatch.setattr(staging_module, "_SESSION_OPERATION_SETTLE_SECONDS", 0.001)
+    second_snapshot = first_snapshot.model_copy(update={"name": "owned-after-timeout"})
+    second = asyncio.create_task(session.checkpoint(second_snapshot))
+    await second_started.wait()
+    second.cancel()
+    with pytest.raises(asyncio.CancelledError) as raised:
+        await asyncio.wait_for(second, timeout=1)
+    assert any("checkpoint" in note for note in raised.value.__notes__)
+
+    close = asyncio.create_task(session.close())
+    await asyncio.sleep(0)
+    assert close.done() is False
+    second_release.set()
+    await asyncio.wait_for(close, timeout=1)
+    assert {item.name for item in session.manifest.checkpoints} == {
+        "settled-after-cancel",
+        "owned-after-timeout",
+    }
+
+
+async def test_abort_rechecks_lifecycle_after_owned_operation_finishes(tmp_path: Path) -> None:
+    _, session, _ = await open_artifact_context(tmp_path)
+    operation_started = asyncio.Event()
+    release_operation = asyncio.Event()
+
+    async def finish_session() -> None:
+        operation_started.set()
+        await release_operation.wait()
+        session.finished = True
+
+    session._start_operation(finish_session())
+    abort = asyncio.create_task(
+        session.abort(
+            ExperimentTermination(
+                status=ExperimentStatus.ABORTED,
+                partial=True,
+            )
+        )
+    )
+    await operation_started.wait()
+    await asyncio.sleep(0)
+    assert abort.done() is False
+
+    release_operation.set()
+    await abort
+
+    assert session.state.status.value == "active"
+    await session.close()
+
+
+async def test_cancelled_file_worker_is_removed_from_session_ownership(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx, session, _ = await open_artifact_context(tmp_path)
+    source = tmp_path / "cancelled.bin"
+    source.write_bytes(b"payload")
+
+    def cancel_prepare_file(
+        active_session: FileRecordSession,
+        *,
+        run_id: str,
+        artifact_id: str,
+        name: str,
+        source: Path,
+        media_type: str | None,
+        max_bytes: int,
+        overflow: ArtifactOverflow,
+        symlinks: SymlinkPolicy,
+        filename: str | None,
+        span_id: str | None,
+        tags: dict[str, Any],
+    ) -> ArtifactRef:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(FileRecordSession, "prepare_file", cancel_prepare_file)
+    with pytest.raises(asyncio.CancelledError):
+        await ctx.artifact_file_async("cancelled", source)
+    await asyncio.sleep(0)
+
+    assert session.artifact_transfers == set()
+    assert ctx.artifacts[0].state is ArtifactState.PARTIAL
+    await session.close()
 
 
 async def test_stream_publish_honors_synced_durability_and_cleans_failed_commit(

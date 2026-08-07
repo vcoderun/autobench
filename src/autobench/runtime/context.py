@@ -3,7 +3,7 @@ from __future__ import annotations as _annotations
 import asyncio
 import json
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable, Iterator
-from contextlib import AbstractContextManager, suppress
+from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import datetime
 from enum import StrEnum
@@ -50,8 +50,11 @@ from autobench.records.artifacts import (
     ArtifactRef,
     ArtifactSink,
     ArtifactSinkRequiredError,
+    ArtifactSource,
+    ArtifactState,
     SymlinkPolicy,
 )
+from autobench.runtime.awaitables import settle_task
 from autobench.runtime.lifecycle import RunPhase
 from autobench.tracking import (
     AssetCandidate,
@@ -68,6 +71,7 @@ from autobench.tracking import (
 )
 
 _RUN_CONTEXTS: WeakValueDictionary[str, RunContext] = WeakValueDictionary()
+_ARTIFACT_TRANSFER_SETTLE_SECONDS = 5.0
 
 
 class DurationMetricSpec(BaseModel):
@@ -778,8 +782,7 @@ class RunContext:
             artifact_id = self._next_artifact_id()
         active_tags = dict(tags or {})
         transfer = asyncio.create_task(
-            asyncio.to_thread(
-                sink.prepare_file,
+            sink.prepare_file_async(
                 run_id=self.run_id,
                 artifact_id=artifact_id,
                 name=name,
@@ -795,10 +798,33 @@ class RunContext:
         )
         try:
             artifact = await asyncio.shield(transfer)
-        except asyncio.CancelledError:
-            with suppress(BaseException):
-                await transfer
-            self._retain_interrupted_artifact(sink, artifact_id, span_id=span_id)
+        except asyncio.CancelledError as cancellation:
+            transfer_error = await settle_task(
+                transfer,
+                timeout_seconds=_ARTIFACT_TRANSFER_SETTLE_SECONDS,
+                cancel_on_timeout=False,
+                description=f"Artifact {artifact_id} transfer",
+            )
+            retained = self._retain_interrupted_artifact(
+                sink,
+                artifact_id,
+                span_id=span_id,
+            )
+            if not retained:
+                self._retain_prepared_artifact(
+                    ArtifactRef(
+                        id=artifact_id,
+                        name=name,
+                        media_type=media_type,
+                        span_id=span_id,
+                        tags=active_tags,
+                        source=ArtifactSource.FILE,
+                        state=ArtifactState.PARTIAL,
+                        filename=filename or source.name,
+                    )
+                )
+            if transfer_error is not None:
+                cancellation.add_note(f"artifact transfer did not settle: {transfer_error}")
             raise
         except BaseException:
             self._retain_interrupted_artifact(sink, artifact_id, span_id=span_id)
@@ -893,12 +919,14 @@ class RunContext:
         artifact_id: str,
         *,
         span_id: str | None,
-    ) -> None:
+    ) -> bool:
         artifact = sink.prepared_artifact(run_id=self.run_id, artifact_id=artifact_id)
-        if artifact is not None:
-            self._retain_prepared_artifact(
-                artifact.model_copy(update={"span_id": artifact.span_id or span_id})
-            )
+        if artifact is None:
+            return False
+        self._retain_prepared_artifact(
+            artifact.model_copy(update={"span_id": artifact.span_id or span_id})
+        )
+        return True
 
     def _retain_prepared_artifact(self, artifact: ArtifactRef) -> ArtifactRef:
         with self._evidence_lock:

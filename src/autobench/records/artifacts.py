@@ -89,6 +89,22 @@ class ArtifactSink(Protocol):
         tags: dict[str, Any],
     ) -> ArtifactRef: ...
 
+    async def prepare_file_async(
+        self,
+        *,
+        run_id: str,
+        artifact_id: str,
+        name: str,
+        source: Path,
+        media_type: str | None,
+        max_bytes: int,
+        overflow: ArtifactOverflow,
+        symlinks: SymlinkPolicy,
+        filename: str | None,
+        span_id: str | None,
+        tags: dict[str, Any],
+    ) -> ArtifactRef: ...
+
     def prepare_stream(
         self,
         *,
