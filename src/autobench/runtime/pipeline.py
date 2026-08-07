@@ -4,16 +4,13 @@ import asyncio
 import hashlib
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-from pydantic import BaseModel, Field
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
 from autobench.data.datasets import Case
-from autobench.data.variants import FactorValue, Variant
+from autobench.data.variants import Variant
 from autobench.errors import ErrorRecord
 from autobench.evaluation.derivation import derive_observations
 from autobench.evaluation.scoring import (
@@ -25,124 +22,56 @@ from autobench.evaluation.scoring import (
 from autobench.instrumentation.manager import InstrumentationManager
 from autobench.instrumentation.models import InstrumentationError, Instrumentor
 from autobench.instrumentation.registry import InstrumentorStatus, resolve_instrumentors
-from autobench.metrics.mappings import SourceSnapshot
 from autobench.metrics.observations import (
     Observation,
     ObservationKind,
     ObservationRole,
     ObservationSource,
 )
-from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, Semantic, SemanticRegistry
+from autobench.metrics.semantics import Semantic, SemanticRegistry
 from autobench.protocol import EndReason, SpanStatus
-from autobench.protocol.traces import Trace
-from autobench.records.storage import EnvironmentMetadata, capture_environment
+from autobench.records.artifacts import ArtifactSink
+from autobench.records.storage import capture_environment
 from autobench.runtime.awaitables import run_sync
-from autobench.runtime.context import RunContext
+from autobench.runtime.context import ContextEvidence, RunContext
+from autobench.runtime.lifecycle import RunPhase
+from autobench.runtime.models import (
+    BenchmarkPlan,
+    EvaluationStatus,
+    ExecutionCorrelation,
+    ExperimentResult,
+    ExperimentStatus,
+    ExperimentTermination,
+    MatrixRunSpec,
+    RunResult,
+    RunStatus,
+    merge_execution_correlation,
+)
+from autobench.runtime.progress import (
+    ProgressErrorHandler,
+    ProgressErrorPolicy,
+    ProgressEventKind,
+    ProgressHandler,
+    _ProgressDispatcher,
+)
 from autobench.runtime.tasks import TaskResult, TaskStatus, run_python_task
-from autobench.tracking import AssetUse, AssetVersion, track
+from autobench.tracking import track
 
 if TYPE_CHECKING:  # pragma: no cover
+    from autobench.evaluation.policies import PolicyResult
+    from autobench.records.staging import PartialRunSnapshot, Recorder, RecordSession
     from autobench.spec import BenchmarkSpec
 
+CleanupResultT = TypeVar("CleanupResultT")
 
-class BenchmarkPlan(BaseModel):
-    benchmark_id: str
-    dataset_id: str | None = None
-    dataset_version: str | None = None
-    dataset_hash: str | None = None
-    case_ids: tuple[str, ...] = ()
-    case_count: int
-    variant_count: int
-    planned_run_count: int
-    warnings: list[str] = Field(default_factory=list)
-
-
-class RunStatus(StrEnum):
-    PASSED = "passed"
-    FAILED = "failed"
-    ERRORED = "errored"
-    SKIPPED = "skipped"
-
-
-class EvaluationStatus(StrEnum):
-    PASSED = "passed"
-    FAILED = "failed"
-    ERRORED = "errored"
-    SKIPPED = "skipped"
-    NOT_EVALUATED = "not_evaluated"
-
-
-class MatrixRunSpec(BaseModel):
-    run_id: str
-    benchmark_id: str
-    experiment_id: str
-    case_index: int
-    variant_index: int
-    case: Case
-    variant: Variant
-
-
-class RunResult(BaseModel):
-    run_id: str
-    benchmark_id: str
-    experiment_id: str
-    case_id: str
-    variant_id: str
-    status: RunStatus
-    evaluation_status: EvaluationStatus
-    case: Case
-    task_result: TaskResult
-    scores: list[ScoreRecord] = Field(default_factory=list)
-    factors: list[FactorValue] = Field(default_factory=list)
-    asset_versions: list[AssetVersion] = Field(default_factory=list)
-    asset_uses: list[AssetUse] = Field(default_factory=list)
-    parent_run_id: str | None = None
-    error: ErrorRecord | None = None
-    trace: Trace | None = None
-    source_snapshots: tuple[SourceSnapshot, ...] = ()
-
-
-class ExperimentResult(BaseModel):
-    experiment_id: str
-    benchmark_id: str
-    plan: BenchmarkPlan
-    runs: list[RunResult]
-    environment: EnvironmentMetadata
-    report_spec_data: dict[str, Any] | None = None
-    semantic_registry: SemanticRegistry = Field(
-        default_factory=lambda: DEFAULT_SEMANTIC_REGISTRY.model_copy(deep=True)
-    )
-    spec_snapshot: dict[str, Any] | None = None
-    spec_hash: str | None = None
-
-    @property
-    def total_count(self) -> int:
-        return len(self.runs)
-
-    @property
-    def passed_count(self) -> int:
-        return self.count_status(RunStatus.PASSED)
-
-    @property
-    def failed_count(self) -> int:
-        return self.count_status(RunStatus.FAILED)
-
-    @property
-    def errored_count(self) -> int:
-        return self.count_status(RunStatus.ERRORED)
-
-    @property
-    def skipped_count(self) -> int:
-        return self.count_status(RunStatus.SKIPPED)
-
-    def count_status(self, status: RunStatus) -> int:
-        return sum(1 for run in self.runs if run.status is status)
+_CANCELLATION_CLEANUP_TIMEOUT_SECONDS = 5.0
 
 
 def expand_matrix(
     spec: BenchmarkSpec,
     *,
     experiment_id: str,
+    correlation: ExecutionCorrelation | None = None,
 ) -> list[MatrixRunSpec]:
     return [
         MatrixRunSpec(
@@ -155,6 +84,7 @@ def expand_matrix(
             variant_index=variant_index,
             case=case,
             variant=variant,
+            correlation=correlation,
         )
         for case_index, case in enumerate(spec.dataset.cases)
         for variant_index, variant in enumerate(spec.variants)
@@ -182,95 +112,266 @@ async def run_benchmark_spec(
     spec: BenchmarkSpec,
     *,
     experiment_id: str | None = None,
+    correlation: ExecutionCorrelation | None = None,
     concurrency_limit: int | None = 1,
     instrumentors: Sequence[Instrumentor] = (),
+    recorder: Recorder | None = None,
+    progress_handlers: Sequence[ProgressHandler] = (),
+    progress_error_policy: ProgressErrorPolicy = ProgressErrorPolicy.STRICT,
+    progress_error_handler: ProgressErrorHandler | None = None,
 ) -> ExperimentResult:
     from autobench.spec import build_benchmark_plan
 
     active_experiment_id = experiment_id or generate_experiment_id(spec.benchmark.id)
+    active_correlation = merge_execution_correlation(
+        spec.execution.correlation,
+        correlation,
+    )
     plan = build_benchmark_plan(spec)
-    run_specs = expand_matrix(spec, experiment_id=active_experiment_id)
+    run_specs = expand_matrix(
+        spec,
+        experiment_id=active_experiment_id,
+        correlation=active_correlation,
+    )
     environment = capture_environment()
+    session: RecordSession | None = None
+    staged_run_ids: list[str] = []
+    started_run_ids: list[str] = []
+    completed_runs: dict[str, RunResult] = {}
+    cancelled_run_ids: set[str] = set()
+    policy_violations: list[PolicyResult] = []
+    cross_run_derivation_complete = not bool(spec.post_derive)
+    policies_complete = not bool(spec.policies)
+    dispatcher = _ProgressDispatcher(
+        progress_handlers,
+        error_policy=progress_error_policy,
+        error_handler=progress_error_handler,
+    )
+    if recorder is not None:
+        from autobench.records.staging import ExperimentStart
 
-    configured, instrumentation_diagnostics = resolve_instrumentors(
-        spec.instrumentation,
-        reserved_ids={instrumentor.info.id for instrumentor in instrumentors},
-    )
-    active_instrumentors = [*configured, *instrumentors]
-    instrumentor_ids = [instrumentor.info.id for instrumentor in active_instrumentors]
-    duplicate_ids = sorted(
-        instrumentor_id
-        for instrumentor_id in set(instrumentor_ids)
-        if instrumentor_ids.count(instrumentor_id) > 1
-    )
-    if duplicate_ids:
-        raise InstrumentationError(
-            f"duplicate instrumentors configured: {', '.join(duplicate_ids)}"
+        session = await recorder.open(
+            ExperimentStart(
+                experiment_id=active_experiment_id,
+                benchmark_id=spec.benchmark.id,
+                plan=plan,
+                runs=tuple(run_specs),
+                environment=environment,
+                semantic_registry=spec.semantic_registry.model_copy(deep=True),
+                report_spec_data=spec.reports.model_dump(mode="json"),
+                spec_snapshot=spec.model_dump(mode="json"),
+                spec_hash=_spec_hash(spec),
+                requires_cross_run_derivation=bool(spec.post_derive),
+                requires_policies=bool(spec.policies),
+                correlation=active_correlation,
+            )
         )
 
-    with InstrumentationManager() as instrumentation:
-        for instrumentor in active_instrumentors:
-            instrumentation.install(instrumentor)
-
-        if concurrency_limit is None or concurrency_limit <= 1:
-            runs = [
-                await _run_matrix_item(
-                    spec,
-                    run_spec,
-                    instrumentation_diagnostics=instrumentation_diagnostics,
-                )
-                for run_spec in run_specs
-            ]
-        else:
-            semaphore = asyncio.Semaphore(concurrency_limit)
-            runs = await asyncio.gather(
-                *[
-                    _run_matrix_item_limited(
-                        spec,
-                        run_spec,
-                        semaphore,
-                        instrumentation_diagnostics=instrumentation_diagnostics,
-                    )
-                    for run_spec in run_specs
-                ]
+    try:
+        await dispatcher.emit(
+            ProgressEventKind.BENCHMARK_STARTED,
+            f"Benchmark {spec.benchmark.id} started.",
+            benchmark_id=spec.benchmark.id,
+            experiment_id=active_experiment_id,
+            case_count=plan.case_count,
+            variant_count=plan.variant_count,
+            planned_run_count=plan.planned_run_count,
+        )
+        configured, instrumentation_diagnostics = resolve_instrumentors(
+            spec.instrumentation,
+            reserved_ids={instrumentor.info.id for instrumentor in instrumentors},
+        )
+        active_instrumentors = [*configured, *instrumentors]
+        instrumentor_ids = [instrumentor.info.id for instrumentor in active_instrumentors]
+        duplicate_ids = sorted(
+            instrumentor_id
+            for instrumentor_id in set(instrumentor_ids)
+            if instrumentor_ids.count(instrumentor_id) > 1
+        )
+        if duplicate_ids:
+            raise InstrumentationError(
+                f"duplicate instrumentors configured: {', '.join(duplicate_ids)}"
             )
 
-    result = ExperimentResult(
-        experiment_id=active_experiment_id,
+        with InstrumentationManager() as instrumentation:
+            for instrumentor in active_instrumentors:
+                instrumentation.install(instrumentor)
+
+            if concurrency_limit is None or concurrency_limit <= 1:
+                runs = []
+                for run_spec in run_specs:
+                    run = await _run_matrix_item_observed(
+                        spec,
+                        run_spec,
+                        dispatcher=dispatcher,
+                        started_run_ids=started_run_ids,
+                        completed_runs=completed_runs,
+                        cancelled_run_ids=cancelled_run_ids,
+                        instrumentation_diagnostics=instrumentation_diagnostics,
+                        record_session=session,
+                        staged_run_ids=staged_run_ids,
+                    )
+                    runs.append(run)
+            else:
+                semaphore = asyncio.Semaphore(concurrency_limit)
+                runs = await _run_concurrent_matrix(
+                    [
+                        _run_matrix_item_limited(
+                            spec,
+                            run_spec,
+                            semaphore,
+                            dispatcher=dispatcher,
+                            started_run_ids=started_run_ids,
+                            completed_runs=completed_runs,
+                            cancelled_run_ids=cancelled_run_ids,
+                            instrumentation_diagnostics=instrumentation_diagnostics,
+                            record_session=session,
+                            staged_run_ids=staged_run_ids,
+                        )
+                        for run_spec in run_specs
+                    ],
+                )
+
+        result = ExperimentResult(
+            experiment_id=active_experiment_id,
+            benchmark_id=spec.benchmark.id,
+            plan=plan,
+            runs=runs,
+            environment=environment,
+            termination=ExperimentTermination(
+                status=ExperimentStatus.COMPLETED,
+                cross_run_derivation_complete=cross_run_derivation_complete,
+                policies_complete=policies_complete,
+                planned_run_ids=tuple(run_spec.run_id for run_spec in run_specs),
+                recorded_run_ids=tuple(run.run_id for run in runs),
+            ),
+            report_spec_data=spec.reports.model_dump(mode="json"),
+            semantic_registry=spec.semantic_registry.model_copy(deep=True),
+            spec_snapshot=spec.model_dump(mode="json"),
+            spec_hash=_spec_hash(spec),
+            correlation=active_correlation,
+        )
+        if spec.post_derive:
+            from autobench.evaluation.comparison import derive_experiment_observations
+
+            result = derive_experiment_observations(
+                spec.post_derive,
+                result=result,
+                registry=spec.semantic_registry,
+            )
+            cross_run_derivation_complete = True
+        if spec.policies:
+            from autobench.evaluation.policies import apply_policies, evaluate_policies
+
+            policy_violations = [
+                policy
+                for policy in evaluate_policies(
+                    spec.policies,
+                    result=result,
+                    registry=spec.semantic_registry,
+                )
+                if not policy.passed
+            ]
+            result = apply_policies(
+                spec.policies,
+                result=result,
+                registry=spec.semantic_registry,
+            )
+            policies_complete = True
+        result = _refresh_run_statuses(result, registry=spec.semantic_registry)
+        result = result.model_copy(
+            update={
+                "termination": result.termination.model_copy(
+                    update={
+                        "cross_run_derivation_complete": cross_run_derivation_complete,
+                        "policies_complete": policies_complete,
+                    }
+                )
+            }
+        )
+        completed_runs.update((run.run_id, run) for run in result.runs)
+        if session is not None:
+            await session.finish(result)
+            await session.close()
+    except BaseException as exc:
+        if session is not None:
+            planned_ids = tuple(run_spec.run_id for run_spec in run_specs)
+            recorded = tuple(run_id for run_id in planned_ids if run_id in staged_run_ids)
+            missing = tuple(run_id for run_id in planned_ids if run_id not in staged_run_ids)
+            termination = ExperimentTermination(
+                status=(
+                    ExperimentStatus.CANCELLED
+                    if isinstance(exc, asyncio.CancelledError)
+                    else ExperimentStatus.ABORTED
+                ),
+                partial=True,
+                cross_run_derivation_complete=cross_run_derivation_complete,
+                policies_complete=policies_complete,
+                planned_run_ids=planned_ids,
+                recorded_run_ids=recorded,
+                missing_run_ids=missing,
+                error=ErrorRecord.from_exception(exc),
+            )
+            abort_error = await _finish_cleanup_task(
+                asyncio.create_task(session.abort(termination))
+            )
+            if abort_error is not None:
+                exc.add_note(f"recording abort failed: {abort_error}")
+            close_error = await _finish_cleanup_task(asyncio.create_task(session.close()))
+            if close_error is not None:
+                exc.add_note(f"recording close failed: {close_error}")
+        progress_error = await _finish_cleanup_task(
+            asyncio.create_task(
+                _emit_completion_progress(
+                    dispatcher,
+                    benchmark_id=spec.benchmark.id,
+                    experiment_id=active_experiment_id,
+                    run_specs=run_specs,
+                    started_run_ids=started_run_ids,
+                    completed_runs=completed_runs,
+                    cancelled_run_ids=cancelled_run_ids,
+                    policy_violations=policy_violations,
+                    experiment_status=(
+                        ExperimentStatus.CANCELLED
+                        if isinstance(exc, asyncio.CancelledError)
+                        else ExperimentStatus.ABORTED
+                    ),
+                    error=exc,
+                )
+            )
+        )
+        if progress_error is not None:
+            exc.add_note(f"progress terminal delivery failed: {progress_error}")
+        dispatch_error = dispatcher.error()
+        if dispatch_error is not None:
+            exc.add_note(str(dispatch_error))
+        raise
+    await _emit_completion_progress(
+        dispatcher,
         benchmark_id=spec.benchmark.id,
-        plan=plan,
-        runs=runs,
-        environment=environment,
-        report_spec_data=spec.reports.model_dump(mode="json"),
-        semantic_registry=spec.semantic_registry.model_copy(deep=True),
-        spec_snapshot=spec.model_dump(mode="json"),
-        spec_hash=_spec_hash(spec),
+        experiment_id=active_experiment_id,
+        run_specs=run_specs,
+        started_run_ids=started_run_ids,
+        completed_runs=completed_runs,
+        cancelled_run_ids=cancelled_run_ids,
+        policy_violations=policy_violations,
+        experiment_status=ExperimentStatus.COMPLETED,
     )
-    if spec.post_derive:
-        from autobench.evaluation.comparison import derive_experiment_observations
-
-        result = derive_experiment_observations(
-            spec.post_derive,
-            result=result,
-            registry=spec.semantic_registry,
-        )
-    if spec.policies:
-        from autobench.evaluation.policies import apply_policies
-
-        result = apply_policies(
-            spec.policies,
-            result=result,
-            registry=spec.semantic_registry,
-        )
-    return _refresh_run_statuses(result, registry=spec.semantic_registry)
+    dispatcher.raise_if_failed()
+    return result
 
 
 def run_benchmark_path(
     path: Path,
     *,
     experiment_id: str | None = None,
+    correlation: ExecutionCorrelation | None = None,
     concurrency_limit: int | None = 1,
     instrumentors: Sequence[Instrumentor] = (),
+    recorder: Recorder | None = None,
+    progress_handlers: Sequence[ProgressHandler] = (),
+    progress_error_policy: ProgressErrorPolicy = ProgressErrorPolicy.STRICT,
+    progress_error_handler: ProgressErrorHandler | None = None,
 ) -> ExperimentResult:
     from autobench.spec import load_benchmark_spec
 
@@ -279,8 +380,13 @@ def run_benchmark_path(
         run_benchmark_spec(
             spec,
             experiment_id=experiment_id,
+            correlation=correlation,
             concurrency_limit=concurrency_limit,
             instrumentors=instrumentors,
+            recorder=recorder,
+            progress_handlers=progress_handlers,
+            progress_error_policy=progress_error_policy,
+            progress_error_handler=progress_error_handler,
         )
     )
 
@@ -290,14 +396,67 @@ async def _run_matrix_item_limited(
     run_spec: MatrixRunSpec,
     semaphore: asyncio.Semaphore,
     *,
+    dispatcher: _ProgressDispatcher,
+    started_run_ids: list[str],
+    completed_runs: dict[str, RunResult],
+    cancelled_run_ids: set[str],
     instrumentation_diagnostics: Sequence[InstrumentorStatus] = (),
+    record_session: RecordSession | None,
+    staged_run_ids: list[str],
 ) -> RunResult:
     async with semaphore:
-        return await _run_matrix_item(
+        return await _run_matrix_item_observed(
+            spec,
+            run_spec,
+            dispatcher=dispatcher,
+            started_run_ids=started_run_ids,
+            completed_runs=completed_runs,
+            cancelled_run_ids=cancelled_run_ids,
+            instrumentation_diagnostics=instrumentation_diagnostics,
+            record_session=record_session,
+            staged_run_ids=staged_run_ids,
+        )
+
+
+async def _run_matrix_item_observed(
+    spec: BenchmarkSpec,
+    run_spec: MatrixRunSpec,
+    *,
+    dispatcher: _ProgressDispatcher,
+    started_run_ids: list[str],
+    completed_runs: dict[str, RunResult],
+    cancelled_run_ids: set[str],
+    instrumentation_diagnostics: Sequence[InstrumentorStatus],
+    record_session: RecordSession | None,
+    staged_run_ids: list[str],
+) -> RunResult:
+    started_run_ids.append(run_spec.run_id)
+    try:
+        await dispatcher.emit(
+            ProgressEventKind.RUN_STARTED,
+            f"Run {run_spec.run_id} started.",
+            benchmark_id=run_spec.benchmark_id,
+            experiment_id=run_spec.experiment_id,
+            run_id=run_spec.run_id,
+            case_id=run_spec.case.id,
+            variant_id=run_spec.variant.id,
+        )
+        run = await _run_matrix_item(
             spec,
             run_spec,
             instrumentation_diagnostics=instrumentation_diagnostics,
+            record_session=record_session,
         )
+    except asyncio.CancelledError:
+        cancelled_run_ids.add(run_spec.run_id)
+        raise
+    completed_runs[run.run_id] = run
+    if record_session is not None:
+        from autobench.records.staging import ExecutionSnapshot
+
+        await record_session.stage(ExecutionSnapshot.from_result(run))
+        staged_run_ids.append(run.run_id)
+    return run
 
 
 async def _run_matrix_item(
@@ -305,6 +464,7 @@ async def _run_matrix_item(
     run_spec: MatrixRunSpec,
     *,
     instrumentation_diagnostics: Sequence[InstrumentorStatus] = (),
+    record_session: RecordSession | None = None,
 ) -> RunResult:
     ctx = RunContext(
         benchmark_id=run_spec.benchmark_id,
@@ -314,6 +474,26 @@ async def _run_matrix_item(
         experiment_id=run_spec.experiment_id,
         capture_policy=spec.capture,
     )
+    if isinstance(record_session, ArtifactSink):
+        ctx.bind_artifact_sink(record_session)
+    if record_session is not None:
+
+        async def persist_checkpoint(
+            name: str,
+            phase: RunPhase,
+            task_output: Any,
+            evidence: ContextEvidence,
+        ) -> None:
+            snapshot = _build_partial_snapshot(
+                run_spec,
+                name=name,
+                phase=phase,
+                task_output=task_output,
+                evidence=evidence,
+            )
+            await _persist_explicit_checkpoint(record_session, snapshot)
+
+        ctx.bind_checkpoint(persist_checkpoint)
     _seed_variant_evidence(ctx)
     for status in instrumentation_diagnostics:
         ctx.diagnostic(
@@ -336,12 +516,13 @@ async def _run_matrix_item(
             message="No task is defined for this benchmark.",
         )
         task_result = TaskResult(status=TaskStatus.SKIPPED, error=error)
+        task_result.end_reason = EndReason.DEFERRED
+        ctx.set_phase(RunPhase.FINALIZING)
         ctx.finalize(status=SpanStatus.UNSET, reason=EndReason.DEFERRED)
         return _build_run_result(
             run_spec,
             task_result,
             ctx=ctx,
-            asset_versions=list(ctx.asset_versions),
             error=error,
             registry=spec.semantic_registry,
         )
@@ -354,19 +535,21 @@ async def _run_matrix_item(
         ctx.error(error)
         task_result = TaskResult(
             status=TaskStatus.ERRORED,
+            end_reason=EndReason.FAILED,
             error=error,
             errors=list(ctx.errors),
         )
+        ctx.set_phase(RunPhase.FINALIZING)
         ctx.finalize(status=SpanStatus.ERROR, reason=EndReason.FAILED)
         return _build_run_result(
             run_spec,
             task_result,
             ctx=ctx,
-            asset_versions=list(ctx.asset_versions),
             error=error,
             registry=spec.semantic_registry,
         )
 
+    ctx.set_phase(RunPhase.EXECUTING)
     try:
         task_result = await run_python_task(
             spec.task.target,
@@ -375,23 +558,24 @@ async def _run_matrix_item(
             search_paths=spec.task.module_search_paths,
         )
     except asyncio.CancelledError as exc:
-        ctx.error(exc)
-        ctx.finalize(
-            status=SpanStatus.ERROR,
-            reason=EndReason.CANCELLED,
-            partial=True,
+        await _propagate_run_cancellation(
+            ctx,
+            run_spec,
+            record_session=record_session,
+            cancellation=exc,
         )
-        raise
     except Exception as exc:
         error = ctx.error(exc)
         task_result = TaskResult(
             status=TaskStatus.ERRORED,
+            end_reason=EndReason.FAILED,
             error=error,
             errors=list(ctx.errors),
             observations=list(ctx.observations),
             spans=list(ctx.spans),
             artifacts=list(ctx.artifacts),
         )
+        ctx.set_phase(RunPhase.FINALIZING)
         ctx.finalize(
             status=SpanStatus.ERROR,
             reason=EndReason.FAILED,
@@ -401,15 +585,34 @@ async def _run_matrix_item(
             run_spec,
             task_result,
             ctx=ctx,
-            asset_versions=list(ctx.asset_versions),
             error=error,
             registry=spec.semantic_registry,
         )
 
+    ctx.retain_task_output(task_result.output)
+    ctx.set_phase(RunPhase.SCORING)
     try:
         scores = await evaluate_scoring_specs(spec.scoring, ctx=ctx, task_result=task_result)
         for observation in score_records_to_observations(scores, ctx=ctx):
             ctx.record_observation(observation)
+    except asyncio.CancelledError as exc:
+        await _propagate_run_cancellation(
+            ctx,
+            run_spec,
+            record_session=record_session,
+            cancellation=exc,
+        )
+    except Exception as exc:
+        return _failed_post_task_run(
+            spec,
+            run_spec,
+            ctx=ctx,
+            task_result=task_result,
+            error=exc,
+        )
+
+    ctx.set_phase(RunPhase.DERIVING)
+    try:
         for observation in derive_observations(
             spec.derive,
             ctx=ctx,
@@ -418,34 +621,19 @@ async def _run_matrix_item(
         ):
             ctx.record_observation(observation)
     except asyncio.CancelledError as exc:
-        ctx.error(exc)
-        ctx.finalize(
-            status=SpanStatus.ERROR,
-            reason=EndReason.CANCELLED,
-            partial=True,
-            output=task_result.output,
-        )
-        raise
-    except Exception as exc:
-        error = ctx.error(exc)
-        task_result.status = TaskStatus.ERRORED
-        task_result.error = error
-        task_result.errors = list(ctx.errors)
-        task_result.observations = list(ctx.observations)
-        task_result.spans = list(ctx.spans)
-        task_result.artifacts = list(ctx.artifacts)
-        ctx.finalize(
-            status=SpanStatus.ERROR,
-            reason=EndReason.FAILED,
-            output=task_result.output,
-        )
-        return _build_run_result(
+        await _propagate_run_cancellation(
+            ctx,
             run_spec,
-            task_result,
+            record_session=record_session,
+            cancellation=exc,
+        )
+    except Exception as exc:
+        return _failed_post_task_run(
+            spec,
+            run_spec,
             ctx=ctx,
-            asset_versions=list(ctx.asset_versions),
-            error=error,
-            registry=spec.semantic_registry,
+            task_result=task_result,
+            error=exc,
         )
     error = task_result.error
     if error is None and has_score_errors(scores):
@@ -461,6 +649,9 @@ async def _run_matrix_item(
     if task_result.error is not None and task_result.error.error_type == "TimeoutError":
         reason = EndReason.TIMEOUT
         partial = True
+    task_result.end_reason = reason
+    task_result.partial = partial
+    ctx.set_phase(RunPhase.FINALIZING)
     ctx.finalize(
         status=status,
         reason=reason,
@@ -477,10 +668,235 @@ async def _run_matrix_item(
         task_result,
         ctx=ctx,
         scores=scores,
-        asset_versions=list(ctx.asset_versions),
         error=error,
         registry=spec.semantic_registry,
     )
+
+
+def _failed_post_task_run(
+    spec: BenchmarkSpec,
+    run_spec: MatrixRunSpec,
+    *,
+    ctx: RunContext,
+    task_result: TaskResult,
+    error: Exception,
+) -> RunResult:
+    record = ctx.error(error)
+    task_result.status = TaskStatus.ERRORED
+    task_result.end_reason = EndReason.FAILED
+    task_result.error = record
+    task_result.errors = list(ctx.errors)
+    task_result.observations = list(ctx.observations)
+    task_result.spans = list(ctx.spans)
+    task_result.artifacts = list(ctx.artifacts)
+    ctx.set_phase(RunPhase.FINALIZING)
+    ctx.finalize(
+        status=SpanStatus.ERROR,
+        reason=EndReason.FAILED,
+        output=task_result.output,
+    )
+    return _build_run_result(
+        run_spec,
+        task_result,
+        ctx=ctx,
+        error=record,
+        registry=spec.semantic_registry,
+    )
+
+
+def _build_partial_snapshot(
+    run_spec: MatrixRunSpec,
+    *,
+    name: str,
+    phase: RunPhase,
+    task_output: Any,
+    evidence: ContextEvidence,
+) -> PartialRunSnapshot:
+    from autobench.records.staging import PartialRunSnapshot
+
+    return PartialRunSnapshot(
+        run_id=run_spec.run_id,
+        experiment_id=run_spec.experiment_id,
+        benchmark_id=run_spec.benchmark_id,
+        case_id=run_spec.case.id,
+        variant_id=run_spec.variant.id,
+        name=name,
+        phase=phase,
+        task_output=task_output,
+        observations=evidence.observations,
+        spans=evidence.spans,
+        artifacts=evidence.artifacts,
+        errors=evidence.errors,
+        asset_versions=evidence.asset_versions,
+        asset_uses=evidence.asset_uses,
+        source_snapshots=evidence.source_snapshots,
+        trace=evidence.trace,
+        signal_sequence_watermark=evidence.signal_sequence_watermark,
+        correlation=run_spec.correlation,
+    )
+
+
+async def _persist_explicit_checkpoint(
+    record_session: RecordSession,
+    snapshot: PartialRunSnapshot,
+) -> None:
+    checkpoint_task = asyncio.create_task(record_session.checkpoint(snapshot))
+    try:
+        await asyncio.shield(checkpoint_task)
+    except asyncio.CancelledError as cancellation:
+        if checkpoint_task.done():
+            raise
+        cleanup_error = await _finish_cleanup_task(checkpoint_task)
+        if cleanup_error is not None:
+            cancellation.add_note(f"checkpoint persistence failed: {cleanup_error}")
+        raise cancellation
+
+
+async def _propagate_run_cancellation(
+    ctx: RunContext,
+    run_spec: MatrixRunSpec,
+    *,
+    record_session: RecordSession | None,
+    cancellation: asyncio.CancelledError,
+) -> NoReturn:
+    cancelled_phase = ctx.phase
+    task_output = ctx.checkpoint_output
+    ctx.error(cancellation)
+    ctx.set_phase(RunPhase.FINALIZING)
+    ctx.finalize(
+        status=SpanStatus.ERROR,
+        reason=EndReason.CANCELLED,
+        partial=True,
+        output=task_output,
+    )
+    if record_session is not None:
+        evidence = ctx.snapshot_evidence()
+        snapshot = _build_partial_snapshot(
+            run_spec,
+            name="autobench.cancelled",
+            phase=cancelled_phase,
+            task_output=task_output,
+            evidence=evidence,
+        )
+        cleanup_error = await _finish_cleanup_task(
+            asyncio.create_task(record_session.checkpoint(snapshot))
+        )
+        if cleanup_error is not None:
+            cancellation.add_note(f"cancellation checkpoint failed: {cleanup_error}")
+    raise cancellation
+
+
+async def _run_concurrent_matrix(
+    coroutines: list[Coroutine[Any, Any, RunResult]],
+) -> list[RunResult]:
+    tasks = [asyncio.create_task(coroutine) for coroutine in coroutines]
+    try:
+        return list(await asyncio.gather(*tasks))
+    except BaseException as exc:
+        active_tasks = [task for task in tasks if not task.done()]
+        for task in active_tasks:
+            task.cancel()
+        for task in active_tasks:
+            cleanup_error = await _finish_cleanup_task(task)
+            if cleanup_error is not None and not isinstance(cleanup_error, asyncio.CancelledError):
+                exc.add_note(f"concurrent run cleanup failed: {cleanup_error}")
+        raise
+
+
+async def _emit_completion_progress(
+    dispatcher: _ProgressDispatcher,
+    *,
+    benchmark_id: str,
+    experiment_id: str,
+    run_specs: Sequence[MatrixRunSpec],
+    started_run_ids: Sequence[str],
+    completed_runs: dict[str, RunResult],
+    cancelled_run_ids: set[str],
+    policy_violations: Sequence[PolicyResult],
+    experiment_status: ExperimentStatus,
+    error: BaseException | None = None,
+) -> None:
+    for violation in policy_violations:
+        run = completed_runs[violation.run_id]
+        await dispatcher.emit(
+            ProgressEventKind.POLICY_VIOLATION,
+            f"Policy {violation.policy_name} failed for run {violation.run_id}.",
+            benchmark_id=run.benchmark_id,
+            experiment_id=run.experiment_id,
+            run_id=violation.run_id,
+            case_id=violation.case_id,
+            variant_id=violation.variant_id,
+            policy_name=violation.policy_name,
+            metric=violation.metric,
+            actual=violation.actual,
+            reason=violation.reason,
+        )
+
+    started = set(started_run_ids)
+    for run_spec in run_specs:
+        if run_spec.run_id not in started:
+            continue
+        run = completed_runs.get(run_spec.run_id)
+        if run is None:
+            run_status = (
+                RunStatus.CANCELLED if run_spec.run_id in cancelled_run_ids else RunStatus.ERRORED
+            )
+            partial = True
+            end_reason = (
+                EndReason.CANCELLED if run_status is RunStatus.CANCELLED else EndReason.FAILED
+            )
+        else:
+            run_status = run.status
+            partial = run.partial
+            end_reason = run.end_reason
+        await dispatcher.emit(
+            ProgressEventKind.RUN_FINISHED,
+            f"Run {run_spec.run_id} finished with status {run_status}.",
+            run_status=run_status,
+            benchmark_id=run_spec.benchmark_id,
+            experiment_id=run_spec.experiment_id,
+            run_id=run_spec.run_id,
+            case_id=run_spec.case.id,
+            variant_id=run_spec.variant.id,
+            partial=partial,
+            end_reason=end_reason.value,
+        )
+
+    await dispatcher.emit(
+        ProgressEventKind.BENCHMARK_FINISHED,
+        f"Benchmark finished with status {experiment_status}.",
+        experiment_status=experiment_status,
+        benchmark_id=benchmark_id,
+        experiment_id=experiment_id,
+        partial=experiment_status is not ExperimentStatus.COMPLETED,
+        error_type=None if error is None else type(error).__name__,
+    )
+
+
+async def _finish_cleanup_task(
+    task: asyncio.Task[CleanupResultT],
+    *,
+    timeout_seconds: float = _CANCELLATION_CLEANUP_TIMEOUT_SECONDS,
+) -> BaseException | None:
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while not task.done():
+        remaining = max(deadline - asyncio.get_running_loop().time(), 0)
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
+        except asyncio.CancelledError:
+            pass
+        except TimeoutError:
+            task.cancel()
+            return TimeoutError(f"Cleanup did not finish within {timeout_seconds:g} seconds.")
+        except BaseException as error:
+            return error
+    if task.cancelled():
+        return asyncio.CancelledError()
+    try:
+        task.result()
+    except BaseException as error:
+        return error
+    return None
 
 
 def _build_run_result(
@@ -489,13 +905,22 @@ def _build_run_result(
     *,
     ctx: RunContext,
     scores: list[ScoreRecord] | None = None,
-    asset_versions: list[AssetVersion] | None = None,
     error: ErrorRecord | None,
     registry: SemanticRegistry,
 ) -> RunResult:
+    evidence = ctx.snapshot_evidence()
+    recorded_task_result = task_result.model_copy(
+        update={
+            "errors": list(evidence.errors),
+            "observations": list(evidence.observations),
+            "spans": list(evidence.spans),
+            "artifacts": list(evidence.artifacts),
+        },
+        deep=True,
+    )
     active_scores = scores or []
     evaluation_status = _evaluation_status_from_task_result(
-        task_result,
+        recorded_task_result,
         scores=active_scores,
         registry=registry,
     )
@@ -506,19 +931,22 @@ def _build_run_result(
         case_id=run_spec.case.id,
         variant_id=run_spec.variant.id,
         status=_run_status_from_task_result(
-            task_result,
+            recorded_task_result,
             evaluation_status=evaluation_status,
         ),
         evaluation_status=evaluation_status,
+        partial=recorded_task_result.partial,
+        end_reason=recorded_task_result.end_reason,
         case=run_spec.case,
-        task_result=task_result,
+        task_result=recorded_task_result,
         scores=active_scores,
         factors=list(run_spec.variant.factors),
-        asset_versions=asset_versions or [],
-        asset_uses=list(ctx.asset_uses),
+        asset_versions=list(evidence.asset_versions),
+        asset_uses=list(evidence.asset_uses),
         error=error,
-        trace=ctx.trace,
-        source_snapshots=tuple(ctx.source_snapshots),
+        trace=evidence.trace,
+        source_snapshots=evidence.source_snapshots,
+        correlation=run_spec.correlation,
     )
 
 
@@ -530,6 +958,8 @@ def _evaluation_status_from_task_result(
 ) -> EvaluationStatus:
     if task_result.status is TaskStatus.SKIPPED:
         return EvaluationStatus.SKIPPED
+    if task_result.status is TaskStatus.CANCELLED:
+        return EvaluationStatus.NOT_EVALUATED
     if task_result.status is TaskStatus.FAILED or task_result.status is TaskStatus.ERRORED:
         return EvaluationStatus.NOT_EVALUATED
     if has_score_errors(scores):
@@ -548,6 +978,8 @@ def _run_status_from_task_result(
         return RunStatus.FAILED
     if task_result.status is TaskStatus.SKIPPED:
         return RunStatus.SKIPPED
+    if task_result.status is TaskStatus.CANCELLED:
+        return RunStatus.CANCELLED
     if task_result.status is TaskStatus.ERRORED:
         return RunStatus.ERRORED
     if evaluation_status is EvaluationStatus.ERRORED:
@@ -645,6 +1077,8 @@ __all__ = (
     "BenchmarkPlan",
     "EvaluationStatus",
     "ExperimentResult",
+    "ExperimentStatus",
+    "ExperimentTermination",
     "MatrixRunSpec",
     "RunResult",
     "RunStatus",

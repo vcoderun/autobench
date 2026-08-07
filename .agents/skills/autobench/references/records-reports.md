@@ -25,6 +25,7 @@
 - source hashes and environment metadata;
 - asset versions and `AssetUse` lineage;
 - duration and execution metadata.
+- immutable execution correlation shared by the experiment and every run.
 
 `ExperimentRecord` owns the run set, plan metadata, source references, post-derivation, and report
 configuration. Summary YAML is a projection, not the source of truth.
@@ -114,6 +115,11 @@ Default and configured Rich reports may include:
 - ABP trace composition and diagnostics;
 - asset lineage.
 
+Across several `ExperimentResult` values, `filter_experiments()` matches only explicitly supplied
+correlation fields and `build_grouped_reports()` groups invocations by `group_id`, attempts, and
+phases. Keep this separate from `parent_run_id` and `RecordLineage`, which describe replay or
+derived-record ancestry.
+
 YAML report configuration:
 
 ```yaml
@@ -175,6 +181,11 @@ CSV is useful for tabular analysis. Markdown is a file export, not the default t
 Visualization/image export is not part of the current v0.3 core. Do not invent PNG or Matplotlib
 CLI behavior unless the installed version explicitly provides it.
 
+`autobench telemetry export` is a separate optional outbound projection. It maps immutable
+experiment, run, and ABP evidence to OTLP spans, omits captured content by default, and never
+changes the record. It requires `autobench[otlp]`; vendor configuration does not belong in the
+benchmark YAML.
+
 ## Optimization Handoff
 
 `FeedbackRecord` and `OptimizationFeedbackInput` project runs into compact optimizer evidence:
@@ -189,4 +200,3 @@ CLI behavior unless the installed version explicitly provides it.
 Autobench owns evidence, not search strategy or promotion. `pydantic-gepa` adapts Pydantic AI and
 Pydantic Evals to GEPA. `autoptimize` owns planning, candidate population, validation, matrix
 experiments, and promotion policy.
-

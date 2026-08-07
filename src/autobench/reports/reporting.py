@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from math import prod
 from statistics import median, pstdev
 from typing import Any, Literal
@@ -10,7 +11,7 @@ from pydantic import BaseModel, Field
 from autobench.metrics.observations import Observation, ObservationKind
 from autobench.metrics.projection import observation_priority, source_priority
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, Semantic, SemanticRegistry
-from autobench.runtime.pipeline import ExperimentResult, RunResult
+from autobench.runtime.models import ExecutionCorrelation, ExperimentResult, RunResult
 
 AggregationFn = Literal[
     "count",
@@ -120,6 +121,14 @@ class BenchmarkReport(BaseModel):
     case_matrix: CaseMatrix
     comparisons: list[ComparisonReport] = Field(default_factory=list)
     distributions: list[MetricDistribution] = Field(default_factory=list)
+    correlation: ExecutionCorrelation | None = None
+
+
+class CorrelatedReportGroup(BaseModel):
+    group_id: str | None = None
+    attempts: tuple[int, ...] = ()
+    phases: tuple[str, ...] = ()
+    reports: list[BenchmarkReport] = Field(default_factory=list)
 
 
 DEFAULT_LEADERBOARD_METRICS: tuple[MetricAggregation, ...] = (
@@ -195,7 +204,88 @@ def build_report(
             )
             for distribution in active_report_spec.distributions
         ],
+        correlation=result.correlation,
     )
+
+
+def correlation_matches(
+    actual: ExecutionCorrelation | None,
+    expected: ExecutionCorrelation,
+) -> bool:
+    supplied = expected.model_fields_set
+    if actual is None:
+        return not supplied
+    if "group_id" in supplied and actual.group_id != expected.group_id:
+        return False
+    if "attempt" in supplied and actual.attempt != expected.attempt:
+        return False
+    if "phase" in supplied and actual.phase != expected.phase:
+        return False
+    if (
+        "parent_experiment_id" in supplied
+        and actual.parent_experiment_id != expected.parent_experiment_id
+    ):
+        return False
+    if (
+        "resumed_from_experiment_id" in supplied
+        and actual.resumed_from_experiment_id != expected.resumed_from_experiment_id
+    ):
+        return False
+    return "labels" not in supplied or all(
+        actual.labels.get(key) == value for key, value in expected.labels.items()
+    )
+
+
+def filter_experiments(
+    results: Sequence[ExperimentResult],
+    *,
+    correlation: ExecutionCorrelation,
+) -> list[ExperimentResult]:
+    return [result for result in results if correlation_matches(result.correlation, correlation)]
+
+
+def build_grouped_reports(
+    results: Sequence[ExperimentResult],
+    *,
+    correlation: ExecutionCorrelation | None = None,
+) -> list[CorrelatedReportGroup]:
+    selected = (
+        list(results)
+        if correlation is None
+        else filter_experiments(
+            results,
+            correlation=correlation,
+        )
+    )
+    grouped: dict[str | None, list[ExperimentResult]] = {}
+    for result in selected:
+        group_id = None if result.correlation is None else result.correlation.group_id
+        grouped.setdefault(group_id, []).append(result)
+    return [
+        CorrelatedReportGroup(
+            group_id=group_id,
+            attempts=tuple(
+                sorted(
+                    {
+                        result.correlation.attempt
+                        for result in group_results
+                        if result.correlation is not None and result.correlation.attempt is not None
+                    }
+                )
+            ),
+            phases=tuple(
+                sorted(
+                    {
+                        result.correlation.phase
+                        for result in group_results
+                        if result.correlation is not None and result.correlation.phase is not None
+                    }
+                )
+            ),
+            reports=[build_report(result) for result in group_results],
+        )
+        for group_id, group_results in grouped.items()
+    ]
 
 
 def build_status_counts(result: ExperimentResult) -> dict[str, int]:
@@ -520,6 +610,8 @@ def render_markdown_report(report: BenchmarkReport) -> str:
         "## Leaderboard",
         "",
     ]
+    if report.correlation is not None:
+        lines.insert(4, f"correlation: `{report.correlation.model_dump_json(exclude_none=True)}`")
     metric_names = list(dict.fromkeys(name for row in report.leaderboard for name in row.metrics))
     lines.append("| variant | runs | " + " | ".join(metric_names) + " |")
     lines.append("| --- | ---: | " + " | ".join("---:" for _ in metric_names) + " |")

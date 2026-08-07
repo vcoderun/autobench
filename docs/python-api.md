@@ -32,6 +32,12 @@ from autobench import (
 benchmark = (
     Benchmark("builder-demo")
     .description("Compare current and candidate behavior.")
+    .correlation(
+        group_id="routing-proposal-42",
+        attempt=1,
+        phase="validation",
+        labels={"owner": "evaluation"},
+    )
     .dataset(
         [
             Case(
@@ -84,11 +90,25 @@ benchmark = (
 result = benchmark.run(experiment_id="routing-candidate-42", concurrency_limit=4)
 ```
 
+Attach live lifecycle observers without changing the benchmark definition:
+
+```python
+from autobench import ProgressEvent
+
+
+def observe(event: ProgressEvent) -> None:
+    print(event.sequence, event.kind, event.run_id, event.run_status)
+
+
+result = benchmark.run(progress_handlers=(observe,))
+```
+
 ### Builder Methods
 
 | Method | Configures |
 | --- | --- |
 | `description(value)` | Benchmark description |
+| `correlation(...)` | Static invocation group, attempt, phase, ancestry hints, and scalar labels |
 | `capture(policy)` | ABP and asset capture policy |
 | `dataset(...)` | Inline cases or a typed dataset source |
 | `variants(items)` | Typed variants or normalized dictionaries |
@@ -156,8 +176,26 @@ normal Python import paths.
 | `artifact(...)` | Attach a payload |
 | `error(...)` | Preserve a structured error |
 | `attach_tracked_asset(...)` | Bind an explicit tracked asset version |
+| `await checkpoint(name)` | Commit all currently available evidence to durable staging |
 
 Evidence emitted before an exception remains in the failed run.
+
+`phase` reports whether the run is resolving, executing, scoring, deriving, post-processing, or
+finalizing. Checkpoints preserve that phase automatically. Application tasks normally only call
+`checkpoint()`:
+
+```python
+async def run_case(ctx: RunContext, case: Case) -> Result:
+    draft = await build_draft(case.input)
+    ctx.artifact("draft", draft)
+    await ctx.checkpoint("draft-built")
+    return await validate_draft(draft)
+```
+
+The method requires an active `Recorder`; without one it raises `RuntimeError`. It is cancellation
+aware: if the caller is cancelled while persistence is active, Autobench gives the atomic write
+bounded time to finish and then propagates cancellation. Names beginning with `autobench.` belong
+to framework lifecycle checkpoints and are rejected for application calls.
 
 ## Load And Run YAML
 
@@ -165,7 +203,12 @@ Evidence emitted before an exception remains in the failed run.
 import asyncio
 from pathlib import Path
 
-from autobench import load_benchmark_spec, run_benchmark_path, run_benchmark_spec
+from autobench import (
+    ExecutionCorrelation,
+    load_benchmark_spec,
+    run_benchmark_path,
+    run_benchmark_spec,
+)
 
 path = Path("benchmarks/routing.yaml")
 spec = load_benchmark_spec(path)
@@ -181,9 +224,23 @@ async_result = asyncio.run(
         spec,
         experiment_id="routing-43",
         concurrency_limit=4,
+        correlation=ExecutionCorrelation(attempt=2, labels={"review": "holdout"}),
+        progress_handlers=(observe,),
     )
 )
 ```
+
+Import `ExecutionCorrelation` for invocation-level overrides. Explicit fields merge with
+`spec.execution.correlation`; omitted fields remain unchanged and label maps merge by key. The
+resolved value is immutable and identical on `ExperimentResult`, every `RunResult`, durable
+records, and replayed results. `parent_experiment_id` and `resumed_from_experiment_id` are grouping
+metadata only. Replay ancestry remains `RecordLineage` / `parent_run_id`, and Autobench does not
+infer workflow resume from either correlation field.
+
+`run_benchmark_path()`, `run_benchmark_spec()`, `Benchmark.run()`, and `Benchmark.run_async()` share
+the same `progress_handlers`, `progress_error_policy`, and `progress_error_handler` contract. Bare
+handlers are strict by default; see [Tasks and Runtime](tasks-and-runtime.md#progress-events) for
+ordering, terminal status, and backpressure guarantees.
 
 Loading resolves dataset, pricing, task, and Python scorer references relative to the YAML file.
 
@@ -204,12 +261,62 @@ record = record_experiment(
     record_dir,
     source_files=list(collect_benchmark_source_files(path)),
     path_root=Path.cwd(),
+    durability="atomic",
 )
 replayed = replay_experiment(record_dir)
 ```
 
-`record_experiment()` refuses to overwrite an existing experiment. Use a new directory for every
-execution. Referenced tracked-asset histories and large trace artifacts are persisted automatically.
+`record_experiment()` refuses to overwrite a non-empty experiment directory. It assembles the
+record in a temporary sibling, validates its integrity manifest, and publishes it atomically.
+Referenced tracked-asset histories and large trace artifacts are persisted automatically. Use
+`durability="synced"` when supported POSIX file and directory `fsync` calls are also required.
+
+For durable execution, pass a recorder to the pipeline instead of waiting for the full result:
+
+```python
+from autobench import FileRecorder
+
+durable_result = asyncio.run(
+    run_benchmark_spec(
+        spec,
+        experiment_id="routing-durable-44",
+        concurrency_limit=4,
+        recorder=FileRecorder(
+            Path("runs/routing-durable-44"),
+            source_files=collect_benchmark_source_files(path),
+            path_root=Path.cwd(),
+            durability="atomic",
+        ),
+    )
+)
+```
+
+`FileRecorder` commits complete run snapshots during execution and atomically publishes the final
+directory after post-processing. Its sibling `.routing-durable-44.staging` directory survives an
+interrupted process. Use `inspect_staging`, `recover_staging`, and `finalize_staging` to recover it;
+use `archive_staging` or `discard_staging` for explicit lifecycle decisions.
+
+Cooperative task cancellation, `KeyboardInterrupt`, and supported CLI `SIGTERM` handling commit a
+terminal partial checkpoint before propagating. A hard process kill can preserve only the last
+explicit checkpoint that had already returned; it cannot execute a final write.
+
+```python
+from autobench import finalize_staging, inspect_staging
+
+staging = Path("runs/.routing-durable-44.staging")
+inspection = inspect_staging(staging)
+if inspection.recoverable and inspection.missing_run_ids:
+    partial_record = finalize_staging(
+        staging,
+        Path("runs/routing-durable-44-partial"),
+        allow_partial=True,
+    )
+```
+
+`Recorder` and `RecordSession` are the typed extension contracts for another persistence backend.
+The pipeline owns `open`, `stage`, `finish` or `abort`, and `close`; application code should not
+open a live session just to run a normal benchmark. `ExperimentStart`, `ExecutionSnapshot`, and
+`PartialRunSnapshot` are frozen transfer models. Recovery never imports the task or optional SDKs.
 
 Load one exact record when building an audit or optimizer adapter:
 
@@ -247,6 +354,42 @@ export_markdown_report(replayed, Path("analysis/report.md"))
 
 `build_leaderboard`, `build_case_matrix`, `build_metric_distribution`, and
 `build_run_metric_rows` expose individual projections.
+
+Group or select several invocation results without changing their records:
+
+```python
+from autobench import ExecutionCorrelation, build_grouped_reports, filter_experiments
+
+validation = filter_experiments(
+    results,
+    correlation=ExecutionCorrelation(group_id="routing-proposal-42", phase="validation"),
+)
+groups = build_grouped_reports(results)
+```
+
+Filters match only explicitly supplied fields. Grouped reports retain each experiment report and
+summarize the attempts and phases present under each `group_id`.
+
+## Optional OTLP Export
+
+```python
+from pathlib import Path
+
+from autobench import OTLPSettings, export_record_otlp
+
+delivery = export_record_otlp(
+    Path("runs/routing-42"),
+    settings=OTLPSettings(
+        endpoint="https://collector.example/v1/traces",
+        service_name="routing-benchmark",
+    ),
+)
+```
+
+Install `autobench[otlp]` on the exporting process. `export_record_otlp()` loads immutable record
+models; `export_otlp()` accepts already-loaded `ExperimentRecord` and `RunRecord` values. Both
+return `OTLPExportResult` and raise `OTLPExportError` without modifying evidence. Vendor settings
+remain separate from `BenchmarkSpec`. See [OTLP Export](otlp-export.md).
 
 ## Native Instrumentation
 
@@ -312,10 +455,15 @@ unadorned SDK-visible components to runs. Experiment recording uses the same con
 ## Production And Generated Cases
 
 ```python
+from pathlib import Path
+
 from autobench import (
+    CaseGeneratorInput,
     SamplingPolicy,
+    generate_dataset_sync,
     generated_batch_from_cases,
     samples_to_cases,
+    write_generation_result,
 )
 
 review_cases = samples_to_cases(production_samples, policy=SamplingPolicy(max_samples=50))
@@ -325,9 +473,21 @@ generated = generated_batch_from_cases(
     model_provider="openrouter",
     model_name="openai/gpt-5.6-luna",
 )
+
+result = generate_dataset_sync(
+    generate_cases,
+    CaseGeneratorInput(seed=17, settings={"count": 20}),
+    generator_id="generation:generate_cases",
+    dataset_id="generated-routing",
+    version="v1",
+)
+write_generation_result(result, Path("datasets/generated-routing.yaml"))
 ```
 
-These helpers normalize provenance; they do not own production querying or case generation.
+Production helpers normalize reviewed samples. Generated-dataset APIs own the typed preparation,
+hashing, review projection, manifest, and safe publication boundary, while the application owns the
+actual generator/provider logic. Generation finishes before normal benchmark planning. See
+[Generated Datasets](generated-datasets.md).
 
 ## Extension Rules
 

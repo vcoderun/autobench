@@ -11,6 +11,7 @@ from autobench.instrumentation.config import (
     PydanticAIInstrumentation,
 )
 from autobench.instrumentation.manager import (
+    CurrentSpan,
     InstrumentationManager,
     InstrumentationRuntime,
     check_package_compatibility,
@@ -49,6 +50,7 @@ __all__ = (
     "CallLifecycle",
     "Compatibility",
     "CompatibilityStatus",
+    "CurrentSpan",
     "HTTPXCaptureSettings",
     "HTTPXInstrumentation",
     "InstrumentationConflictError",

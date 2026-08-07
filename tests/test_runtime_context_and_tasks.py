@@ -125,6 +125,30 @@ def test_span_observations_artifacts_and_duration_metric() -> None:
     assert ctx.spans[0].artifacts == ["artifact_1"]
 
 
+def test_context_evidence_snapshots_are_consistent_and_immutable() -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+    )
+
+    with ctx.span("active") as span:
+        span.metric("quality", 0.5, semantic_type=Semantic.QUALITY_SCORE)
+        active = ctx.snapshot_evidence()
+
+    completed = ctx.snapshot_evidence()
+    ctx.metric("later", 1.0, semantic_type=Semantic.QUALITY_SCORE)
+
+    assert len(active.spans) == 1
+    assert active.spans[0].ended_at is None
+    assert len(active.observations) == 1
+    assert active.signal_sequence_watermark == active.trace.signals[-1].sequence
+    assert completed.spans[0].ended_at is not None
+    assert completed.signal_sequence_watermark > active.signal_sequence_watermark
+    assert len(completed.observations) == 1
+    assert len(ctx.observations) == 2
+
+
 def test_context_helpers_record_measurements_bundles_checks_and_outcomes() -> None:
     ctx = RunContext(benchmark_id="demo", case=Case(id="case_1"), variant=Variant(id="variant_1"))
     measurement = Measurement(

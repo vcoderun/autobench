@@ -81,6 +81,11 @@ def report_to_yaml_view(report: BenchmarkReport) -> dict[str, Any]:
         "report": {
             "benchmark": report.benchmark_id,
             "experiment": report.experiment_id,
+            "correlation": (
+                None
+                if report.correlation is None
+                else report.correlation.model_dump(mode="json", exclude_none=True)
+            ),
             "runs": report.run_count,
             "status": report.status_counts,
             "variants": variants,
@@ -103,6 +108,9 @@ def export_runs_csv(result: ExperimentResult, path: Path | None = None) -> str:
         "case_id",
         "variant_id",
         "status",
+        "correlation_group_id",
+        "correlation_attempt",
+        "correlation_phase",
         *[name for name, _ in CSV_METRICS],
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -113,6 +121,9 @@ def export_runs_csv(result: ExperimentResult, path: Path | None = None) -> str:
             "case_id": run.case_id,
             "variant_id": run.variant_id,
             "status": run.status.value,
+            "correlation_group_id": (None if run.correlation is None else run.correlation.group_id),
+            "correlation_attempt": None if run.correlation is None else run.correlation.attempt,
+            "correlation_phase": None if run.correlation is None else run.correlation.phase,
         }
         for name, semantic_type in CSV_METRICS:
             row[name] = metric_value(run, semantic_type)

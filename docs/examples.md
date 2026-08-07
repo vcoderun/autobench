@@ -16,6 +16,8 @@ These examples are credential-free and run in `make examples`:
 | `abp_manual` | ticket router | manual span plus method instrumentation |
 | `abp_concurrent` | async workers | task-local trace context and concurrent runs |
 | `automatic_assets` | Pydantic AI and custom SDK | automatic behavioral asset lineage |
+| `generated_dataset` | support-routing case preparation | typed generator, request YAML, review state, frozen dataset and provenance manifest |
+| `otlp_export` | immutable ABP record | offline OTLP hierarchy mapping through an injected exporter |
 
 Run all offline examples:
 
@@ -33,6 +35,20 @@ autobench replay /tmp/autobench-minimal
 
 Read `examples/minimal/autobench.yaml` together with `minimal_benchmark.py`. This is the shortest
 complete `case x variant -> task -> score -> record -> report` implementation.
+
+## Generated Dataset: Prepare Before Planning
+
+```bash
+cd examples/generated_dataset
+autobench dataset generate generator:generate_routing_cases \
+  --request request.yaml \
+  --output generated-cases.yaml \
+  --id routing-generated \
+  --version v1
+```
+
+This example is deterministic and credential-free. It writes a normal dataset and a separate
+generation manifest, showing the boundary between data preparation and benchmark execution.
 
 ## Basic: Application Evidence
 
@@ -143,6 +159,17 @@ uv run python examples/abp_replay/replay_and_extract.py /tmp/recorded-experiment
 
 The script loads records without provider SDKs and creates extraction-derived records with explicit
 parent lineage.
+
+## Offline OTLP Export
+
+```bash
+uv run autobench run examples/abp_manual/autobench.yaml --record /tmp/abp-manual
+uv run python examples/otlp_export/export_record.py /tmp/abp-manual
+```
+
+The example maps a real recorded experiment to OTel SDK spans through an injected in-memory
+exporter, so it verifies hierarchy and delivery without a collector or network request. Production
+delivery uses `autobench telemetry export`; see [OTLP Export](otlp-export.md).
 
 ## CodeMode: Migrating A Real Benchmark Runner
 

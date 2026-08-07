@@ -59,7 +59,7 @@ _INFO: dict[InstrumentorName, InstrumentorInfo] = {
         id="autobench.pydantic_ai",
         version=__version__,
         target_distribution="pydantic-ai-slim",
-        supported_versions=">=2.22,<2.23",
+        supported_versions=">=2.22,<2.24",
         mechanism=CaptureMechanism.HOOK,
         layer=AbstractionLayer.FRAMEWORK,
         span_kinds=("agent", "llm", "tool", "validation"),

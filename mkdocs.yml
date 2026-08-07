@@ -81,6 +81,7 @@ nav:
       - Architecture: architecture.md
       - Core Concepts: concepts.md
       - Datasets And Variants: datasets-and-variants.md
+      - Generated Datasets: generated-datasets.md
       - Tasks And Runtime: tasks-and-runtime.md
       - Observations And Semantics: observations-and-semantics.md
   - Evaluation:
@@ -94,6 +95,7 @@ nav:
       - Protocol And Traces: instrumentation-and-traces.md
       - Native Instrumentation: native-instrumentation.md
       - Compatibility Contract: abp-compatibility.md
+      - OTLP Export: otlp-export.md
   - Reference:
       - YAML Spec: yaml-spec.md
       - Python API: python-api.md

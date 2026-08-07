@@ -37,6 +37,7 @@ The root contains one named benchmark:
 | Section | Required | Purpose |
 | --- | --- | --- |
 | `description` | no | Human-readable intent |
+| `execution` | no | Static invocation correlation |
 | `cases` or `dataset` | yes | Inline, file, or glob-backed cases |
 | `run` | for execution | Python task target |
 | `variants` | yes | Named factor combinations |
@@ -56,6 +57,13 @@ The root contains one named benchmark:
 benchmark:
   support-routing:
     description: Compare current and proposed routing behavior.
+    execution:
+      correlation:
+        group_id: routing-proposal-42
+        attempt: 1
+        phase: validation
+        labels:
+          owner: evaluation
     dataset:
       source: file://datasets/cases.yaml
       version: "2026-08-07"
@@ -260,4 +268,3 @@ Report configuration changes presentation and aggregation; it must not mutate so
 - Validate the spec before execution.
 - When changing a public YAML model, update the typed model, DSL transforms, versioned JSON schema,
   docs, examples, and round-trip tests together.
-

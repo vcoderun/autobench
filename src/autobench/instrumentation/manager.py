@@ -4,7 +4,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from types import TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -19,11 +19,18 @@ from autobench.instrumentation.models import (
     InstrumentorInfo,
 )
 from autobench.instrumentation.patching import CallHandler, PatchManager
+from autobench.metrics.observations import Direction, ObservationRole, ObservationSource
+from autobench.metrics.semantics import SemanticType
 from autobench.protocol.collector import Emitter
 from autobench.protocol.context import get_context
 from autobench.protocol.signals import InstrumentationScope
 from autobench.protocol.traces import DiagnosticSeverity
 from autobench.tracking import AssetCandidate, RegisteredAsset, TrackingRegistry, track
+
+if TYPE_CHECKING:
+    from autobench.errors import ErrorRecord
+    from autobench.metrics.observations import Observation
+    from autobench.runtime.context import RunContext, Span
 
 
 @dataclass(slots=True)
@@ -32,6 +39,62 @@ class _Installation:
     handle: InstrumentationHandle
     compatibility: Compatibility
     references: int = 1
+
+
+class CurrentSpan:
+    """Mutable view of the active Autobench span for an external backend."""
+
+    def __init__(self, context: RunContext, span_id: str) -> None:
+        self._context = context
+        self._span_id = span_id
+
+    @property
+    def id(self) -> str:
+        return self._span_id
+
+    def is_recording(self) -> bool:
+        record = self._context._span_by_id(self._span_id)
+        return record is not None and record.ended_at is None and not self._context.finalized
+
+    def get_attribute(self, name: str) -> Any | None:
+        record = self._context._span_by_id(self._span_id)
+        if record is None:
+            return None
+        return record.attributes.get(name)
+
+    def set_attribute(self, name: str, value: Any) -> bool:
+        record = self._context._span_by_id(self._span_id)
+        if record is None or record.ended_at is not None or self._context.finalized:
+            return False
+        record.attributes[name] = value
+        return True
+
+    def set_usage(self, name: str, value: Any) -> bool:
+        record = self._context._span_by_id(self._span_id)
+        if record is None or record.ended_at is not None or self._context.finalized:
+            return False
+        record.usage[name] = value
+        return True
+
+    def event(
+        self,
+        name: str,
+        value: Any = True,
+        *,
+        semantic_type: SemanticType | None = None,
+        tags: dict[str, Any] | None = None,
+    ) -> Observation:
+        return self._context.event(
+            name,
+            value,
+            semantic_type=semantic_type,
+            span_id=self._span_id,
+            tags=tags,
+            source=ObservationSource.INSTRUMENTATION,
+        )
+
+    def record_exception(self, error: BaseException | str) -> ErrorRecord:
+        return self._context.error(error, span_id=self._span_id)
 
 
 class InstrumentationRuntime:
@@ -43,6 +106,14 @@ class InstrumentationRuntime:
     ) -> None:
         self.patches = PatchManager() if patches is None else patches
         self.registry = registry
+        self._installed_ids: set[str] = set()
+
+    @property
+    def installed_ids(self) -> tuple[str, ...]:
+        return tuple(sorted(self._installed_ids))
+
+    def is_installed(self, instrumentor_id: str) -> bool:
+        return instrumentor_id in self._installed_ids
 
     def patch_method(
         self,
@@ -105,6 +176,98 @@ class InstrumentationRuntime:
         except RuntimeError:
             return False
         return True
+
+    def span(
+        self,
+        info: InstrumentorInfo,
+        operation: str,
+        *,
+        kind: str = "custom",
+        input: Any = None,
+        attributes: dict[str, Any] | None = None,
+        usage: dict[str, Any] | None = None,
+        tags: dict[str, Any] | None = None,
+        target_version: str | None = None,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> Span | None:
+        """Create an unentered span in the active benchmark run, when one exists."""
+
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return None
+
+        from autobench.runtime.context import active_run_context
+
+        run_context = active_run_context()
+        if run_context is None:
+            return None
+        return run_context.span(
+            operation,
+            kind=kind,
+            input=input,
+            attributes=attributes,
+            usage=usage,
+            tags=tags,
+            instrumentation_scope=self.scope(info, target_version=target_version),
+        )
+
+    def metric(
+        self,
+        info: InstrumentorInfo,
+        name: str,
+        value: Any,
+        *,
+        semantic_type: SemanticType | None = None,
+        unit: str | None = None,
+        direction: Direction | None = None,
+        role: ObservationRole | None = None,
+        tags: dict[str, Any] | None = None,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> Observation | None:
+        """Record an instrumentation observation in the active benchmark run."""
+
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return None
+
+        from autobench.runtime.context import active_run_context
+
+        run_context = active_run_context()
+        if run_context is None:
+            return None
+        return run_context.metric(
+            name,
+            value,
+            semantic_type=semantic_type,
+            unit=unit,
+            direction=direction,
+            role=role,
+            span_id=run_context.active_span_id,
+            tags=tags,
+            source=ObservationSource.INSTRUMENTATION,
+        )
+
+    def current_span(
+        self,
+        info: InstrumentorInfo,
+        *,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> CurrentSpan | None:
+        """Return a mutable view of the active span owned by the benchmark run."""
+
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return None
+
+        from autobench.runtime.context import active_run_context
+
+        run_context = active_run_context()
+        if run_context is None:
+            return None
+        span_id = run_context.active_span_id
+        if span_id is None:
+            return None
+        return CurrentSpan(run_context, span_id)
 
     def asset(
         self,
@@ -201,6 +364,7 @@ class InstrumentationManager(AbstractContextManager["InstrumentationManager"]):
             handle=native_handle,
             compatibility=compatibility,
         )
+        self.runtime._installed_ids.add(info.id)
         return InstrumentationHandle(lambda: self._release(info.id), info=info)
 
     def close(self) -> None:
@@ -222,6 +386,7 @@ class InstrumentationManager(AbstractContextManager["InstrumentationManager"]):
             return
         installation.handle.close()
         del self._installations[instrumentor_id]
+        self.runtime._installed_ids.discard(instrumentor_id)
 
     def __exit__(
         self,

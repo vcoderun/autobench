@@ -34,6 +34,14 @@ def benchmark_spec_to_yaml_view(spec: BenchmarkSpec) -> dict[str, Any]:
     if spec.capture is not None:
         body["capture"] = spec.capture.model_dump(mode="json", exclude_defaults=True)
 
+    if spec.execution.correlation is not None:
+        body["execution"] = {
+            "correlation": spec.execution.correlation.model_dump(
+                mode="json",
+                exclude_none=True,
+            )
+        }
+
     if spec.task is not None:
         body["run"] = _task_to_yaml_view(spec.task)
     if spec.variants:
@@ -85,6 +93,7 @@ def _normalize_benchmark_dsl(raw: dict[str, Any]) -> dict[str, Any]:
     for section in (
         "dataset",
         "capture",
+        "execution",
         "task",
         "derive",
         "post_derive",

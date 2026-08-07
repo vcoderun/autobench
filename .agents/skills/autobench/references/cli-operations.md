@@ -15,6 +15,7 @@
 | Command | Executes subject? | Input | Purpose |
 | --- | --- | --- | --- |
 | `validate` | no | benchmark YAML | Resolve and validate the matrix |
+| `dataset generate` | yes | generator target + request YAML | Prepare a frozen dataset before matrix planning |
 | `run` | yes | benchmark YAML | Execute, record, and render |
 | `replay` | no | record directory | Reconstruct recorded results |
 | `report` | no | record directory | Render configured analysis |
@@ -22,25 +23,41 @@
 | `export` | no | record directory | Write YAML, CSV, or Markdown projection |
 | `instrumentation doctor` | no | environment | Inspect integration compatibility |
 | `instrumentation trace` | no | record directory | Summarize ABP evidence |
+| `telemetry export` | no | record directory | Replay immutable ABP evidence to OTLP |
 
 Use `autobench <command> --help` for exact flags in the installed version.
 
 ## Standard Workflow
 
 ```bash
+autobench dataset generate generation:generate_cases \
+  --request generation-request.yaml \
+  --output datasets/generated.yaml \
+  --id generated-v1
 autobench validate autobench.yaml
 autobench run autobench.yaml --record runs/latest
 autobench replay runs/latest
 autobench report runs/latest
 autobench compare runs/latest --baseline current --candidate proposed
 autobench export runs/latest --format csv --path analysis/runs.csv
+autobench telemetry export runs/latest --endpoint https://collector.example/v1/traces
 ```
+
+For cross-invocation analysis, `run` accepts `--group-id`, `--attempt`, `--phase`,
+`--parent-experiment-id`, `--resumed-from-experiment-id`, and repeatable
+`--correlation-label KEY VALUE`. Explicit flags override YAML `execution.correlation` one field at a
+time; omitted values remain unchanged.
 
 Validate before any expensive subject call. Keep record directories outside committed source unless
 the project intentionally checks in fixtures.
 
 The CLI renders Rich tables and panels for humans. Machine consumers should read records or exports,
 not scrape terminal formatting.
+
+`dataset generate` resolves a sync or async `CaseGenerator`, records request/provider/model/review/
+usage/cost provenance, and publishes normal dataset YAML plus a generation manifest. Explicit
+incomplete generation exits `2` and writes only an incomplete sidecar; it never mutates a benchmark
+dataset.
 
 ## Exit Behavior
 
@@ -55,8 +72,8 @@ case, variant, scorer, or integration without dumping secrets.
 
 ## Schemas And YAML
 
-The repository ships versioned schemas for benchmark, dataset, records, semantics, pricing,
-reports, artifacts, assets, and traces. All generated Autobench YAML should include a
+The repository ships versioned schemas for benchmark, dataset, generation request/manifest,
+records, semantics, pricing, reports, artifacts, assets, and traces. All generated Autobench YAML should include a
 `yaml-language-server` schema header.
 
 When changing YAML behavior:
@@ -113,7 +130,7 @@ When changing YAML behavior:
 For the Autobench repository:
 
 ```bash
-uv sync --extra dev --extra instrumentation --extra openai-agents
+uv sync --extra dev --extra instrumentation --extra openai-agents --extra otlp
 make prod
 make pre-commit
 ```
@@ -143,4 +160,3 @@ record. Add project tests for task behavior and custom scorers.
 - Do not claim production readiness only because unit tests pass; verify install, CLI, docs,
   records, replay, and compatibility surfaces.
 - Commit generated `llms-full.txt` when the repository treats it as a release artifact.
-

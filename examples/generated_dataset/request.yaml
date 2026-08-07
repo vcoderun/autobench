@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../schemas/0.3.0/generation_request_schema.json
+generation:
+  request:
+    seed: 17
+    prompt:
+      content: Generate privacy-safe support routing cases.
+      asset_version: prompt.routing-generator@v1
+    settings:
+      route: billing
+    metadata:
+      owner: evaluation
+    seed_cases:
+      - id: reviewed-refund
+        input:
+          message: Refund for a duplicate charge
+        expected:
+          route: billing
+

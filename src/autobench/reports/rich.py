@@ -10,8 +10,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from autobench.data.generation import GenerationResult, GenerationWriteResult
+from autobench.data.ingestion import ReviewStatus
+from autobench.exporters.otlp import OTLPExportResult
 from autobench.instrumentation.registry import InstrumentorStatus
 from autobench.protocol.traces import Trace
+from autobench.records.staging import StagingInspection
 from autobench.reports.exporting import CSV_METRICS
 from autobench.reports.reporting import (
     BenchmarkReport,
@@ -19,6 +23,7 @@ from autobench.reports.reporting import (
     build_report,
     metric_value,
 )
+from autobench.runtime.models import ExecutionCorrelation
 from autobench.runtime.pipeline import ExperimentResult, RunResult
 
 
@@ -44,6 +49,83 @@ def render_validation_summary(console: Console, summary: Mapping[str, Any]) -> N
         console.print(_warnings_panel([str(warning) for warning in warnings]))
 
 
+def render_generation_result(
+    console: Console,
+    result: GenerationResult,
+    written: GenerationWriteResult,
+) -> None:
+    complete = result.batch.complete
+    color = "green" if complete else "yellow"
+    console.print(
+        Panel.fit(
+            Text(result.generator_id),
+            title="Dataset Generation Complete" if complete else "Dataset Generation Incomplete",
+            border_style=color,
+        )
+    )
+    summary = _kv_table("Generation Summary")
+    summary.add_row("Generator", result.generator_id)
+    summary.add_row("Status", "complete" if complete else "incomplete")
+    summary.add_row("Determinism", result.batch.determinism.value)
+    summary.add_row("Generated cases", str(len(result.generated_cases)))
+    summary.add_row(
+        "Included cases", str(0 if result.dataset is None else len(result.dataset.cases))
+    )
+    summary.add_row(
+        "Rejected cases",
+        str(sum(case.review_status is ReviewStatus.REJECTED for case in result.generated_cases)),
+    )
+    summary.add_row("Request hash", result.request_hash)
+    if result.dataset_hash is not None:
+        summary.add_row("Dataset hash", result.dataset_hash)
+    if result.batch.cost is not None:
+        summary.add_row(
+            "Generation cost",
+            f"{result.batch.cost.amount:.6g} {result.batch.cost.currency}",
+        )
+    if result.batch.incomplete_reason is not None:
+        summary.add_row("Incomplete reason", result.batch.incomplete_reason)
+    if written.dataset_path is not None:
+        summary.add_row("Dataset", str(written.dataset_path))
+    summary.add_row("Manifest", str(written.manifest_path))
+    console.print(summary)
+
+    cases = Table(title="Generated Cases", box=box.SIMPLE_HEAVY, header_style="bold cyan")
+    cases.add_column("Case")
+    cases.add_column("Review")
+    cases.add_column("SHA-256")
+    cases.add_column("Reason")
+    for generated_case in result.generated_cases:
+        cases.add_row(
+            generated_case.case.id,
+            generated_case.review_status.value,
+            generated_case.content_hash[:12],
+            generated_case.rejection_reason or "-",
+        )
+    console.print(cases)
+
+
+def render_otlp_export(console: Console, result: OTLPExportResult) -> None:
+    console.print(
+        Panel.fit(
+            Text(result.experiment_id, style="bold green"),
+            title="OTLP Export Complete",
+            border_style="green",
+        )
+    )
+    summary = _kv_table("Telemetry Export Summary")
+    summary.add_row("Benchmark", result.benchmark_id)
+    summary.add_row("Record version", str(result.record_version))
+    summary.add_row("Runs", str(result.run_count))
+    summary.add_row("ABP traces", str(result.trace_count))
+    summary.add_row("ABP spans", str(result.abp_span_count))
+    summary.add_row("Exported spans", str(result.exported_span_count))
+    summary.add_row("Partial runs", str(result.partial_run_count))
+    summary.add_row("Partial traces", str(result.partial_trace_count))
+    summary.add_row("Endpoint", result.endpoint)
+    console.print(summary)
+
+
 def render_experiment_result(
     console: Console,
     result: ExperimentResult,
@@ -60,12 +142,22 @@ def render_experiment_result(
     )
     table = _kv_table("Run Summary")
     table.add_row("Experiment", result.experiment_id)
+    _add_correlation_rows(table, result.correlation)
+    table.add_row("Terminal status", result.termination.status.value)
+    table.add_row("Partial", "yes" if result.termination.partial else "no")
     table.add_row("Planned runs", str(result.plan.planned_run_count))
     table.add_row("Runs", str(result.total_count))
     table.add_row("Passed", str(result.passed_count))
     table.add_row("Failed", str(result.failed_count))
     table.add_row("Errored", str(result.errored_count))
     table.add_row("Skipped", str(result.skipped_count))
+    table.add_row("Cancelled", str(result.cancelled_count))
+    if not result.termination.cross_run_derivation_complete:
+        table.add_row("Cross-run derivation", "incomplete")
+    if not result.termination.policies_complete:
+        table.add_row("Policies", "incomplete")
+    if result.termination.missing_run_ids:
+        table.add_row("Missing runs", ", ".join(result.termination.missing_run_ids))
     if record_path is not None:
         table.add_row("Recorded to", str(record_path))
     console.print(table)
@@ -84,9 +176,30 @@ def render_report(console: Console, report: BenchmarkReport) -> None:
     )
     table = _kv_table("Overview")
     table.add_row("Experiment", report.experiment_id)
+    _add_correlation_rows(table, report.correlation)
     table.add_row("Runs", str(report.run_count))
     console.print(table)
     _render_report_tables(console, report)
+
+
+def _add_correlation_rows(table: Table, correlation: ExecutionCorrelation | None) -> None:
+    if correlation is None:
+        return
+    if correlation.group_id is not None:
+        table.add_row("Correlation group", correlation.group_id)
+    if correlation.attempt is not None:
+        table.add_row("Attempt", str(correlation.attempt))
+    if correlation.phase is not None:
+        table.add_row("Execution phase", correlation.phase)
+    if correlation.parent_experiment_id is not None:
+        table.add_row("Parent experiment", correlation.parent_experiment_id)
+    if correlation.resumed_from_experiment_id is not None:
+        table.add_row("Resumed from", correlation.resumed_from_experiment_id)
+    if correlation.labels:
+        table.add_row(
+            "Correlation labels",
+            ", ".join(f"{key}={value}" for key, value in sorted(correlation.labels.items())),
+        )
 
 
 def render_comparison(console: Console, comparison: ComparisonReport) -> None:
@@ -152,6 +265,40 @@ def render_export_preview(
         _render_runs_preview(console, result.runs)
         return
     render_report(console, build_report(result))
+
+
+def render_staging_inspection(console: Console, inspection: StagingInspection) -> None:
+    color = {
+        "complete": "green",
+        "partial": "yellow",
+        "missing": "yellow",
+        "corrupt": "red",
+        "conflicting": "yellow" if inspection.recoverable else "red",
+    }[inspection.health.value]
+    console.print(
+        Panel.fit(
+            Text(inspection.experiment_id, style=f"bold {color}"),
+            title=f"Staging {inspection.health.value.title()}",
+            border_style=color,
+        )
+    )
+    summary = _kv_table("Recovery State")
+    summary.add_row("Path", str(inspection.path))
+    summary.add_row("Session status", inspection.status.value)
+    summary.add_row("Recoverable", "yes" if inspection.recoverable else "no")
+    summary.add_row("Planned runs", str(len(inspection.planned_run_ids)))
+    summary.add_row("Complete runs", str(len(inspection.complete_run_ids)))
+    summary.add_row("Checkpointed runs", str(len(inspection.checkpointed_run_ids)))
+    summary.add_row("Missing runs", str(len(inspection.missing_run_ids)))
+    summary.add_row("Corrupt runs", str(len(inspection.corrupt_run_ids)))
+    summary.add_row("Orphaned files", str(len(inspection.orphaned_files)))
+    console.print(summary)
+    if inspection.missing_run_ids:
+        console.print(
+            _warnings_panel([f"missing run: {run_id}" for run_id in inspection.missing_run_ids])
+        )
+    if inspection.diagnostics:
+        console.print(_warnings_panel(list(inspection.diagnostics)))
 
 
 def render_model_configurations(
@@ -693,7 +840,9 @@ __all__ = (
     "render_comparison",
     "render_experiment_result",
     "render_export_preview",
+    "render_generation_result",
     "render_model_configurations",
+    "render_otlp_export",
     "render_recorded_runs",
     "render_report",
     "render_validation_summary",

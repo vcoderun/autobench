@@ -8,8 +8,9 @@ Autobench supports four collection styles that can be mixed in one run:
 4. Native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX instrumentors configured from Python or
    YAML.
 
-OpenTelemetry is not a core dependency. Future OTLP bridges can export Autobench spans, but the
-evidence model remains owned by Autobench.
+OpenTelemetry is not a core dependency. The optional outbound
+[OTLP exporter](otlp-export.md) can replay immutable Autobench evidence to compatible backends,
+while ABP remains the canonical evidence model.
 
 See [Native Instrumentation](native-instrumentation.md) for the typed fluent API, YAML DSL,
 compatibility doctor, privacy defaults, layered traces, and provider examples.
@@ -188,6 +189,92 @@ installing duplicate hooks. Closing the final handle unregisters native callback
 exact patched descriptor. Competing owners can instrument the same method independently, while an
 external wrapper replacement produces a conflict diagnostic instead of being overwritten.
 
+### External Backend Integration
+
+An SDK that already exposes its own telemetry backend does not need a second method-patching layer.
+Its Autobench adapter can install a backend that asks `InstrumentationRuntime` for a span:
+
+```python
+from collections.abc import Generator
+from contextlib import contextmanager
+
+from autobench import InstrumentationRuntime, InstrumentorInfo, Span
+
+
+class AutobenchBackend:
+    def __init__(self, runtime: InstrumentationRuntime, info: InstrumentorInfo) -> None:
+        self.runtime = runtime
+        self.info = info
+
+    @contextmanager
+    def start_span(
+        self,
+        name: str,
+        attributes: dict[str, bool | str | int | float],
+    ) -> Generator[Span | None, None, None]:
+        span = self.runtime.span(
+            self.info,
+            name,
+            kind="workflow",
+            attributes=attributes,
+            target_version="1.4.0",
+            suppression_keys=("example-sdk",),
+        )
+        if span is None:
+            yield None
+            return
+        with span:
+            yield span
+```
+
+`runtime.span()` returns an unentered span only during an active Autobench run. It returns `None`
+outside a run, in a matching suppression scope, or when the active protocol context is not owned by
+a `RunContext`. Entering the span makes it the parent of nested built-in instrumentation, including
+Pydantic AI, OpenAI, and HTTPX calls. Exiting it records normal completion, failure, timeout, or
+cancellation without changing the host SDK result or exception.
+
+External counters and histograms can use the matching observation seam:
+
+```python
+runtime.metric(
+    info,
+    "framework.jobs",
+    1,
+    semantic_type="workflow.jobs",
+    unit="job",
+    suppression_keys=("example-sdk",),
+)
+```
+
+The observation is attached to the currently entered Autobench span when one exists and is marked
+with `source=instrumentation`. Like `runtime.span()`, this method returns `None` outside an owned,
+unsuppressed benchmark context.
+
+Backends that enrich a span owned by another installed instrumentor can use the active-span view:
+
+```python
+current = runtime.current_span(info, suppression_keys=("example-sdk",))
+if current is not None:
+    current.set_attribute("framework.profile", "reviewer")
+    current.set_usage("input_tokens", 420)
+    current.event("framework cache hit", semantic_type="event.occurrence")
+```
+
+`CurrentSpan` can read and set attributes, set usage, attach instrumentation events, and record an
+exception. It never renames the ABP operation after `span_start`; an external backend that supports
+display-name updates should store that value as an attribute. Calls return `None` outside an active
+legacy-backed span, including a raw ABP context that is not owned by a `RunContext`.
+
+`runtime.is_installed(instrumentor_id)` and `runtime.installed_ids` let a composite backend choose
+the native owner dynamically. For example, a framework adapter can suppress its model/tool spans
+only while `autobench.pydantic_ai` is actually installed, avoiding both missing evidence and double
+accounting.
+
+The adapter remains responsible for its host's backend ownership. If a backend is already installed,
+compose or multiplex it with the Autobench backend; do not replace it silently. The close callback
+must restore the previous backend only when the adapter still owns the active slot. This preserves
+an existing OTel, Logfire, or application backend and avoids clobbering a newer installation.
+
 Mechanisms should be selected in this order:
 
 1. stable native processor or callback;
@@ -263,8 +350,8 @@ No manual span or metric calls are required. The instrumentor captures:
 
 The instrumentor composes with user event handlers and Pydantic AI's own
 `Instrumentation` capability. It does not configure, replace, or require
-OpenTelemetry. Autobench 0.2.x pins the public integration seam
-to Pydantic AI 2.22.x; `InstrumentationManager.check()` reports incompatible
+OpenTelemetry. Autobench supports the audited public integration seam across
+Pydantic AI 2.22.x and 2.23.x; `InstrumentationManager.check()` reports incompatible
 versions before installing hooks.
 
 Application outputs and exceptions are passed through unchanged. Aggregate agent

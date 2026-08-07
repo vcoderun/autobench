@@ -1,6 +1,6 @@
 from __future__ import annotations as _annotations
 
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -23,8 +23,9 @@ from autobench.instrumentation.config import (
 from autobench.instrumentation.models import Instrumentor
 from autobench.protocol.capture import CapturePolicy
 from autobench.runtime.awaitables import run_sync
-from autobench.runtime.pipeline import ExperimentResult
-from autobench.spec import BenchmarkInfo, BenchmarkSpec, TaskSpec
+from autobench.runtime.models import ExecutionCorrelation, ExperimentResult
+from autobench.runtime.progress import ProgressErrorHandler, ProgressErrorPolicy, ProgressHandler
+from autobench.spec import BenchmarkInfo, BenchmarkSpec, ExecutionSpec, TaskSpec
 
 
 class Component(Protocol):  # pragma: no cover
@@ -54,6 +55,7 @@ class Benchmark:
     def __init__(self, benchmark_id: str) -> None:
         self._benchmark = BenchmarkInfo(id=benchmark_id)
         self._capture: CapturePolicy | None = None
+        self._execution = ExecutionSpec()
         self._dataset = DatasetSpec()
         self._task: TaskSpec | None = None
         self._variants: list[Variant] = []
@@ -70,6 +72,18 @@ class Benchmark:
         self._capture = (
             policy if isinstance(policy, CapturePolicy) else CapturePolicy.model_validate(policy)
         )
+        return self
+
+    def correlation(
+        self,
+        value: ExecutionCorrelation | Mapping[str, Any],
+    ) -> Benchmark:
+        correlation = (
+            value
+            if isinstance(value, ExecutionCorrelation)
+            else ExecutionCorrelation.model_validate(value)
+        )
+        self._execution = ExecutionSpec(correlation=correlation)
         return self
 
     def dataset(
@@ -166,6 +180,7 @@ class Benchmark:
         return BenchmarkSpec(
             benchmark=self._benchmark,
             capture=self._capture,
+            execution=self._execution,
             dataset=self._dataset,
             task=self._task,
             variants=self._variants,
@@ -178,27 +193,43 @@ class Benchmark:
         self,
         *,
         experiment_id: str | None = None,
+        correlation: ExecutionCorrelation | None = None,
         concurrency_limit: int | None = 1,
+        progress_handlers: Sequence[ProgressHandler] = (),
+        progress_error_policy: ProgressErrorPolicy = ProgressErrorPolicy.STRICT,
+        progress_error_handler: ProgressErrorHandler | None = None,
     ) -> ExperimentResult:
         from autobench.runtime.pipeline import run_benchmark_spec
 
         return await run_benchmark_spec(
             self.to_spec(),
             experiment_id=experiment_id,
+            correlation=correlation,
             concurrency_limit=concurrency_limit,
             instrumentors=self._instrumentors,
+            progress_handlers=progress_handlers,
+            progress_error_policy=progress_error_policy,
+            progress_error_handler=progress_error_handler,
         )
 
     def run(
         self,
         *,
         experiment_id: str | None = None,
+        correlation: ExecutionCorrelation | None = None,
         concurrency_limit: int | None = 1,
+        progress_handlers: Sequence[ProgressHandler] = (),
+        progress_error_policy: ProgressErrorPolicy = ProgressErrorPolicy.STRICT,
+        progress_error_handler: ProgressErrorHandler | None = None,
     ) -> ExperimentResult:
         return run_sync(
             self.run_async(
                 experiment_id=experiment_id,
+                correlation=correlation,
                 concurrency_limit=concurrency_limit,
+                progress_handlers=progress_handlers,
+                progress_error_policy=progress_error_policy,
+                progress_error_handler=progress_error_handler,
             )
         )
 

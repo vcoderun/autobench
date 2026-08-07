@@ -118,16 +118,21 @@ variant-configuration tables.
 
 ## Generated And Production Cases
 
-The data helpers preserve where generated examples came from:
+The data layer preserves where generated examples came from:
 
 - `ProductionSample` models a source sample and review state.
 - `sample_to_case` and `samples_to_cases` convert samples without losing provenance.
 - `mark_generated_case` records generation metadata.
 - `generated_batch_from_cases` creates a `GeneratedCaseBatch` with generator, model, and source
-  details.
+  details;
+- `generate_dataset` and `generate_dataset_sync` execute a typed generator before benchmark
+  planning;
+- `write_generation_result` publishes a normal dataset plus a separate provenance manifest.
 
-This layer is intentionally not a synthetic-data generator. It defines the evidence contract so a
-generator, production sampler, or review system can supply cases consistently.
+Autobench owns the preparation and evidence contract, not the model or sampling strategy. Complete
+generation freezes accepted and candidate cases into ordinary dataset YAML; rejected cases remain
+in the manifest with their reasons. Incomplete generation writes only an incomplete sidecar and
+cannot replace a benchmark dataset. See [Generated Datasets](generated-datasets.md).
 
 ## Identity And Reproducibility
 

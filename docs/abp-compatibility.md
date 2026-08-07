@@ -129,7 +129,7 @@ The initial integration extras are reserved as follows:
 
 | Extra | Research baseline | First implementation phase |
 | --- | ---: | ---: |
-| `autobench[pydantic-ai]` | Pydantic AI 2.22.0 | 10 |
+| `autobench[pydantic-ai]` | Pydantic AI 2.22.0 and 2.23.0 | 10 |
 | `autobench[openai]` | OpenAI Python 2.52.0 and 2.53.0 | 11 |
 | `autobench[openai-agents]` | OpenAI Agents 0.19.2 | 11 |
 | `autobench[httpx]` | HTTPX 0.28.1 | 12 |
@@ -187,3 +187,11 @@ machine and are not release thresholds. Reproduce transport and stream measureme
 uv run python scripts/benchmark_spans.py --httpx --iterations 1000 --repeats 7
 uv run python scripts/benchmark_spans.py --httpx-stream --chunks 10000 --chunk-size 32 --repeats 7
 ```
+
+## Outbound OTLP Compatibility
+
+The optional ABP-to-OTLP adapter is a projection of immutable evidence, not part of the ABP wire
+format. OTel SDK/exporter version changes therefore do not change `PROTOCOL_VERSION`. The adapter
+must preserve Autobench identities, partial state, source provenance, and semantic event payloads
+while leaving the input records byte-for-byte unchanged. The base package and replay remain usable
+without the `otlp` extra.

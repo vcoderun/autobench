@@ -188,12 +188,22 @@ autobench instrumentation doctor
 
 The command reports compatibility rather than failing because an optional SDK is absent.
 
+To export immutable ABP records to an OTLP HTTP/protobuf backend, install the independent exporter
+extra:
+
+```bash
+uv add 'autobench[otlp]'
+```
+
+Collection still uses ABP. The extra is needed only on the process that performs
+`autobench telemetry export`; see [OTLP Export](otlp-export.md).
+
 ## Development Checkout
 
 From the repository root:
 
 ```bash
-uv sync --extra dev --extra instrumentation --extra openai-agents
+uv sync --extra dev --extra instrumentation --extra openai-agents --extra otlp
 make prod
 ```
 
@@ -499,6 +509,7 @@ infrastructure begins.
 | Track prompts/tools/schemas | explicit tracking or automatic asset discovery |
 | Turn production failures into regressions | `ProductionSample`, sampling policy, reviewed cases |
 | Feed an optimizer | objectives, constraints, factors, asset versions, feedback records |
+| Publish evidence to telemetry | immutable records, optional ABP-to-OTLP export |
 
 ## Application Regression Benchmark
 
@@ -847,21 +858,37 @@ reviewed cases into a versioned YAML dataset before using them as a release gate
 
 ## Synthetic Case Generation With Provenance
 
-Autobench does not own a model-based generator, but it preserves generated-data lineage:
+Autobench does not prescribe a model-based generator, but it owns the typed preparation and
+generated-data lineage boundary:
 
 ```python
-from autobench import Case, generated_batch_from_cases
+from pathlib import Path
 
-batch = generated_batch_from_cases(
-    [Case(id="edge-1", input={"message": "..."})],
-    generator_asset_version="prompt.generate_cases@82ab39",
-    model_provider="openrouter",
-    model_name="openai/gpt-5.6-luna",
+from autobench import (
+    Case,
+    CaseGeneratorInput,
+    GeneratedCaseBatch,
+    generate_dataset_sync,
+    write_generation_result,
 )
+
+result = generate_dataset_sync(
+    lambda request: GeneratedCaseBatch(
+        cases=(Case(id="edge-1", input={"message": "..."}),),
+        generator_asset_version="prompt.generate_cases@82ab39",
+        model_provider="openrouter",
+        model_name="openai/gpt-5.6-luna",
+    ),
+    CaseGeneratorInput(seed=17),
+    generator_id="generation:generate_cases",
+    dataset_id="routing-edge-cases",
+)
+write_generation_result(result, Path("datasets/routing-edge-cases.yaml"))
 ```
 
-Generated cases remain candidates until reviewed. This keeps generator behavior and benchmark truth
-from collapsing into the same untracked process.
+Candidate, accepted, and rejected states remain visible in the generation manifest. Generation is a
+separate operation, so review and freezing happen before variants see the dataset. See
+[Generated Datasets](generated-datasets.md).
 
 ## CI Regression Gate
 
@@ -924,6 +951,18 @@ report = build_report(experiment)
 This is the correct boundary for dashboards, offline reports, audits, post-hoc extraction, and
 optimizer data ingestion.
 
+To publish the same immutable evidence into an OTLP-compatible operations backend without rerunning
+the subject:
+
+```bash
+autobench telemetry export runs/latest \
+  --endpoint https://collector.example/v1/traces \
+  --service-name routing-benchmark
+```
+
+The outbound adapter preserves experiment/run/trace identity and semantic events. It is not an
+alternative record format; see [OTLP Export](otlp-export.md).
+
 ---
 
 ## Example Projects
@@ -948,6 +987,8 @@ These examples are credential-free and run in `make examples`:
 | `abp_manual` | ticket router | manual span plus method instrumentation |
 | `abp_concurrent` | async workers | task-local trace context and concurrent runs |
 | `automatic_assets` | Pydantic AI and custom SDK | automatic behavioral asset lineage |
+| `generated_dataset` | support-routing case preparation | typed generator, request YAML, review state, frozen dataset and provenance manifest |
+| `otlp_export` | immutable ABP record | offline OTLP hierarchy mapping through an injected exporter |
 
 Run all offline examples:
 
@@ -965,6 +1006,20 @@ autobench replay /tmp/autobench-minimal
 
 Read `examples/minimal/autobench.yaml` together with `minimal_benchmark.py`. This is the shortest
 complete `case x variant -> task -> score -> record -> report` implementation.
+
+## Generated Dataset: Prepare Before Planning
+
+```bash
+cd examples/generated_dataset
+autobench dataset generate generator:generate_routing_cases \
+  --request request.yaml \
+  --output generated-cases.yaml \
+  --id routing-generated \
+  --version v1
+```
+
+This example is deterministic and credential-free. It writes a normal dataset and a separate
+generation manifest, showing the boundary between data preparation and benchmark execution.
 
 ## Basic: Application Evidence
 
@@ -1076,6 +1131,17 @@ uv run python examples/abp_replay/replay_and_extract.py /tmp/recorded-experiment
 The script loads records without provider SDKs and creates extraction-derived records with explicit
 parent lineage.
 
+## Offline OTLP Export
+
+```bash
+uv run autobench run examples/abp_manual/autobench.yaml --record /tmp/abp-manual
+uv run python examples/otlp_export/export_record.py /tmp/abp-manual
+```
+
+The example maps a real recorded experiment to OTel SDK spans through an injected in-memory
+exporter, so it verifies hierarchy and delivery without a collector or network request. Production
+delivery uses `autobench telemetry export`; see [OTLP Export](otlp-export.md).
+
 ## CodeMode: Migrating A Real Benchmark Runner
 
 ```bash
@@ -1125,6 +1191,7 @@ design constraint: the framework can benchmark any system because it does not ow
 | Tracking | behavioral asset identity, versions, representations, diffs, uses | source control or deployment promotion |
 | Records | immutable run and experiment evidence, artifacts, source hashes | mutable operational databases |
 | Reports | semantic projections, aggregation, comparison and exports | causal inference from uncontrolled changes |
+| Outbound adapters | projections such as ABP-to-OTLP delivery | canonical evidence or application instrumentation |
 
 ## One Canonical Spec
 
@@ -1152,8 +1219,19 @@ For each case x variant pair, Autobench:
 7. derives per-run metrics such as token cost;
 8. finalizes status and trace state.
 
-After all runs finish, it applies cross-run derivation and policy evaluation. Recording then
+The context tracks these phases explicitly. With durable recording, `await ctx.checkpoint(name)`
+commits a frozen partial snapshot through the active record session. Cooperative cancellation
+finalizes partial trace state, commits a reserved terminal checkpoint, and propagates the same
+`CancelledError`; concurrent cancellation drains sibling cleanup within a fixed bound before the
+experiment session aborts.
+
+As runs finish, an optional recorder commits their execution snapshots. After all runs finish, the
+runtime applies cross-run derivation and policy evaluation, then
 materializes immutable YAML records and referenced artifacts.
+
+Hard termination is intentionally weaker: `SIGKILL` and power loss preserve only the last staging
+manifest commit under the selected durability mode. Autobench checkpoints evidence, while the
+subject application remains responsible for resumable execution state.
 
 ## Evidence Model
 
@@ -1216,6 +1294,15 @@ Choose the narrowest seam that owns the behavior:
 Application-specific logic belongs in tasks and scorers. Generic SDK behavior belongs in an
 instrumentor. This prevents core Autobench from accumulating one-off integrations disguised as
 framework concepts.
+
+An external framework may retain ownership of its telemetry backend. Its adapter can use
+`InstrumentationRuntime.span()` to join the active ABP tree, while the external package owns backend
+multiplexing and conditional restoration. Autobench core therefore supplies context and evidence
+semantics without importing the framework or replacing an existing telemetry destination.
+
+After recording, the optional OTLP adapter can map immutable experiment, run, trace, and span
+evidence to an external telemetry backend. This happens outside benchmark execution and never
+turns OTLP into storage, replay lineage, or canonical semantics.
 
 ## Optimization Boundary
 
@@ -1331,8 +1418,9 @@ The Autobench Protocol (ABP) is the native execution evidence model. Instrumento
 emit immutable signals that materialize into a trace containing spans, measurements, events, links,
 references, errors, stream state, and diagnostics.
 
-ABP is not an OpenTelemetry wrapper. Optional bridges may export it later, but Autobench controls
-its semantic, replay, accounting, and optimization contracts.
+ABP is not an OpenTelemetry wrapper. The optional outbound OTLP adapter can project recorded ABP
+evidence into OTel spans, but Autobench controls its semantic, replay, accounting, and optimization
+contracts.
 
 ## Tracked Asset
 
@@ -1349,7 +1437,14 @@ representation actually used to a run and optional span.
 the plan, source hashes, environment, report configuration, run paths, and aggregate statuses for
 the whole matrix.
 
-Records are human-readable YAML views backed by strict typed models and versioned JSON Schemas.
+Both complete and partial evidence can be immutable. A run records `partial` and `end_reason`; an
+experiment records one terminal state, post-processing completeness, and its planned, recorded, and
+missing run identities. This lifecycle metadata is separate from benchmark outcomes: an experiment
+can complete even when individual runs fail.
+
+Records are human-readable YAML views backed by strict typed models and versioned JSON Schemas. A
+content manifest is validated before replay, and final experiment directories are published only
+after every record and summary file exists.
 
 ## Report
 
@@ -1489,16 +1584,21 @@ variant-configuration tables.
 
 ## Generated And Production Cases
 
-The data helpers preserve where generated examples came from:
+The data layer preserves where generated examples came from:
 
 - `ProductionSample` models a source sample and review state.
 - `sample_to_case` and `samples_to_cases` convert samples without losing provenance.
 - `mark_generated_case` records generation metadata.
 - `generated_batch_from_cases` creates a `GeneratedCaseBatch` with generator, model, and source
-  details.
+  details;
+- `generate_dataset` and `generate_dataset_sync` execute a typed generator before benchmark
+  planning;
+- `write_generation_result` publishes a normal dataset plus a separate provenance manifest.
 
-This layer is intentionally not a synthetic-data generator. It defines the evidence contract so a
-generator, production sampler, or review system can supply cases consistently.
+Autobench owns the preparation and evidence contract, not the model or sampling strategy. Complete
+generation freezes accepted and candidate cases into ordinary dataset YAML; rejected cases remain
+in the manifest with their reasons. Incomplete generation writes only an incomplete sidecar and
+cannot replace a benchmark dataset. See [Generated Datasets](generated-datasets.md).
 
 ## Identity And Reproducibility
 
@@ -1507,6 +1607,224 @@ generator, production sampler, or review system can supply cases consistently.
 - Matrix order is deterministic.
 - Run IDs are stable for a given plan position, case, and variant.
 - Dataset version may also be emitted as `dataset.version` semantic evidence.
+
+---
+
+## Generated Datasets
+
+Canonical page: https://vcoderun.github.io/autobench/generated-datasets/
+
+# Generated Datasets
+
+Autobench can prepare generated cases before a benchmark begins, preserve how they were produced,
+and publish them as an ordinary reviewable dataset. Generation is deliberately separate from the
+case x variant execution loop: every variant sees the same frozen cases.
+
+## Lifecycle
+
+```text
+generation request
+  -> sync or async CaseGenerator
+  -> GeneratedCaseBatch
+  -> review/provenance normalization
+  -> complete dataset YAML + generation manifest
+  -> normal benchmark dataset.source
+```
+
+This separation prevents a model, random seed, provider retry, or partially completed generation
+job from changing matrix identity while variants are already running.
+
+## Generator Contract
+
+A generator receives one `CaseGeneratorInput` and returns `GeneratedCaseBatch`. It may be
+synchronous or asynchronous:
+
+```python
+from autobench import (
+    Case,
+    CaseGeneratorInput,
+    GeneratedCaseBatch,
+    GeneratedCaseReview,
+    GenerationCost,
+    GenerationDeterminism,
+    GenerationUsage,
+    ReviewStatus,
+)
+
+
+def generate_cases(request: CaseGeneratorInput) -> GeneratedCaseBatch:
+    route = str(request.settings.get("route", "billing"))
+    cases = (
+        Case(
+            id="generated-refund",
+            input={"message": "Refund a duplicate charge"},
+            expected={"route": route},
+        ),
+    )
+    return GeneratedCaseBatch(
+        cases=cases,
+        generator_asset_version=request.prompt_asset_version,
+        model_provider="openrouter",
+        model_name="openai/gpt-5.6-luna",
+        determinism=GenerationDeterminism.NOT_GUARANTEED,
+        usage=GenerationUsage(input_tokens=120, output_tokens=45, requests=1),
+        cost=GenerationCost(amount=0.0012, currency="usd"),
+        reviews=(
+            GeneratedCaseReview(
+                case_id="generated-refund",
+                status=ReviewStatus.ACCEPTED,
+            ),
+        ),
+    )
+```
+
+Autobench does not prescribe the model, sampler, prompt framework, or review service. The callable
+is the application-owned adapter; its typed output is the portable evidence boundary.
+
+## Request YAML
+
+The CLI can pass a human-authored request to the generator:
+
+```yaml
+# yaml-language-server: $schema=schemas/0.3.0/generation_request_schema.json
+generation:
+  request:
+    seed: 17
+    prompt:
+      content: Generate privacy-safe support routing cases.
+      asset_version: prompt.routing-generator@v1
+    settings:
+      route: billing
+      count: 20
+    metadata:
+      owner: evaluation
+    seed_cases:
+      - id: reviewed-refund
+        input:
+          message: Refund for a duplicate charge
+        expected:
+          route: billing
+```
+
+`settings` and `metadata` accept portable serialized values. `seed_cases` provide reviewed examples
+without requiring the generator to load a Pydantic Evals dataset or an Autobench benchmark spec.
+
+## Generate From The CLI
+
+```bash
+autobench dataset generate generator:generate_cases \
+  --request generation-request.yaml \
+  --output datasets/generated-routing.yaml \
+  --id generated-routing \
+  --version v1
+```
+
+A complete invocation writes:
+
+- `datasets/generated-routing.yaml`: normal dataset DSL consumed by `dataset.source`;
+- `datasets/generated-routing.generation.yaml`: provider, model, prompt version, seed, settings,
+  usage, cost, review state, timestamps, and content hashes.
+
+Existing outputs are protected. Use `--force` only when intentionally replacing both artifacts.
+
+## Generate From Python
+
+```python
+from pathlib import Path
+
+from autobench import (
+    CaseGeneratorInput,
+    generate_dataset_sync,
+    write_generation_result,
+)
+
+request = CaseGeneratorInput(
+    seed=17,
+    prompt="Generate privacy-safe support routing cases.",
+    prompt_asset_version="prompt.routing-generator@v1",
+    settings={"route": "billing", "count": 20},
+)
+result = generate_dataset_sync(
+    generate_cases,
+    request,
+    generator_id="generator:generate_cases",
+    dataset_id="generated-routing",
+    version="v1",
+)
+written = write_generation_result(result, Path("datasets/generated-routing.yaml"))
+```
+
+Use `await generate_dataset(...)` inside an async application. `GenerationResult` validates the
+request hash, case records, review projection, dataset content, timestamps, and dataset hash before
+publication.
+
+## Review Semantics
+
+Every generated case has one of three states:
+
+| State | Published in complete dataset? | Meaning |
+| --- | --- | --- |
+| `candidate` | Yes | Generated and not yet explicitly accepted or rejected |
+| `accepted` | Yes | Explicitly reviewed and accepted |
+| `rejected` | No | Excluded; a nonempty rejection reason is required |
+
+The generation manifest retains all three states, including the complete rejected case and its
+reason. The dataset retains `source`, review status, generator/model provenance, and its own content
+hash in each included case's metadata. Teams that permit only accepted data can review or filter
+candidates in their generator before returning a complete batch.
+
+## Incomplete Generation
+
+A generator that reaches a budget, provider, or review boundary can return:
+
+```python
+return GeneratedCaseBatch(
+    complete=False,
+    incomplete_reason="manual review required",
+    cases=partial_cases,
+)
+```
+
+Autobench writes only `<output-stem>.incomplete.yaml` and exits the CLI with status `2`. It does not
+write or replace the requested dataset, even with `--force`. The sidecar preserves partial cases for
+inspection without presenting them as benchmark-ready truth. An exception is a failed generation
+operation, not a partial result; return an explicit incomplete batch when partial evidence exists.
+
+## Determinism And Hashes
+
+`GenerationDeterminism` is an evidence claim made by the generator adapter:
+
+- `guaranteed`: the provider and adapter contract guarantee the same generated content;
+- `not_guaranteed`: repeated requests may differ;
+- `unknown`: no reliable guarantee is available.
+
+Autobench never upgrades this claim based only on a seed. The request hash covers seed cases,
+prompt, prompt version, settings, and metadata. Each generated case and the frozen dataset have
+separate SHA-256 identities. For a guaranteed generator, identical normalized output produces
+byte-identical dataset YAML; the provenance manifest still has new execution timestamps.
+
+The manifest stores the prompt hash and asset version rather than copying prompt content. Keep the
+request file or tracked prompt asset when the exact historical text must be reconstructed.
+
+## Use In A Benchmark
+
+After generation, consume the output like any other file-backed dataset:
+
+```yaml
+benchmark:
+  routing:
+    dataset:
+      source: file://datasets/generated-routing.yaml
+      version: v1
+    run:
+      python: benchmark_task:run
+    variants:
+      current: {}
+      candidate: {}
+```
+
+Generation never runs implicitly during `autobench run`. Regenerate deliberately, review the diff,
+then start a new experiment so every run has one immutable dataset identity.
 
 ---
 
@@ -1596,10 +1914,55 @@ reports separate execution reliability from evaluation quality.
 
 ## Progress Events
 
-`ProgressEvent` and `ProgressEventKind` provide typed lifecycle notifications. Known event fields
-remain stable while event-specific data is carried in the payload. This is the extension surface
-for terminal progress, service runners, and future UIs without coupling the core runtime to one
-frontend.
+`ProgressEvent` is a live, typed observer surface for terminals, service runners, and UIs. Pass one
+or more synchronous or asynchronous handlers to any execution entry point:
+
+```python
+from autobench import ProgressEvent, ProgressEventKind, run_benchmark_spec
+
+
+async def publish(event: ProgressEvent) -> None:
+    if event.kind is ProgressEventKind.RUN_FINISHED:
+        await send_status(event.run_id, event.run_status, event.sequence)
+
+
+result = await run_benchmark_spec(spec, progress_handlers=(publish,))
+```
+
+Runtime delivery has these guarantees:
+
+- `benchmark_started` is emitted once after Autobench owns execution.
+- Each emitted `run_started` receives exactly one `run_finished` on cooperative success, failure,
+  error, skip, or cancellation.
+- `run_finished.run_status` is the final status after cross-run derivation and policies.
+- Failed policies emit `policy_violation`; passing policies do not create noise.
+- `benchmark_finished.experiment_status` is `completed`, `cancelled`, or `aborted`.
+- `sequence` is unique and monotonic for one benchmark execution. Concurrent producers are
+  serialized by the dispatcher; final run events follow logical matrix order.
+
+Handlers run in registration order. A synchronous handler runs inline. An asynchronous handler is
+awaited before the next handler or event, so a slow handler applies deliberate backpressure to the
+benchmark.
+
+Library execution is strict by default. A handler that raises is disabled, remaining handlers still
+receive terminal events, durable recording is finalized, and Autobench then raises
+`ProgressDispatchError`. CLI progress explicitly uses `ProgressErrorPolicy.BEST_EFFORT` and reports
+renderer failures to stderr:
+
+```python
+from autobench import ProgressErrorPolicy, run_benchmark_spec
+
+result = await run_benchmark_spec(
+    spec,
+    progress_handlers=(optional_dashboard,),
+    progress_error_policy=ProgressErrorPolicy.BEST_EFFORT,
+    progress_error_handler=report_dashboard_failure,
+)
+```
+
+Progress is not persistence. The recorder stages evidence through its own lifecycle even when a
+progress handler fails. A hard process death cannot emit terminal events; inspect durable staging
+to recover the last committed evidence.
 
 ## Python Builder
 
@@ -2185,8 +2548,10 @@ Canonical page: https://vcoderun.github.io/autobench/recording-and-reporting/
 
 # Recording And Reporting
 
-Recording turns an in-memory experiment into portable, immutable evidence. Replay and analysis use
-those records without executing the application again.
+Recording turns an experiment into portable evidence while it is running. Each completed matrix
+item is committed to a mutable staging directory; only a validated complete or explicitly partial
+experiment is published as an immutable record. Replay and analysis use the immutable record
+without executing the application again.
 
 ## Record Layout
 
@@ -2200,6 +2565,7 @@ The directory contains:
 runs/support-routing/
   experiment.yaml
   summary.yaml
+  manifest.yaml
   cases/<case-id>/<variant-id>/run.yaml
   assets/index.yaml
   assets/<safe-asset-id>.yaml
@@ -2210,10 +2576,181 @@ runs/support-routing/
 Paths are stable and artifact references are relative so the directory can be moved or archived.
 Recording is append-only: an existing run payload is never silently replaced.
 
+The CLI and `FileRecorder` stage each completed run before the next serial run, or independently as
+concurrent runs complete. Final publication preserves matrix-plan order rather than wall-clock
+completion order. `record_experiment()` remains the compatible one-shot API for an already
+in-memory result.
+
+Both finalization paths build the complete record in a temporary sibling directory, write
+`experiment.yaml` and `summary.yaml`, validate `manifest.yaml`, and only then publish the final
+directory with one atomic rename. A normal process failure therefore leaves either no new final
+directory or a complete one; readers never observe a half-written final experiment.
+
+Each manifest entry records the relative path, SHA-256 hash, byte count, file kind, and logical
+identity of one file. The manifest excludes itself to avoid a recursive hash. Replay validates the
+manifest before loading runs, so changed, missing, or unexpected payloads fail explicitly.
+
 Asset manifests contain identity, lineage, hashes, changed fields, and content references. The
 versioned prompt/tool/schema snapshots and readable diffs live in the single experiment-local,
 content-addressed `artifacts/asset-content.sqlite3` registry. Resolve them with
 `load_asset_content(...)` and `load_asset_diff(...)`.
+
+## Incremental Durable Recording
+
+Use `FileRecorder` when completed runs must survive a later task, scorer, policy, recorder, or
+process failure:
+
+```python
+import asyncio
+from pathlib import Path
+
+from autobench import FileRecorder, run_benchmark_spec
+
+output = Path("runs/routing-42")
+result = asyncio.run(
+    run_benchmark_spec(
+        spec,
+        experiment_id="routing-42",
+        concurrency_limit=4,
+        recorder=FileRecorder(output, durability="atomic"),
+    )
+)
+```
+
+The pipeline owns the recording session lifecycle. It opens the recorder after constructing the
+fixed experiment plan, stages each `ExecutionSnapshot`, finalizes after cross-run derivation and
+policies, aborts on failure, and closes under success, failure, or cancellation. A recorder failure
+is a required persistence failure: Autobench does not report a run as durably recorded when its
+snapshot was not committed.
+
+Without `recorder=`, `run_benchmark_spec()` stays purely in memory and creates no staging files.
+The CLI constructs a `FileRecorder` for `--record` and for its default `.autobench/...` destination;
+`--no-record` selects the in-memory path explicitly.
+
+During execution, a sibling staging directory is used:
+
+```text
+runs/.routing-42.staging/
+  staging.yaml
+  staging-manifest.yaml
+  cases/<case-id>/<variant-id>/run.yaml
+  checkpoints/<run-id>/<name>.yaml
+  artifacts/<run-id>/...
+  assets/<run-id>/...
+```
+
+`staging.yaml` owns experiment identity, the immutable plan, environment, semantic registry,
+source hashes, post-processing requirements, and session state. `staging-manifest.yaml` is the
+commit index for run and checkpoint payloads. Both use versioned JSON Schema headers. A run is
+recoverable only after all of its files and hashes appear in the manifest.
+
+Staging is intentionally not accepted by `replay_experiment()`. Mutable execution state and
+immutable experiment evidence are different formats.
+
+## Explicit Checkpoints And Cancellation
+
+An async task can commit the evidence collected so far without ending its run:
+
+```python
+from autobench import Case, RunContext
+
+
+async def evaluate_route(ctx: RunContext, case: Case) -> dict[str, str]:
+    route = await choose_route(case.input)
+    ctx.metric("route_confidence", route.confidence)
+    ctx.artifact("route_preview", route.model_dump(mode="json"))
+    await ctx.checkpoint("route-selected")
+
+    response = await execute_route(route)
+    return {"response": response}
+```
+
+`checkpoint()` snapshots the current run phase, available task output, observations, errors,
+legacy spans, canonical ABP trace, artifacts, tracked asset versions and uses, source snapshots,
+and signal-sequence watermark. It returns only after the staging manifest commits the checkpoint.
+Checkpoint names beginning with `autobench.` are reserved for runtime lifecycle records.
+
+Explicit checkpoints require durable recording. Calling `ctx.checkpoint()` in an in-memory run
+raises before pretending evidence was persisted. A task that does not need interruption recovery
+does not pay checkpoint or staging overhead.
+
+On cooperative cancellation Autobench:
+
+1. records the original `CancelledError`;
+2. finalizes open ABP spans as partial;
+3. commits an `autobench.cancelled` checkpoint with the phase where cancellation occurred;
+4. cancels active concurrent siblings and gives each bounded time to perform the same cleanup;
+5. marks staging cancelled, closes the record session, and re-raises the original cancellation.
+
+If cancellation happens during scoring or derivation, a task output already produced by the
+application remains in the partial snapshot. Recorder failures are attached to the cancellation as
+notes and never replace its identity. A task timeout remains a timeout and is not reclassified as
+cooperative cancellation.
+
+The CLI maps `SIGTERM` to this cooperative path where event-loop signal handlers are supported.
+`KeyboardInterrupt` also reaches pipeline cancellation before the CLI exits. `SIGKILL`, abrupt
+runtime termination, and power loss cannot run cleanup; they preserve only payloads already
+committed to `staging-manifest.yaml`. With `durability="synced"`, those commits receive the
+documented filesystem-sync guarantee. Autobench does not claim that uncommitted in-memory evidence
+survives a hard kill.
+
+Autobench does not write on every signal and does not resume application code from a checkpoint.
+The application owns executable workflow state; Autobench owns durable evidence. Automatic
+periodic checkpoint policy is intentionally outside this release.
+
+## Inspect And Recover Staging
+
+```bash
+autobench recording inspect runs/.routing-42.staging
+autobench recording finalize runs/.routing-42.staging \
+  --output runs/routing-42-recovered \
+  --allow-partial
+autobench recording archive runs/.routing-42.staging \
+  --output archives/routing-42-staging
+autobench recording discard runs/.routing-42.staging --yes
+```
+
+Inspection reports health, recoverability, complete and checkpointed runs, missing identities,
+corrupt or conflicting runs, orphaned files, and diagnostics. The health states are:
+
+| Health | Meaning |
+| --- | --- |
+| `complete` | Every planned run has committed, valid evidence |
+| `partial` | Some committed run or checkpoint evidence exists |
+| `missing` | No planned run has committed evidence yet |
+| `corrupt` | A manifest-committed file is missing, malformed, or has the wrong hash |
+| `conflicting` | Identity, revision, or uncommitted-file state needs an explicit decision |
+
+Not every conflict destroys committed evidence. Files left by a process failure before manifest
+commit and a state/manifest revision mismatch are reported as recoverable; recovery ignores those
+uncommitted files and trusts the last manifest revision. Plan, experiment, run, checkpoint, or
+payload identity conflicts are not recoverable because choosing one side would silently rewrite
+lineage.
+
+Python callers can inspect or load the committed subset without application imports:
+
+```python
+from pathlib import Path
+
+from autobench import inspect_staging, recover_staging
+
+staging = Path("runs/.routing-42.staging")
+inspection = inspect_staging(staging)
+if inspection.recoverable:
+    recovered = recover_staging(staging)
+    print([run.run_id for run in recovered.runs])
+```
+
+`finalize_staging(..., allow_partial=False)` refuses an incomplete matrix. With
+`allow_partial=True`, committed runs and the newest checkpoint per missing run become one immutable
+partial experiment. Its terminal metadata lists planned, recorded, and missing run IDs and marks
+incomplete cross-run derivation or policies. The source staging directory remains until it is
+archived or explicitly discarded.
+
+A finalized cancellation uses normal `RunRecord`, `ExperimentRecord`, replay, and report paths.
+Recovered checkpoint runs have `RunStatus.CANCELLED`, `TaskStatus.CANCELLED`,
+`EvaluationStatus.NOT_EVALUATED`, `partial=true`, and `end_reason=cancelled`; they are not rewritten
+as failed evaluations.
 
 ## RunRecord
 
@@ -2221,6 +2758,7 @@ One `RunRecord` represents one case x variant execution:
 
 - record, run, experiment, benchmark, case, and variant IDs
 - final, task, and evaluation statuses
+- explicit `partial` state and ABP `end_reason`, including cancelled runs
 - complete case snapshot and task output
 - observations and scores
 - canonical ABP trace, including signals, span graph, measurements, events, links, references,
@@ -2230,6 +2768,8 @@ One `RunRecord` represents one case x variant execution:
 - materialized artifacts
 - factors and tracked asset versions
 - extraction and source-map replay lineage
+- immutable invocation correlation: group, attempt, phase, external experiment associations, and
+  scalar labels
 - structured errors
 
 The YAML view groups the data for people rather than dumping internal Pydantic fields. A schema
@@ -2251,9 +2791,47 @@ The experiment-level record stores:
 - normalized benchmark snapshot and hash
 - hashes of resolved specs, datasets, pricing files, tasks, and scorer modules
 - relative run paths and status counts
+- terminal experiment state: completed, cancelled, or aborted
+- planned, recorded, and missing run identities
+- whether cross-run derivation and experiment policies completed
+- the relative integrity-manifest path
+- the same resolved execution correlation copied to every run
 
 This is enough to explain what was planned, which files defined it, and where every run record
 lives.
+
+An experiment may be terminal and still partial. Cancelled or recovered evidence uses the same
+immutable record models as complete evidence, while `EvaluationStatus.NOT_EVALUATED` distinguishes
+a cancelled task from a scored failure. Records written before format version 5 load as completed,
+non-partial experiments with complete post-processing. Format version 6 adds optional execution
+correlation; older records load it as `None`.
+
+Execution correlation is not replay lineage. `parent_run_id` and `RecordLineage` describe derived or
+replayed evidence, while `ExecutionCorrelation` groups separately invoked experiments. Reports,
+Rich tables, YAML/CSV exports, staging inspection, finalized partial records, and replay preserve
+that distinction.
+
+## Atomicity And Durability
+
+Python callers can select the publication guarantee:
+
+```python
+record_experiment(result, Path("runs/latest"), durability="atomic")
+record_experiment(result, Path("runs/durable"), durability="synced")
+```
+
+- `atomic` uses sibling temporary files/directories and `os.replace`. It protects readers from
+  partially published records after an ordinary process failure.
+- `synced` adds file and directory `fsync` calls before and after publication on supported POSIX
+  filesystems. It is intended for callers that also require the strongest available power-loss
+  durability.
+
+`synced` fails explicitly when directory syncing is unsupported. Autobench does not silently call
+an atomic record power-loss durable. Neither mode overwrites a non-empty experiment directory.
+
+Atomicity applies to each staged payload and final-directory publication. The staging manifest is
+the commit boundary: a file that exists but is absent from the manifest is uncommitted evidence,
+not a completed run. `synced` also syncs staged state and manifest files where supported.
 
 ## Environment And Source Identity
 
@@ -3020,7 +3598,7 @@ task module. Rescoring and report replay never mutate the original asset history
 
 | Integration | Discovery | Representations | Default asset families |
 | --- | --- | --- | --- |
-| Pydantic AI `>=2.22,<2.23` | yes | definition + effective | agent, capability, prompt, tool, toolset, output schema, policy |
+| Pydantic AI `>=2.22,<2.24` | yes | definition + effective | agent, capability, prompt, tool, toolset, output schema, policy |
 | OpenAI Python `>=2.52,<2.54` | yes | effective | prompt, tool, output schema |
 | OpenAI Agents `>=0.19.2,<0.20` | yes | definition | agent, prompt, tool, output schema, guardrail, handoff, policy, toolset |
 | HTTPX `>=0.28,<0.29` | no | none | transport evidence only |
@@ -3058,8 +3636,9 @@ Autobench supports four collection styles that can be mixed in one run:
 4. Native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX instrumentors configured from Python or
    YAML.
 
-OpenTelemetry is not a core dependency. Future OTLP bridges can export Autobench spans, but the
-evidence model remains owned by Autobench.
+OpenTelemetry is not a core dependency. The optional outbound
+[OTLP exporter](otlp-export.md) can replay immutable Autobench evidence to compatible backends,
+while ABP remains the canonical evidence model.
 
 See [Native Instrumentation](native-instrumentation.md) for the typed fluent API, YAML DSL,
 compatibility doctor, privacy defaults, layered traces, and provider examples.
@@ -3238,6 +3817,92 @@ installing duplicate hooks. Closing the final handle unregisters native callback
 exact patched descriptor. Competing owners can instrument the same method independently, while an
 external wrapper replacement produces a conflict diagnostic instead of being overwritten.
 
+### External Backend Integration
+
+An SDK that already exposes its own telemetry backend does not need a second method-patching layer.
+Its Autobench adapter can install a backend that asks `InstrumentationRuntime` for a span:
+
+```python
+from collections.abc import Generator
+from contextlib import contextmanager
+
+from autobench import InstrumentationRuntime, InstrumentorInfo, Span
+
+
+class AutobenchBackend:
+    def __init__(self, runtime: InstrumentationRuntime, info: InstrumentorInfo) -> None:
+        self.runtime = runtime
+        self.info = info
+
+    @contextmanager
+    def start_span(
+        self,
+        name: str,
+        attributes: dict[str, bool | str | int | float],
+    ) -> Generator[Span | None, None, None]:
+        span = self.runtime.span(
+            self.info,
+            name,
+            kind="workflow",
+            attributes=attributes,
+            target_version="1.4.0",
+            suppression_keys=("example-sdk",),
+        )
+        if span is None:
+            yield None
+            return
+        with span:
+            yield span
+```
+
+`runtime.span()` returns an unentered span only during an active Autobench run. It returns `None`
+outside a run, in a matching suppression scope, or when the active protocol context is not owned by
+a `RunContext`. Entering the span makes it the parent of nested built-in instrumentation, including
+Pydantic AI, OpenAI, and HTTPX calls. Exiting it records normal completion, failure, timeout, or
+cancellation without changing the host SDK result or exception.
+
+External counters and histograms can use the matching observation seam:
+
+```python
+runtime.metric(
+    info,
+    "framework.jobs",
+    1,
+    semantic_type="workflow.jobs",
+    unit="job",
+    suppression_keys=("example-sdk",),
+)
+```
+
+The observation is attached to the currently entered Autobench span when one exists and is marked
+with `source=instrumentation`. Like `runtime.span()`, this method returns `None` outside an owned,
+unsuppressed benchmark context.
+
+Backends that enrich a span owned by another installed instrumentor can use the active-span view:
+
+```python
+current = runtime.current_span(info, suppression_keys=("example-sdk",))
+if current is not None:
+    current.set_attribute("framework.profile", "reviewer")
+    current.set_usage("input_tokens", 420)
+    current.event("framework cache hit", semantic_type="event.occurrence")
+```
+
+`CurrentSpan` can read and set attributes, set usage, attach instrumentation events, and record an
+exception. It never renames the ABP operation after `span_start`; an external backend that supports
+display-name updates should store that value as an attribute. Calls return `None` outside an active
+legacy-backed span, including a raw ABP context that is not owned by a `RunContext`.
+
+`runtime.is_installed(instrumentor_id)` and `runtime.installed_ids` let a composite backend choose
+the native owner dynamically. For example, a framework adapter can suppress its model/tool spans
+only while `autobench.pydantic_ai` is actually installed, avoiding both missing evidence and double
+accounting.
+
+The adapter remains responsible for its host's backend ownership. If a backend is already installed,
+compose or multiplex it with the Autobench backend; do not replace it silently. The close callback
+must restore the previous backend only when the adapter still owns the active slot. This preserves
+an existing OTel, Logfire, or application backend and avoids clobbering a newer installation.
+
 Mechanisms should be selected in this order:
 
 1. stable native processor or callback;
@@ -3313,8 +3978,8 @@ No manual span or metric calls are required. The instrumentor captures:
 
 The instrumentor composes with user event handlers and Pydantic AI's own
 `Instrumentation` capability. It does not configure, replace, or require
-OpenTelemetry. Autobench 0.2.x pins the public integration seam
-to Pydantic AI 2.22.x; `InstrumentationManager.check()` reports incompatible
+OpenTelemetry. Autobench supports the audited public integration seam across
+Pydantic AI 2.22.x and 2.23.x; `InstrumentationManager.check()` reports incompatible
 versions before installing hooks.
 
 Application outputs and exceptions are passed through unchanged. Aggregate agent
@@ -3592,6 +4257,54 @@ benchmark.instrument(MyNativeInstrumentor(settings))
 Duplicate instrumentor IDs are rejected before hooks are installed. This avoids ambiguous
 ownership when a typed setting and a custom instance configure the same integration.
 
+### SDK-Owned Telemetry Backends
+
+Some frameworks already route lifecycle spans through a process-wide or context-local backend.
+Implement the Autobench integration against that stable backend contract instead of patching every
+framework method. `InstrumentationRuntime.span()` creates an unentered ABP span in the active
+benchmark run and returns `None` when capture is inactive or suppressed:
+
+```python
+span = runtime.span(
+    instrumentor.info,
+    "framework.workflow",
+    kind="workflow",
+    attributes={"framework.operation": "run"},
+    target_version=installed_framework_version,
+    suppression_keys=("framework",),
+)
+
+if span is None:
+    return call_subject()
+
+with span:
+    return call_subject()
+```
+
+Use `runtime.metric()` for host counters and histograms that should become semantic observations.
+It follows the same active-context and suppression rules and attaches the observation to the
+currently entered ABP span.
+
+Use `runtime.current_span()` when the host enriches a span owned by a nested native instrumentor.
+The returned `CurrentSpan` updates attributes, usage, events, and errors on that active ABP span.
+Check `runtime.is_installed()` before claiming native ownership so disabling a child instrumentor
+does not silently remove model or tool evidence.
+
+The entered span becomes the parent of nested Autobench instrumentors automatically. This is the
+preferred integration for an agent runtime whose workflow span should contain native Pydantic AI
+agent/model/tool spans. Keep provider usage on the native provider or framework span; a higher-level
+workflow span should not copy the same token totals.
+
+Backend installation must preserve existing observers:
+
+1. read the current host backend;
+2. install a host-owned composite containing the previous backend and the ABP backend;
+3. retain the exact installed composite identity;
+4. on close, restore the previous backend only if the composite is still current.
+
+This policy allows existing OTel or Logfire telemetry and Autobench evidence to coexist. Autobench
+does not own the host backend protocol and core does not import the external framework.
+
 ## Built-In Integrations
 
 | Integration | Layer | Collection seam | Evidence |
@@ -3696,9 +4409,9 @@ for benchmark execution, semantic measurements, accounting scope, partial stream
 optimization lineage. Native instrumentors use the same kinds of stable SDK hooks that mature OTel
 instrumentations validate, but emit ABP directly.
 
-A future bridge can export ABP spans to OTLP systems such as Logfire or Datadog. That bridge will be
-an adapter: ABP remains the source evidence model, and importing Autobench will not require an OTel
-SDK or collector.
+The optional [OTLP exporter](otlp-export.md) can replay immutable ABP evidence to systems such as
+Logfire, Datadog, or a vendor-neutral collector. It remains an outbound adapter: ABP is the source
+evidence model, and importing the base Autobench package does not require an OTel SDK or collector.
 
 ## Protocol Stability
 
@@ -3855,7 +4568,7 @@ The initial integration extras are reserved as follows:
 
 | Extra | Research baseline | First implementation phase |
 | --- | ---: | ---: |
-| `autobench[pydantic-ai]` | Pydantic AI 2.22.0 | 10 |
+| `autobench[pydantic-ai]` | Pydantic AI 2.22.0 and 2.23.0 | 10 |
 | `autobench[openai]` | OpenAI Python 2.52.0 and 2.53.0 | 11 |
 | `autobench[openai-agents]` | OpenAI Agents 0.19.2 | 11 |
 | `autobench[httpx]` | HTTPX 0.28.1 | 12 |
@@ -3914,6 +4627,190 @@ uv run python scripts/benchmark_spans.py --httpx --iterations 1000 --repeats 7
 uv run python scripts/benchmark_spans.py --httpx-stream --chunks 10000 --chunk-size 32 --repeats 7
 ```
 
+## Outbound OTLP Compatibility
+
+The optional ABP-to-OTLP adapter is a projection of immutable evidence, not part of the ABP wire
+format. OTel SDK/exporter version changes therefore do not change `PROTOCOL_VERSION`. The adapter
+must preserve Autobench identities, partial state, source provenance, and semantic event payloads
+while leaving the input records byte-for-byte unchanged. The base package and replay remain usable
+without the `otlp` extra.
+
+---
+
+## OTLP Export
+
+Canonical page: https://vcoderun.github.io/autobench/otlp-export/
+
+# OTLP Export
+
+Autobench can replay an immutable experiment record into OTLP HTTP/protobuf traces for systems
+such as Logfire, Datadog, or a vendor-neutral OpenTelemetry Collector. This is an outbound adapter,
+not Autobench's collection protocol:
+
+```text
+application -> ABP instrumentation -> immutable Autobench record -> optional OTLP export
+```
+
+ABP remains the complete source of truth for semantic observations, benchmark identity, partial
+execution, behavioral assets, and replay. Export never converts a record back into application
+calls and never mutates the source directory.
+
+## Install The Exporter
+
+The base package does not import or install OpenTelemetry. Add the dedicated extra only on a worker
+that exports records:
+
+=== "uv"
+
+    ```bash
+    uv add 'autobench[otlp]'
+    ```
+
+=== "pip"
+
+    ```bash
+    python -m pip install 'autobench[otlp]'
+    ```
+
+This installs the OpenTelemetry SDK and HTTP/protobuf trace exporter. It does not replace ABP
+instrumentors and does not enable OTel-to-ABP ingestion.
+
+## Export From The CLI
+
+Point the command at a completed or explicitly partial Autobench record:
+
+```bash
+autobench telemetry export runs/routing-42 \
+  --endpoint https://collector.example/v1/traces \
+  --header authorization 'Bearer ...' \
+  --service-name routing-benchmark \
+  --service-namespace evaluation
+```
+
+When `--endpoint` and `--header` are omitted, the underlying exporter can use standard
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` configuration. Credentials
+belong in environment variables or CLI secret injection, never in a benchmark YAML file.
+
+Useful options:
+
+| Option | Meaning |
+| --- | --- |
+| `--endpoint` | OTLP HTTP/protobuf trace endpoint |
+| `--header NAME VALUE` | Repeatable request header |
+| `--timeout SECONDS` | Positive exporter timeout |
+| `--service-name` | OTLP `service.name`; default is `autobench` |
+| `--service-namespace` | Optional OTLP `service.namespace` |
+| `--certificate-file` | Custom CA certificate path |
+| `--include-captured-content` | Export captured bodies and other content-bearing evidence |
+
+The command prints a Rich summary containing experiment and benchmark identity, record version,
+run/trace/span counts, partial counts, and the selected endpoint. Export failures return a nonzero
+exit status and leave the record unchanged.
+
+## Export From Python
+
+```python
+from pathlib import Path
+
+from autobench import OTLPSettings, export_record_otlp
+
+result = export_record_otlp(
+    Path("runs/routing-42"),
+    settings=OTLPSettings(
+        endpoint="https://collector.example/v1/traces",
+        headers={"authorization": "Bearer ..."},
+        timeout_seconds=10,
+        service_name="routing-benchmark",
+        service_namespace="evaluation",
+        resource_attributes={"deployment.environment": "staging"},
+    ),
+)
+
+print(result.exported_span_count)
+```
+
+`export_otlp(experiment, runs, ...)` accepts already loaded `ExperimentRecord` and `RunRecord`
+models. It validates run count, unique run IDs, benchmark and experiment ownership, and execution
+correlation before mapping anything. Tests and custom delivery layers may inject an OTel
+`SpanExporter`; Autobench does not shut down an exporter it does not own.
+
+## Evidence Mapping
+
+One export creates this hierarchy:
+
+```text
+autobench.experiment <benchmark_id>
+  autobench.run <case_id> / <variant_id>
+    autobench.trace <trace_id-prefix>
+      <ABP root span>
+        <ABP child span>
+```
+
+| Autobench evidence | OTLP representation |
+| --- | --- |
+| Experiment lifecycle | Root span, status, identity attributes, termination event |
+| Run lifecycle | Child span with run/case/variant, record path, status, and partial state |
+| ABP trace envelope | Child span with protocol version, trace ID, partial state, diagnostics |
+| ABP span | Nested span with original operation, timestamps, scope, source convention, usage, and stream attributes |
+| Factor, observation, score | Timestamped span event on the run |
+| Measurement | Timestamped event on its ABP span |
+| Asset use and source snapshot | Run events preserving version/provenance identity |
+| ABP diagnostic/reference | Trace or span events |
+| Trace-and-span link target | Native OTLP span link plus the lossless ABP link event |
+| Error | Error status and structured exception/termination event |
+
+Historical benchmark measurements are exported as span events, not fabricated live OTLP metric
+streams. Their canonical semantic type, unit, direction, role, and source remain in the event, so a
+consumer can project them deliberately without confusing replay time with measurement time.
+
+The exporter preserves experiment, benchmark, run, case, variant, record-version, ABP trace/span,
+dataset, spec hash, manifest, correlation, instrumentation scope, package version, source-map, and
+source-convention identities where available. Reserved Autobench resource identities cannot be
+overridden through custom resource attributes.
+
+## Partial And Cancelled Records
+
+Completed, cancelled, aborted, and recovered partial records are all exportable. Experiment and run
+spans retain terminal status, `partial`, end reason, planned/recorded/missing run IDs, and whether
+cross-run derivation and policy evaluation completed. An open or partial ABP trace is marked as
+partial rather than being represented as a successful complete trace.
+
+OTLP export is reporting, not recovery. Use `autobench recording inspect` and
+`autobench recording finalize --allow-partial` to publish recoverable staging evidence first.
+
+## Content And Privacy
+
+By default, export keeps structural and semantic evidence while omitting captured content:
+
+- event bodies and ABP span outputs;
+- score actual/expected values;
+- non-metric observation values;
+- retained source-fact values;
+- tracebacks.
+
+References, hashes, counts, semantic types, status, usage, asset IDs/versions, and provenance remain
+available. `--include-captured-content` or `OTLPSettings(include_captured_content=True)` includes
+content that ABP already captured. It cannot recover content excluded or redacted by the original
+capture policy. Treat this switch as a deliberate data-export decision.
+
+## Failure Boundary
+
+Mapping, network export, exporter rejection, and owned-exporter shutdown failures raise
+`OTLPExportError`. The original Pydantic record models and files are never changed. An injected
+exporter remains caller-owned and is not shut down. This allows export retries or delivery to
+several telemetry systems without changing benchmark evidence or replay lineage.
+
+## What This Adapter Does Not Do
+
+- It does not make OTel an Autobench runtime dependency.
+- It does not ingest arbitrary OTel traces into ABP.
+- It does not patch application SDKs through OTel instrumentations.
+- It does not use OTLP as benchmark persistence.
+- It does not add vendor configuration to `BenchmarkSpec`.
+
+Use [Native Instrumentation](native-instrumentation.md) to collect automatic application evidence
+into ABP, then use this adapter when the resulting record also needs to appear in an OTLP backend.
+
 ---
 
 ## YAML Spec
@@ -3934,6 +4831,7 @@ named benchmark:
 | Section | Required | Purpose |
 | --- | --- | --- |
 | `description` | No | Human-readable benchmark intent |
+| `execution` | No | Static cross-invocation correlation metadata |
 | `dataset` | Yes | Inline or file-backed cases, defaults, version, and metadata |
 | `run` | For execution | Python task target |
 | `variants` | Yes | Named factor combinations |
@@ -3951,6 +4849,15 @@ named benchmark:
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
+    execution:
+      correlation:
+        group_id: routing-proposal-42
+        attempt: 1
+        phase: validation
+        parent_experiment_id: routing-baseline-17
+        labels:
+          owner: evaluation
+          seed: 7
     dataset:
       source: file://datasets/cases.yaml
       version: v2
@@ -4020,6 +4927,15 @@ benchmark:
               metric: quality.correctness
               aggregate: ratio_true
 ```
+
+`execution.correlation` groups separate benchmark invocations without changing matrix identity.
+`attempt` must be positive, and labels accept only stable string, integer, finite float, or boolean
+values. Correlation is copied unchanged to the experiment and every run record. It is not replay
+lineage and does not claim that Autobench can resume application workflow state.
+
+Python or CLI overrides merge field by field. An omitted override keeps the YAML value; supplied
+labels replace matching keys and preserve the other YAML labels. Per-case or per-variant correlation
+resolvers are intentionally not part of this surface.
 
 ## Resolution Rules
 
@@ -4375,6 +5291,31 @@ dataset:
         subject: Refund
 ```
 
+Generated datasets use this exact dataset format. Generation itself has two additional schemas. A
+request is a portable input to an application-owned generator:
+
+```yaml
+# yaml-language-server: $schema=schemas/0.3.0/generation_request_schema.json
+generation:
+  request:
+    seed: 17
+    prompt:
+      content: Generate privacy-safe routing cases.
+      asset_version: prompt.routing-generator@v1
+    settings:
+      count: 20
+    seed_cases:
+      - id: reviewed-refund
+        input: {message: Refund a duplicate charge}
+        expected: {route: billing}
+```
+
+The resulting `.generation.yaml` or `.incomplete.yaml` manifest uses
+`generation_schema.json`. It records generator/provider/model identity, determinism, request and
+case hashes, usage, cost, review states, rejected-case reasons, output counts, and the published
+dataset reference. Prompt content is represented by its hash and tracked asset version rather than
+duplicated into the manifest. See [Generated Datasets](generated-datasets.md).
+
 ## Exported Semantic Registry YAML
 
 Semantic registry exports use stable type ids with compact metadata:
@@ -4487,11 +5428,20 @@ Experiment records keep replay data structured, but the outer shape stays readab
 ```yaml
 record:
   type: experiment
-  version: 4
+  version: 5
 
 experiment:
   id: exp_support_routing_20260507T120000Z
   benchmark: support-routing
+  termination:
+    status: completed
+    partial: false
+    post_processing:
+      cross_run_derivation: true
+      policies: true
+    planned_runs: [run_ticket_1_route_v1]
+    recorded_runs: [run_ticket_1_route_v1]
+    missing_runs: []
 
 benchmark:
   id: support-routing
@@ -4519,8 +5469,11 @@ runs:
   failed: 1
   errored: 0
   skipped: 0
+  cancelled: 0
   paths:
     - cases/ticket_1/route_v1/run.yaml
+
+manifest: manifest.yaml
 
 files:
   /abs/path/autobench.yaml: 3c4d...
@@ -4539,6 +5492,35 @@ semantic_registry:
       unit: usd
       shape: number
 ```
+
+The corresponding integrity manifest is also human-readable and schema-backed:
+
+```yaml
+record:
+  type: manifest
+  version: 1
+
+experiment:
+  id: exp_support_routing_20260507T120000Z
+
+files:
+  - path: experiment.yaml
+    sha256: 58f4...
+    bytes: 2148
+    kind: experiment
+    identity: exp_support_routing_20260507T120000Z
+  - path: cases/ticket_1/route_v1/run.yaml
+    sha256: 2c91...
+    bytes: 4892
+    kind: run
+    identity: run_ticket_1_route_v1
+```
+
+Run records in format version 5 add `run.partial` and `run.end_reason`. Format version 6 adds
+optional execution correlation to experiment, summary, run, staging, and checkpoint documents.
+Existing records without
+these fields remain loadable; Autobench infers completed, failed, deferred, or cancelled lifecycle
+state from their legacy status.
 
 ## Exported Artifact YAML
 
@@ -4685,6 +5667,12 @@ from autobench import (
 benchmark = (
     Benchmark("builder-demo")
     .description("Compare current and candidate behavior.")
+    .correlation(
+        group_id="routing-proposal-42",
+        attempt=1,
+        phase="validation",
+        labels={"owner": "evaluation"},
+    )
     .dataset(
         [
             Case(
@@ -4737,11 +5725,25 @@ benchmark = (
 result = benchmark.run(experiment_id="routing-candidate-42", concurrency_limit=4)
 ```
 
+Attach live lifecycle observers without changing the benchmark definition:
+
+```python
+from autobench import ProgressEvent
+
+
+def observe(event: ProgressEvent) -> None:
+    print(event.sequence, event.kind, event.run_id, event.run_status)
+
+
+result = benchmark.run(progress_handlers=(observe,))
+```
+
 ### Builder Methods
 
 | Method | Configures |
 | --- | --- |
 | `description(value)` | Benchmark description |
+| `correlation(...)` | Static invocation group, attempt, phase, ancestry hints, and scalar labels |
 | `capture(policy)` | ABP and asset capture policy |
 | `dataset(...)` | Inline cases or a typed dataset source |
 | `variants(items)` | Typed variants or normalized dictionaries |
@@ -4809,8 +5811,26 @@ normal Python import paths.
 | `artifact(...)` | Attach a payload |
 | `error(...)` | Preserve a structured error |
 | `attach_tracked_asset(...)` | Bind an explicit tracked asset version |
+| `await checkpoint(name)` | Commit all currently available evidence to durable staging |
 
 Evidence emitted before an exception remains in the failed run.
+
+`phase` reports whether the run is resolving, executing, scoring, deriving, post-processing, or
+finalizing. Checkpoints preserve that phase automatically. Application tasks normally only call
+`checkpoint()`:
+
+```python
+async def run_case(ctx: RunContext, case: Case) -> Result:
+    draft = await build_draft(case.input)
+    ctx.artifact("draft", draft)
+    await ctx.checkpoint("draft-built")
+    return await validate_draft(draft)
+```
+
+The method requires an active `Recorder`; without one it raises `RuntimeError`. It is cancellation
+aware: if the caller is cancelled while persistence is active, Autobench gives the atomic write
+bounded time to finish and then propagates cancellation. Names beginning with `autobench.` belong
+to framework lifecycle checkpoints and are rejected for application calls.
 
 ## Load And Run YAML
 
@@ -4818,7 +5838,12 @@ Evidence emitted before an exception remains in the failed run.
 import asyncio
 from pathlib import Path
 
-from autobench import load_benchmark_spec, run_benchmark_path, run_benchmark_spec
+from autobench import (
+    ExecutionCorrelation,
+    load_benchmark_spec,
+    run_benchmark_path,
+    run_benchmark_spec,
+)
 
 path = Path("benchmarks/routing.yaml")
 spec = load_benchmark_spec(path)
@@ -4834,9 +5859,23 @@ async_result = asyncio.run(
         spec,
         experiment_id="routing-43",
         concurrency_limit=4,
+        correlation=ExecutionCorrelation(attempt=2, labels={"review": "holdout"}),
+        progress_handlers=(observe,),
     )
 )
 ```
+
+Import `ExecutionCorrelation` for invocation-level overrides. Explicit fields merge with
+`spec.execution.correlation`; omitted fields remain unchanged and label maps merge by key. The
+resolved value is immutable and identical on `ExperimentResult`, every `RunResult`, durable
+records, and replayed results. `parent_experiment_id` and `resumed_from_experiment_id` are grouping
+metadata only. Replay ancestry remains `RecordLineage` / `parent_run_id`, and Autobench does not
+infer workflow resume from either correlation field.
+
+`run_benchmark_path()`, `run_benchmark_spec()`, `Benchmark.run()`, and `Benchmark.run_async()` share
+the same `progress_handlers`, `progress_error_policy`, and `progress_error_handler` contract. Bare
+handlers are strict by default; see [Tasks and Runtime](tasks-and-runtime.md#progress-events) for
+ordering, terminal status, and backpressure guarantees.
 
 Loading resolves dataset, pricing, task, and Python scorer references relative to the YAML file.
 
@@ -4857,12 +5896,62 @@ record = record_experiment(
     record_dir,
     source_files=list(collect_benchmark_source_files(path)),
     path_root=Path.cwd(),
+    durability="atomic",
 )
 replayed = replay_experiment(record_dir)
 ```
 
-`record_experiment()` refuses to overwrite an existing experiment. Use a new directory for every
-execution. Referenced tracked-asset histories and large trace artifacts are persisted automatically.
+`record_experiment()` refuses to overwrite a non-empty experiment directory. It assembles the
+record in a temporary sibling, validates its integrity manifest, and publishes it atomically.
+Referenced tracked-asset histories and large trace artifacts are persisted automatically. Use
+`durability="synced"` when supported POSIX file and directory `fsync` calls are also required.
+
+For durable execution, pass a recorder to the pipeline instead of waiting for the full result:
+
+```python
+from autobench import FileRecorder
+
+durable_result = asyncio.run(
+    run_benchmark_spec(
+        spec,
+        experiment_id="routing-durable-44",
+        concurrency_limit=4,
+        recorder=FileRecorder(
+            Path("runs/routing-durable-44"),
+            source_files=collect_benchmark_source_files(path),
+            path_root=Path.cwd(),
+            durability="atomic",
+        ),
+    )
+)
+```
+
+`FileRecorder` commits complete run snapshots during execution and atomically publishes the final
+directory after post-processing. Its sibling `.routing-durable-44.staging` directory survives an
+interrupted process. Use `inspect_staging`, `recover_staging`, and `finalize_staging` to recover it;
+use `archive_staging` or `discard_staging` for explicit lifecycle decisions.
+
+Cooperative task cancellation, `KeyboardInterrupt`, and supported CLI `SIGTERM` handling commit a
+terminal partial checkpoint before propagating. A hard process kill can preserve only the last
+explicit checkpoint that had already returned; it cannot execute a final write.
+
+```python
+from autobench import finalize_staging, inspect_staging
+
+staging = Path("runs/.routing-durable-44.staging")
+inspection = inspect_staging(staging)
+if inspection.recoverable and inspection.missing_run_ids:
+    partial_record = finalize_staging(
+        staging,
+        Path("runs/routing-durable-44-partial"),
+        allow_partial=True,
+    )
+```
+
+`Recorder` and `RecordSession` are the typed extension contracts for another persistence backend.
+The pipeline owns `open`, `stage`, `finish` or `abort`, and `close`; application code should not
+open a live session just to run a normal benchmark. `ExperimentStart`, `ExecutionSnapshot`, and
+`PartialRunSnapshot` are frozen transfer models. Recovery never imports the task or optional SDKs.
 
 Load one exact record when building an audit or optimizer adapter:
 
@@ -4900,6 +5989,42 @@ export_markdown_report(replayed, Path("analysis/report.md"))
 
 `build_leaderboard`, `build_case_matrix`, `build_metric_distribution`, and
 `build_run_metric_rows` expose individual projections.
+
+Group or select several invocation results without changing their records:
+
+```python
+from autobench import ExecutionCorrelation, build_grouped_reports, filter_experiments
+
+validation = filter_experiments(
+    results,
+    correlation=ExecutionCorrelation(group_id="routing-proposal-42", phase="validation"),
+)
+groups = build_grouped_reports(results)
+```
+
+Filters match only explicitly supplied fields. Grouped reports retain each experiment report and
+summarize the attempts and phases present under each `group_id`.
+
+## Optional OTLP Export
+
+```python
+from pathlib import Path
+
+from autobench import OTLPSettings, export_record_otlp
+
+delivery = export_record_otlp(
+    Path("runs/routing-42"),
+    settings=OTLPSettings(
+        endpoint="https://collector.example/v1/traces",
+        service_name="routing-benchmark",
+    ),
+)
+```
+
+Install `autobench[otlp]` on the exporting process. `export_record_otlp()` loads immutable record
+models; `export_otlp()` accepts already-loaded `ExperimentRecord` and `RunRecord` values. Both
+return `OTLPExportResult` and raise `OTLPExportError` without modifying evidence. Vendor settings
+remain separate from `BenchmarkSpec`. See [OTLP Export](otlp-export.md).
 
 ## Native Instrumentation
 
@@ -4965,10 +6090,15 @@ unadorned SDK-visible components to runs. Experiment recording uses the same con
 ## Production And Generated Cases
 
 ```python
+from pathlib import Path
+
 from autobench import (
+    CaseGeneratorInput,
     SamplingPolicy,
+    generate_dataset_sync,
     generated_batch_from_cases,
     samples_to_cases,
+    write_generation_result,
 )
 
 review_cases = samples_to_cases(production_samples, policy=SamplingPolicy(max_samples=50))
@@ -4978,9 +6108,21 @@ generated = generated_batch_from_cases(
     model_provider="openrouter",
     model_name="openai/gpt-5.6-luna",
 )
+
+result = generate_dataset_sync(
+    generate_cases,
+    CaseGeneratorInput(seed=17, settings={"count": 20}),
+    generator_id="generation:generate_cases",
+    dataset_id="generated-routing",
+    version="v1",
+)
+write_generation_result(result, Path("datasets/generated-routing.yaml"))
 ```
 
-These helpers normalize provenance; they do not own production querying or case generation.
+Production helpers normalize reviewed samples. Generated-dataset APIs own the typed preparation,
+hashing, review projection, manifest, and safe publication boundary, while the application owns the
+actual generator/provider logic. Generation finishes before normal benchmark planning. See
+[Generated Datasets](generated-datasets.md).
 
 ## Extension Rules
 
@@ -5011,13 +6153,19 @@ file exports instead of raw terminal output.
 | Command | Executes subject? | Input | Purpose |
 | --- | --- | --- | --- |
 | `validate` | No | benchmark YAML | Resolve and validate the planned matrix |
+| `dataset generate` | Yes | generator target + request YAML | Prepare and freeze generated cases before planning |
 | `run` | Yes | benchmark YAML | Execute, record, and render an experiment |
 | `replay` | No | record directory | Reconstruct recorded results |
 | `report` | No | record directory | Render configured analysis views |
 | `compare` | No | record directory | Compare two variants without causal claims |
 | `export` | No | record directory | Write a YAML, CSV, or Markdown projection |
+| `recording inspect` | No | staging directory | Diagnose committed, missing, corrupt, and conflicting evidence |
+| `recording finalize` | No | staging directory | Publish complete or explicitly partial immutable evidence |
+| `recording archive` | No | staging directory | Copy mutable staging for retention or investigation |
+| `recording discard` | No | staging directory | Permanently remove a validated staging directory |
 | `instrumentation doctor` | No | environment | Inspect integration compatibility |
 | `instrumentation trace` | No | record directory | Summarize ABP traces and diagnostics |
+| `telemetry export` | No | record directory | Replay immutable ABP evidence to OTLP traces |
 
 ## Validate
 
@@ -5028,6 +6176,23 @@ autobench validate benchmarks/routing.yaml
 Validation parses the DSL, loads file or glob datasets, resolves pricing and task sources relative
 to the spec, checks duplicate IDs and runnable requirements, and displays case, variant, and run
 counts. It does not invoke the task.
+
+## Generate A Dataset
+
+```bash
+autobench dataset generate generator:generate_cases \
+  --request generation-request.yaml \
+  --output datasets/generated.yaml \
+  --id generated-routing \
+  --version v1
+```
+
+The target is an importable sync or async callable that accepts `CaseGeneratorInput` and returns
+`GeneratedCaseBatch`. Complete generation writes normal dataset YAML and a `.generation.yaml`
+provenance manifest. Explicit incomplete generation writes only `.incomplete.yaml` and exits `2`;
+it never publishes or replaces the requested dataset. `--force` replaces existing complete output
+files but does not weaken that incomplete-result boundary. See
+[Generated Datasets](generated-datasets.md).
 
 ## Run
 
@@ -5044,12 +6209,60 @@ Options:
 | `--concurrency INTEGER` | Maximum active runs; default and minimum are `1` |
 | `--record DIRECTORY` | Write immutable evidence to this new directory |
 | `--no-record` | Execute and display without persistence |
+| `--group-id TEXT` | Override the YAML correlation group |
+| `--attempt INTEGER` | Override the positive invocation attempt |
+| `--phase TEXT` | Override the invocation phase |
+| `--parent-experiment-id TEXT` | Associate a prior experiment without creating replay lineage |
+| `--resumed-from-experiment-id TEXT` | Record an external resume association |
+| `--correlation-label KEY VALUE` | Merge one repeatable scalar label |
 
 Without either recording flag, Autobench creates
 `.autobench/<spec-stem>/<experiment-id>/`. `--record` and `--no-record` are mutually exclusive.
 
+Correlation flags override `execution.correlation` field by field. Omitted flags preserve YAML
+values, while repeated labels replace matching keys and retain the rest. These values group
+independent invocations for analysis; they neither resume a task nor alter replay ancestry.
+
 The CLI records the benchmark file and resolved referenced-source hashes so evidence can explain
-what was executed.
+what was executed. Recording is incremental: every completed run is committed before whole-matrix
+post-processing. If execution stops, the Rich error output includes the sibling staging path.
+
+`Ctrl-C` and `SIGTERM` use cooperative cancellation. Active runs finalize partial ABP state and
+commit cancellation checkpoints before the command exits with status 130 or `128 + SIGTERM`.
+Concurrent siblings receive cancellation and bounded cleanup time before the recorder is aborted.
+The staging path printed by the CLI can then be inspected or finalized explicitly.
+
+`SIGKILL` cannot run Python cleanup. After a hard kill, only completed runs and explicit
+`await ctx.checkpoint(...)` calls already present in `staging-manifest.yaml` are recoverable. This
+is a deliberate guarantee boundary, not an application-resume mechanism.
+
+Interactive terminals also receive live Rich progress through the public `ProgressEvent` observer
+API. The CLI explicitly selects best-effort delivery for this display: a renderer failure is written
+to stderr and never replaces benchmark execution or recorder behavior. Python callers remain strict
+by default so a lost lifecycle integration cannot pass silently.
+
+## Recording Recovery
+
+```bash
+autobench recording inspect runs/.routing-42.staging
+
+autobench recording finalize runs/.routing-42.staging \
+  --output runs/routing-42-recovered \
+  --allow-partial
+
+autobench recording archive runs/.routing-42.staging \
+  --output archives/routing-42
+
+autobench recording discard runs/.routing-42.staging --yes
+```
+
+`inspect` displays whether the staging directory is recoverable as well as complete, checkpointed,
+missing, corrupt, and conflicting identities. `finalize` is strict by default; `--allow-partial`
+publishes explicit missing-run and incomplete-post-processing metadata rather than pretending the
+matrix completed. Finalization does not delete the source staging directory.
+
+`archive` and `discard` are separate operations. `discard` requires `--yes` and first verifies that
+the path is an Autobench staging directory. A symlink or arbitrary directory is rejected.
 
 ## Replay
 
@@ -5101,6 +6314,20 @@ autobench export runs/routing-42 \
 `--format` is required and accepts `yaml`, `csv`, or `markdown`. `--path` is also required. YAML
 exports include a versioned schema header; CSV is a run-level projection; Markdown is a portable
 report. The complete evidence remains the record directory.
+
+## OTLP Telemetry Export
+
+```bash
+autobench telemetry export runs/routing-42 \
+  --endpoint https://collector.example/v1/traces \
+  --header authorization 'Bearer ...' \
+  --service-name routing-benchmark
+```
+
+This command requires `autobench[otlp]`. It maps the experiment, runs, ABP trace hierarchy,
+semantic evidence, source provenance, links, partial state, and record identities without changing
+the source record. Captured content is omitted unless `--include-captured-content` is explicit.
+See [OTLP Export](otlp-export.md) for the mapping and privacy contract.
 
 ## Instrumentation Doctor
 
@@ -5188,7 +6415,7 @@ application execution and custom evaluation logic.
 | Dataset | Inline cases, file-backed datasets, glob-backed case files, defaults, tags, metadata, attachments, and versions |
 | Cases | Arbitrary input and expected payloads with stable IDs and artifact references |
 | Variants | Named factor combinations with labels, semantic types, and `optimize` hints |
-| Generated cases | Production-sample conversion, provenance, review status, reasons, and generation batches |
+| Generated datasets | Separate sync/async preparation API and CLI, typed requests/batches, review state, provenance, usage/cost, content hashes, complete publication, and incomplete sidecars |
 | YAML schemas | Versioned JSON schemas and `yaml-language-server` headers for completion and validation |
 | Source discovery | Hash collection for specs, datasets, pricing files, task modules, and scorer modules |
 
@@ -5203,6 +6430,7 @@ See [Datasets And Variants](datasets-and-variants.md) and [YAML Spec](yaml-spec.
 | Concurrency | Bounded async execution while preserving deterministic result ordering |
 | Failure isolation | One task, scorer, derivation, or policy failure does not erase other runs |
 | Progress events | Typed lifecycle events for runners and future UI integrations |
+| Execution correlation | Immutable cross-invocation group, attempt, phase, association, and scalar-label metadata across Python, YAML, CLI, records, replay, and reports |
 | Optional Pydantic Evals bridge | Internal conversion to Pydantic Evals-compatible case and dataset payloads |
 
 See [Tasks And Runtime](tasks-and-runtime.md).
@@ -5233,6 +6461,11 @@ agent, guardrail, handoff, policy, and toolset versions. Definition/effective re
 capability scopes, aliases, privacy-controlled content, and span-local `AssetUse` evidence survive
 recording and replay. HTTPX remains transport evidence and performs no semantic asset inference.
 See [Automatic Asset Discovery](automatic-asset-discovery.md).
+
+Immutable records can also be replayed through the optional outbound
+[OTLP exporter](otlp-export.md). Experiment/run/ABP hierarchy, semantic events, record identity,
+partial state, links, and source provenance are preserved without making OTel canonical or a base
+dependency.
 
 ## Scoring And Constraints
 
@@ -5302,6 +6535,7 @@ typing. See [Asset Tracking](asset-tracking.md) and
 | --- | --- |
 | `RunRecord` | Immutable case x variant evidence including output, scores, observations, spans, factors, assets, artifacts, and errors |
 | `ExperimentRecord` | Plan, environment, semantic registry, report config, source hashes, and run paths |
+| Correlated reports | Field filters and `group_id` report groups across independent experiment results |
 | Replay | Load records without importing task or scorer modules |
 | Rich terminal reports | Status, variant configuration, leaderboard, run metrics, case matrix, comparisons, and distributions |
 | Exports | Human-readable YAML summary, CSV run projection, and Markdown report |
@@ -5346,20 +6580,41 @@ supported import surface; subpackages organize implementation and extension area
       separate_signature: true
       heading_level: 3
 
+## Progress Runtime
+
+- `ProgressEvent` carries a monotonic `sequence`, stable benchmark/run identity, event-specific
+  `data`, and typed `run_status` or `experiment_status` terminal fields.
+- `ProgressEventKind` defines benchmark start/finish, run start/finish, and actual policy violation
+  events. Candidate decisions belong to Autoptimize rather than the benchmark lifecycle.
+- `ProgressHandler` accepts synchronous and asynchronous observers.
+- `ProgressErrorPolicy` selects strict library delivery or explicit best-effort delivery.
+- `ProgressHandlerFailure` identifies the handler index, event sequence/kind, and original error.
+- `ProgressDispatchError` is raised after strict delivery failure, terminal notification attempts,
+  and durable recorder cleanup.
+
+`run_benchmark_spec()`, `run_benchmark_path()`, `Benchmark.run()`, and `Benchmark.run_async()` all
+accept `progress_handlers`, `progress_error_policy`, and `progress_error_handler`.
+
 ## Public Areas
 
 | Area | Representative symbols |
 | --- | --- |
 | Definition | `Benchmark`, `BenchmarkSpec`, `TaskSpec`, `load_benchmark_spec` |
-| Data | `Case`, `DatasetSpec`, `Variant`, `FactorValue`, production/generated helpers |
-| Runtime | `RunContext`, `Span`, `ExperimentResult`, `run_benchmark_spec` |
+| Data | `Case`, `DatasetSpec`, `Variant`, `FactorValue`, production helpers, typed generated-dataset preparation and provenance |
+| Runtime | `RunContext`, `RunPhase`, `Span`, `ExperimentResult`, `run_benchmark_spec`; durable `await ctx.checkpoint(name)` and cooperative cancellation |
 | Semantics | `Observation`, `Semantic`, `SemanticRegistry`, queries and projection |
 | Evaluation | scorers, derivers, policies, expected actions, measurement, feedback |
 | Protocol | ABP signals, traces, capture, emitter, collector and context |
-| Instrumentation | settings, manager, instrumentors, method instrumentation, diagnostics |
+| Instrumentation | settings, manager, instrumentors, method instrumentation, diagnostics, `CurrentSpan`, and `InstrumentationRuntime.span()` / `metric()` / `current_span()` for external backend composition |
 | Tracking | `track`, asset models, discovery candidates, registry and history views |
-| Records | `RunRecord`, `ExperimentRecord`, recording and replay helpers |
+| Records | `RunRecord`, `ExperimentRecord`, `ExperimentTermination`, `RecordManifest`, `FileRecorder`, frozen staging snapshots, inspection/recovery, atomic/synced publication, and replay helpers |
 | Reports | report models, builders, Rich renderers and exporters |
+| Telemetry export | `OTLPSettings`, `OTLPExportResult`, `export_otlp`, and `export_record_otlp` |
+
+`ExecutionCorrelation` is the public invocation metadata model. It is accepted by the full spec,
+fluent builder, run functions, and CLI; persisted on results and records; and consumed by
+`correlation_matches()`, `filter_experiments()`, and `build_grouped_reports()`. It remains separate
+from replay lineage and application workflow state.
 
 Prefer root imports for application code:
 

@@ -96,8 +96,9 @@ def test_cli_validate_reports_yaml_location_and_plan_warnings(tmp_path: Path) ->
 
     assert invalid.exit_code == 1
     assert "Spec load failed" in invalid.output
-    assert "line " in invalid.output
-    assert "column " in invalid.output
+    normalized_invalid_output = " ".join(invalid.output.split())
+    assert "line 3" in normalized_invalid_output
+    assert "column 1" in normalized_invalid_output
     assert remote_ref.exit_code == 1
     assert "Unsupported remote reference scheme" in remote_ref.output
     assert "line " not in remote_ref.output
@@ -368,7 +369,8 @@ def test_cli_report_export_and_compare_recorded_evidence(
     assert "Exported CSV" in csv_file.output
     assert "Recorded Runs Preview" in csv_file.output
     assert csv_path.read_text(encoding="utf-8").startswith(
-        "run_id,case_id,variant_id,status,success,coverage,cost,input_tokens"
+        "run_id,case_id,variant_id,status,correlation_group_id,correlation_attempt,"
+        "correlation_phase,success,coverage,cost,input_tokens"
     )
     assert markdown_stdout.exit_code == 0
     assert "Exported MARKDOWN" in markdown_stdout.output

@@ -166,6 +166,54 @@ benchmark.instrument(MyNativeInstrumentor(settings))
 Duplicate instrumentor IDs are rejected before hooks are installed. This avoids ambiguous
 ownership when a typed setting and a custom instance configure the same integration.
 
+### SDK-Owned Telemetry Backends
+
+Some frameworks already route lifecycle spans through a process-wide or context-local backend.
+Implement the Autobench integration against that stable backend contract instead of patching every
+framework method. `InstrumentationRuntime.span()` creates an unentered ABP span in the active
+benchmark run and returns `None` when capture is inactive or suppressed:
+
+```python
+span = runtime.span(
+    instrumentor.info,
+    "framework.workflow",
+    kind="workflow",
+    attributes={"framework.operation": "run"},
+    target_version=installed_framework_version,
+    suppression_keys=("framework",),
+)
+
+if span is None:
+    return call_subject()
+
+with span:
+    return call_subject()
+```
+
+Use `runtime.metric()` for host counters and histograms that should become semantic observations.
+It follows the same active-context and suppression rules and attaches the observation to the
+currently entered ABP span.
+
+Use `runtime.current_span()` when the host enriches a span owned by a nested native instrumentor.
+The returned `CurrentSpan` updates attributes, usage, events, and errors on that active ABP span.
+Check `runtime.is_installed()` before claiming native ownership so disabling a child instrumentor
+does not silently remove model or tool evidence.
+
+The entered span becomes the parent of nested Autobench instrumentors automatically. This is the
+preferred integration for an agent runtime whose workflow span should contain native Pydantic AI
+agent/model/tool spans. Keep provider usage on the native provider or framework span; a higher-level
+workflow span should not copy the same token totals.
+
+Backend installation must preserve existing observers:
+
+1. read the current host backend;
+2. install a host-owned composite containing the previous backend and the ABP backend;
+3. retain the exact installed composite identity;
+4. on close, restore the previous backend only if the composite is still current.
+
+This policy allows existing OTel or Logfire telemetry and Autobench evidence to coexist. Autobench
+does not own the host backend protocol and core does not import the external framework.
+
 ## Built-In Integrations
 
 | Integration | Layer | Collection seam | Evidence |
@@ -270,9 +318,9 @@ for benchmark execution, semantic measurements, accounting scope, partial stream
 optimization lineage. Native instrumentors use the same kinds of stable SDK hooks that mature OTel
 instrumentations validate, but emit ABP directly.
 
-A future bridge can export ABP spans to OTLP systems such as Logfire or Datadog. That bridge will be
-an adapter: ABP remains the source evidence model, and importing Autobench will not require an OTel
-SDK or collector.
+The optional [OTLP exporter](otlp-export.md) can replay immutable ABP evidence to systems such as
+Logfire, Datadog, or a vendor-neutral collector. It remains an outbound adapter: ABP is the source
+evidence model, and importing the base Autobench package does not require an OTel SDK or collector.
 
 ## Protocol Stability
 

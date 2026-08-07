@@ -55,6 +55,9 @@ jobs:
           - name: pydantic-ai-2.22.0
             package: pydantic-ai-slim==2.22.0
             tests: tests/test_pydantic_ai_instrumentation.py
+          - name: pydantic-ai-2.23.0
+            package: pydantic-ai-slim==2.23.0
+            tests: tests/test_pydantic_ai_instrumentation.py
           - name: openai-2.52.0
             package: openai==2.52.0
             tests: tests/test_openai_instrumentation.py

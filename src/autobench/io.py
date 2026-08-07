@@ -20,6 +20,7 @@ _SCHEMA_TOP_LEVEL_KEYS: dict[str, tuple[str, ...]] = {
     "benchmark": (
         "benchmark",
         "capture",
+        "execution",
         "dataset",
         "run",
         "variants",
@@ -32,7 +33,10 @@ _SCHEMA_TOP_LEVEL_KEYS: dict[str, tuple[str, ...]] = {
         "semantic_registry",
     ),
     "dataset": ("record", "dataset"),
+    "generation": ("record", "generation"),
+    "generation_request": ("generation",),
     "experiment": ("record", "experiment", "benchmark", "runs", "files", "environment"),
+    "manifest": ("record", "experiment", "files"),
     "pricing": ("record", "pricing"),
     "report": ("record", "report", "leaderboard", "cases", "comparison", "distributions"),
     "run_record": (
@@ -57,6 +61,17 @@ _SCHEMA_TOP_LEVEL_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "semantic_registry": ("record", "semantic_registry"),
     "summary": ("record", "summary"),
+    "staging": (
+        "staging",
+        "experiment",
+        "plan",
+        "runs",
+        "post_processing",
+        "environment",
+        "semantic_registry",
+    ),
+    "staging_manifest": ("staging", "experiment", "runs", "checkpoints"),
+    "checkpoint": ("checkpoint", "run", "evidence"),
     "trace": ("record", "trace"),
 }
 
@@ -133,6 +148,16 @@ def loose_yaml_schema(title: str) -> SchemaDocument:
 def yaml_schema(schema_name: str) -> SchemaDocument:
     if schema_name == "benchmark":
         return benchmark_schema()
+    if schema_name == "dataset":
+        return dataset_schema()
+    if schema_name == "generation":
+        return generation_schema()
+    if schema_name == "generation_request":
+        return generation_request_schema()
+    if schema_name in {"experiment", "manifest", "run_record", "summary"}:
+        return record_schema(schema_name)
+    if schema_name in {"staging", "staging_manifest", "checkpoint"}:
+        return staging_schema(schema_name)
     title = schema_name.replace("_", " ").title()
     properties = {
         key: {
@@ -146,6 +171,222 @@ def yaml_schema(schema_name: str) -> SchemaDocument:
         "type": "object",
         "properties": properties,
         "additionalProperties": True,
+    }
+
+
+def record_schema(schema_name: str) -> SchemaDocument:
+    status = {"type": "string", "enum": ["passed", "failed", "errored", "skipped", "cancelled"]}
+    record_type = "run" if schema_name == "run_record" else schema_name
+    properties: SchemaDocument = {
+        "record": {
+            "type": "object",
+            "required": ["type", "version"],
+            "properties": {
+                "type": {"const": record_type},
+                "version": {"type": "integer", "minimum": 1},
+            },
+            "additionalProperties": False,
+        }
+    }
+    required = ["record"]
+    if schema_name == "manifest":
+        properties.update(
+            {
+                "experiment": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {"id": {"type": "string", "minLength": 1}},
+                    "additionalProperties": False,
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["path", "sha256", "bytes", "kind", "identity"],
+                        "properties": {
+                            "path": {"type": "string", "minLength": 1},
+                            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                            "bytes": {"type": "integer", "minimum": 0},
+                            "kind": {
+                                "type": "string",
+                                "enum": [
+                                    "experiment",
+                                    "summary",
+                                    "run",
+                                    "trace",
+                                    "artifact",
+                                    "asset",
+                                    "source",
+                                    "other",
+                                ],
+                            },
+                            "identity": {"type": "string", "minLength": 1},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        )
+        required.extend(("experiment", "files"))
+    elif schema_name == "experiment":
+        properties.update(
+            {
+                "experiment": {
+                    "type": "object",
+                    "required": ["id", "benchmark", "termination"],
+                    "properties": {
+                        "id": {"type": "string", "minLength": 1},
+                        "benchmark": {"type": "string", "minLength": 1},
+                        "correlation": correlation_schema(),
+                        "termination": {
+                            "type": "object",
+                            "required": ["status", "partial", "post_processing"],
+                            "properties": {
+                                "status": {
+                                    "type": "string",
+                                    "enum": ["completed", "cancelled", "aborted"],
+                                },
+                                "partial": {"type": "boolean"},
+                                "post_processing": {
+                                    "type": "object",
+                                    "required": ["cross_run_derivation", "policies"],
+                                    "properties": {
+                                        "cross_run_derivation": {"type": "boolean"},
+                                        "policies": {"type": "boolean"},
+                                    },
+                                    "additionalProperties": False,
+                                },
+                                "planned_runs": {"type": "array", "items": {"type": "string"}},
+                                "recorded_runs": {"type": "array", "items": {"type": "string"}},
+                                "missing_runs": {"type": "array", "items": {"type": "string"}},
+                                "error": {"type": "object"},
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                "benchmark": {"type": "object"},
+                "runs": {"type": "object"},
+                "environment": {"type": "object"},
+                "manifest": {"type": "string"},
+            }
+        )
+        required.extend(("experiment", "benchmark", "runs", "environment"))
+    elif schema_name == "run_record":
+        properties["run"] = {
+            "type": "object",
+            "required": ["id", "experiment", "benchmark", "case", "variant", "status"],
+            "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "parent": {"type": "string"},
+                "experiment": {"type": "string", "minLength": 1},
+                "benchmark": {"type": "string", "minLength": 1},
+                "case": {"type": "string", "minLength": 1},
+                "variant": {"type": "string", "minLength": 1},
+                "status": status,
+                "correlation": correlation_schema(),
+                "partial": {"type": "boolean"},
+                "end_reason": {
+                    "type": "string",
+                    "enum": [
+                        "completed",
+                        "failed",
+                        "cancelled",
+                        "deferred",
+                        "timeout",
+                        "abandoned",
+                    ],
+                },
+                "outcome": {"type": "object"},
+            },
+            "additionalProperties": False,
+        }
+        required.append("run")
+    else:
+        properties.update(
+            {
+                "summary": {
+                    "type": "object",
+                    "properties": {"correlation": correlation_schema()},
+                    "additionalProperties": True,
+                },
+                "runs": {"type": "object"},
+            }
+        )
+        required.extend(("summary", "runs"))
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": f"Autobench {schema_name.replace('_', ' ').title()} YAML",
+        "type": "object",
+        "required": required,
+        "properties": properties,
+        "additionalProperties": True,
+    }
+
+
+def staging_schema(schema_name: str) -> SchemaDocument:
+    properties: SchemaDocument
+    if schema_name == "staging":
+        required = [
+            "staging",
+            "experiment",
+            "plan",
+            "runs",
+            "post_processing",
+            "environment",
+            "semantic_registry",
+        ]
+        properties = {
+            "staging": {"type": "object"},
+            "experiment": {
+                "type": "object",
+                "properties": {"correlation": correlation_schema()},
+                "additionalProperties": True,
+            },
+            "plan": {"type": "object"},
+            "runs": {"type": "array", "items": {"type": "object"}},
+            "post_processing": {"type": "object"},
+            "environment": {"type": "object"},
+            "semantic_registry": {"type": "object"},
+            "report": {"type": ["object", "null"]},
+            "benchmark_spec": {"type": ["object", "null"]},
+            "spec_hash": {"type": ["string", "null"]},
+            "source_files": {"type": "array", "items": {"type": "object"}},
+        }
+    elif schema_name == "staging_manifest":
+        required = ["staging", "experiment", "runs", "checkpoints"]
+        properties = {
+            "staging": {"type": "object"},
+            "experiment": {"type": "object"},
+            "runs": {"type": "array", "items": {"type": "object"}},
+            "checkpoints": {"type": "array", "items": {"type": "object"}},
+            "payloads": {"type": "array", "items": {"type": "object"}},
+        }
+    else:
+        required = ["checkpoint", "run", "evidence"]
+        properties = {
+            "checkpoint": {"type": "object"},
+            "run": {
+                "type": "object",
+                "properties": {"correlation": correlation_schema()},
+                "additionalProperties": True,
+            },
+            "evidence": {"type": "object"},
+        }
+    properties[required[0]] = {
+        "type": "object",
+        "required": ["version"],
+        "properties": {"version": {"const": 1}},
+        "additionalProperties": True,
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": f"Autobench {schema_name.replace('_', ' ').title()} YAML",
+        "type": "object",
+        "required": required,
+        "properties": properties,
+        "additionalProperties": False,
     }
 
 
@@ -325,6 +566,11 @@ def benchmark_schema() -> SchemaDocument:
                     "properties": {
                         "description": {"type": "string"},
                         "capture": capture_policy,
+                        "execution": {
+                            "type": "object",
+                            "properties": {"correlation": correlation_schema()},
+                            "additionalProperties": False,
+                        },
                         "cases": {
                             "oneOf": [
                                 {"type": "array"},
@@ -351,6 +597,268 @@ def benchmark_schema() -> SchemaDocument:
     }
 
 
+def correlation_schema() -> SchemaDocument:
+    scalar = {"type": ["string", "integer", "number", "boolean"]}
+    return {
+        "type": ["object", "null"],
+        "properties": {
+            "group_id": {"type": ["string", "null"], "minLength": 1},
+            "attempt": {"type": ["integer", "null"], "minimum": 1},
+            "phase": {"type": ["string", "null"], "minLength": 1},
+            "parent_experiment_id": {"type": ["string", "null"], "minLength": 1},
+            "resumed_from_experiment_id": {
+                "type": ["string", "null"],
+                "minLength": 1,
+            },
+            "labels": {"type": "object", "additionalProperties": scalar},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dataset_schema() -> SchemaDocument:
+    body = dataset_body_schema()
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Autobench Dataset YAML",
+        "type": "object",
+        "required": ["dataset"],
+        "properties": {
+            "record": {
+                "type": "object",
+                "required": ["type", "version"],
+                "properties": {
+                    "type": {"const": "dataset"},
+                    "version": {"type": "integer", "minimum": 1},
+                },
+                "additionalProperties": False,
+            },
+            "dataset": {
+                "oneOf": [
+                    body,
+                    {
+                        "type": "object",
+                        "minProperties": 1,
+                        "maxProperties": 1,
+                        "additionalProperties": body,
+                    },
+                ]
+            },
+        },
+        "additionalProperties": False,
+    }
+
+
+def dataset_body_schema() -> SchemaDocument:
+    return {
+        "type": "object",
+        "properties": {
+            "id": {"type": ["string", "null"], "minLength": 1},
+            "source": {"type": ["string", "null"], "minLength": 1},
+            "version": {"type": ["string", "null"]},
+            "metadata": {"type": "object"},
+            "defaults": {"type": "object"},
+            "cases": {"type": "array", "items": case_schema()},
+        },
+        "additionalProperties": False,
+    }
+
+
+def case_schema() -> SchemaDocument:
+    return {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "input": {},
+            "expected": {},
+            "metadata": {"type": "object"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "attachments": {"type": "array", "items": {"type": "object"}},
+        },
+        "additionalProperties": False,
+    }
+
+
+def generation_request_schema() -> SchemaDocument:
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Autobench Dataset Generation Request YAML",
+        "type": "object",
+        "required": ["generation"],
+        "properties": {
+            "generation": {
+                "type": "object",
+                "required": ["request"],
+                "properties": {"request": generation_request_body_schema()},
+                "additionalProperties": False,
+            }
+        },
+        "additionalProperties": False,
+    }
+
+
+def generation_request_body_schema() -> SchemaDocument:
+    return {
+        "type": "object",
+        "properties": {
+            "seed": {"type": ["integer", "string", "null"]},
+            "prompt": {
+                "type": ["object", "null"],
+                "properties": {
+                    "content": {"type": ["string", "null"]},
+                    "asset_version": {"type": ["string", "null"]},
+                },
+                "additionalProperties": False,
+            },
+            "settings": {"type": "object"},
+            "metadata": {"type": "object"},
+            "seed_cases": {"type": "array", "items": case_schema()},
+        },
+        "additionalProperties": False,
+    }
+
+
+def generation_schema() -> SchemaDocument:
+    nullable_string = {"type": ["string", "null"]}
+    sha256_string = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    nonnegative_integer = {"type": "integer", "minimum": 0}
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Autobench Dataset Generation Manifest YAML",
+        "type": "object",
+        "required": ["record", "generation"],
+        "properties": {
+            "record": {
+                "type": "object",
+                "required": ["type", "version"],
+                "properties": {
+                    "type": {"const": "generation"},
+                    "version": {"type": "integer", "minimum": 1},
+                },
+                "additionalProperties": False,
+            },
+            "generation": {
+                "type": "object",
+                "required": [
+                    "status",
+                    "started_at",
+                    "completed_at",
+                    "determinism",
+                    "generator",
+                    "request",
+                    "usage",
+                    "output",
+                    "cases",
+                ],
+                "properties": {
+                    "status": {"enum": ["complete", "incomplete"]},
+                    "reason": nullable_string,
+                    "started_at": {"type": "string", "format": "date-time"},
+                    "completed_at": {"type": "string", "format": "date-time"},
+                    "determinism": {"enum": ["guaranteed", "not_guaranteed", "unknown"]},
+                    "generator": {
+                        "type": "object",
+                        "required": ["id"],
+                        "properties": {
+                            "id": {"type": "string", "minLength": 1},
+                            "asset_version": nullable_string,
+                            "provider": nullable_string,
+                            "model": nullable_string,
+                        },
+                        "additionalProperties": False,
+                    },
+                    "request": {
+                        "type": "object",
+                        "required": ["sha256", "seed_cases"],
+                        "properties": {
+                            "sha256": sha256_string,
+                            "seed": {"type": ["integer", "string", "null"]},
+                            "prompt": {
+                                "type": ["object", "null"],
+                                "properties": {
+                                    "sha256": {"oneOf": [sha256_string, {"type": "null"}]},
+                                    "asset_version": nullable_string,
+                                },
+                                "additionalProperties": False,
+                            },
+                            "settings": {"type": "object"},
+                            "metadata": {"type": "object"},
+                            "seed_cases": {"type": "array", "items": case_schema()},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "usage": {
+                        "type": "object",
+                        "required": [
+                            "input_tokens",
+                            "output_tokens",
+                            "cached_input_tokens",
+                            "requests",
+                            "metadata",
+                        ],
+                        "properties": {
+                            "input_tokens": nonnegative_integer,
+                            "output_tokens": nonnegative_integer,
+                            "cached_input_tokens": nonnegative_integer,
+                            "requests": nonnegative_integer,
+                            "metadata": {"type": "object"},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "cost": {
+                        "type": ["object", "null"],
+                        "required": ["amount", "currency"],
+                        "properties": {
+                            "amount": {"type": "number", "minimum": 0},
+                            "currency": {"type": "string", "minLength": 1},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "output": {
+                        "type": "object",
+                        "required": ["generated", "included", "rejected"],
+                        "properties": {
+                            "dataset": {
+                                "type": ["object", "null"],
+                                "required": ["id", "sha256"],
+                                "properties": {
+                                    "id": {"type": ["string", "null"], "minLength": 1},
+                                    "version": nullable_string,
+                                    "sha256": {"oneOf": [sha256_string, {"type": "null"}]},
+                                    "path": nullable_string,
+                                },
+                                "additionalProperties": False,
+                            },
+                            "generated": nonnegative_integer,
+                            "included": nonnegative_integer,
+                            "rejected": nonnegative_integer,
+                        },
+                        "additionalProperties": False,
+                    },
+                    "cases": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["id", "status", "sha256", "case"],
+                            "properties": {
+                                "id": {"type": "string", "minLength": 1},
+                                "status": {"enum": ["candidate", "accepted", "rejected"]},
+                                "rejection_reason": nullable_string,
+                                "sha256": sha256_string,
+                                "case": case_schema(),
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+        "additionalProperties": False,
+    }
+
+
 def resolve_file_ref(ref: str, *, base_path: Path) -> Path:
     parsed = urlparse(ref)
     if parsed.scheme and parsed.scheme != "file":
@@ -369,11 +877,14 @@ def resolve_file_ref(ref: str, *, base_path: Path) -> Path:
 __all__ = (
     "SchemaDocument",
     "benchmark_schema",
+    "dataset_schema",
     "dump_yaml",
     "ensure_yaml_schema",
     "load_yaml",
     "loose_yaml_schema",
     "resolve_file_ref",
+    "generation_request_schema",
+    "generation_schema",
     "schema_cache_dir",
     "schema_path",
     "yaml_schema",

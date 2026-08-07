@@ -30,7 +30,7 @@ application execution and custom evaluation logic.
 | Dataset | Inline cases, file-backed datasets, glob-backed case files, defaults, tags, metadata, attachments, and versions |
 | Cases | Arbitrary input and expected payloads with stable IDs and artifact references |
 | Variants | Named factor combinations with labels, semantic types, and `optimize` hints |
-| Generated cases | Production-sample conversion, provenance, review status, reasons, and generation batches |
+| Generated datasets | Separate sync/async preparation API and CLI, typed requests/batches, review state, provenance, usage/cost, content hashes, complete publication, and incomplete sidecars |
 | YAML schemas | Versioned JSON schemas and `yaml-language-server` headers for completion and validation |
 | Source discovery | Hash collection for specs, datasets, pricing files, task modules, and scorer modules |
 
@@ -45,6 +45,7 @@ See [Datasets And Variants](datasets-and-variants.md) and [YAML Spec](yaml-spec.
 | Concurrency | Bounded async execution while preserving deterministic result ordering |
 | Failure isolation | One task, scorer, derivation, or policy failure does not erase other runs |
 | Progress events | Typed lifecycle events for runners and future UI integrations |
+| Execution correlation | Immutable cross-invocation group, attempt, phase, association, and scalar-label metadata across Python, YAML, CLI, records, replay, and reports |
 | Optional Pydantic Evals bridge | Internal conversion to Pydantic Evals-compatible case and dataset payloads |
 
 See [Tasks And Runtime](tasks-and-runtime.md).
@@ -75,6 +76,11 @@ agent, guardrail, handoff, policy, and toolset versions. Definition/effective re
 capability scopes, aliases, privacy-controlled content, and span-local `AssetUse` evidence survive
 recording and replay. HTTPX remains transport evidence and performs no semantic asset inference.
 See [Automatic Asset Discovery](automatic-asset-discovery.md).
+
+Immutable records can also be replayed through the optional outbound
+[OTLP exporter](otlp-export.md). Experiment/run/ABP hierarchy, semantic events, record identity,
+partial state, links, and source provenance are preserved without making OTel canonical or a base
+dependency.
 
 ## Scoring And Constraints
 
@@ -144,6 +150,7 @@ typing. See [Asset Tracking](asset-tracking.md) and
 | --- | --- |
 | `RunRecord` | Immutable case x variant evidence including output, scores, observations, spans, factors, assets, artifacts, and errors |
 | `ExperimentRecord` | Plan, environment, semantic registry, report config, source hashes, and run paths |
+| Correlated reports | Field filters and `group_id` report groups across independent experiment results |
 | Replay | Load records without importing task or scorer modules |
 | Rich terminal reports | Status, variant configuration, leaderboard, run metrics, case matrix, comparisons, and distributions |
 | Exports | Human-readable YAML summary, CSV run projection, and Markdown report |

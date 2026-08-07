@@ -99,8 +99,9 @@ The Autobench Protocol (ABP) is the native execution evidence model. Instrumento
 emit immutable signals that materialize into a trace containing spans, measurements, events, links,
 references, errors, stream state, and diagnostics.
 
-ABP is not an OpenTelemetry wrapper. Optional bridges may export it later, but Autobench controls
-its semantic, replay, accounting, and optimization contracts.
+ABP is not an OpenTelemetry wrapper. The optional outbound OTLP adapter can project recorded ABP
+evidence into OTel spans, but Autobench controls its semantic, replay, accounting, and optimization
+contracts.
 
 ## Tracked Asset
 
@@ -117,7 +118,14 @@ representation actually used to a run and optional span.
 the plan, source hashes, environment, report configuration, run paths, and aggregate statuses for
 the whole matrix.
 
-Records are human-readable YAML views backed by strict typed models and versioned JSON Schemas.
+Both complete and partial evidence can be immutable. A run records `partial` and `end_reason`; an
+experiment records one terminal state, post-processing completeness, and its planned, recorded, and
+missing run identities. This lifecycle metadata is separate from benchmark outcomes: an experiment
+can complete even when individual runs fail.
+
+Records are human-readable YAML views backed by strict typed models and versioned JSON Schemas. A
+content manifest is validated before replay, and final experiment directories are published only
+after every record and summary file exists.
 
 ## Report
 

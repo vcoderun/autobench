@@ -1,6 +1,6 @@
 ---
 name: autobench
-description: Design, implement, run, debug, review, or document Autobench benchmarks and integrations. Use for Autobench YAML specs, Python Benchmark builders, task(ctx, case) functions, datasets and variants, semantic metrics, scoring and derivation, policies, ABP spans/traces, native Pydantic AI/OpenAI/Agents/HTTPX instrumentation, behavioral asset tracking, immutable records, replay, Rich reports, comparisons, exports, optimizer evidence, or Autobench repository development.
+description: Design, implement, run, debug, review, or document Autobench benchmarks and integrations. Use for Autobench YAML specs, Python Benchmark builders, task(ctx, case) functions, datasets and variants, semantic metrics, scoring and derivation, policies, ABP spans/traces, native Pydantic AI/OpenAI/Agents/HTTPX instrumentation, behavioral asset tracking, immutable records, replay, Rich reports, comparisons, exports, optional OTLP delivery, optimizer evidence, or Autobench repository development.
 ---
 
 # Autobench
@@ -32,6 +32,7 @@ router. Load only the reference and example required by the current task.
 - Declare semantic type, direction, role, and unit when they carry meaning across applications.
 - Span duration is automatic. Use `measure_callable()` for repeated samples and custom timers.
 - ABP is Autobench-owned instrumentation, not an OpenTelemetry wrapper.
+- OTLP is an optional outbound record projection; it is not ABP collection or persistence.
 - Native instrumentation must never change subject results, exceptions, cancellation, or streams.
 - Runtime capture is metadata-first; behavioral assets are full by default for reconstruction.
 - Run records are immutable. Replay/report/compare/export do not execute the subject.
@@ -55,7 +56,7 @@ Read one or more direct references based on the task:
   [references/data-runtime.md](references/data-runtime.md)
 - **Semantics, scoring, policies, cost, paired baselines, measurements, or agentic evaluation**:
   [references/evaluation.md](references/evaluation.md)
-- **ABP spans, capture, signals, extraction, accounting, streaming, or adapters**:
+- **ABP spans, capture, signals, extraction, accounting, streaming, adapters, or OTLP delivery**:
   [references/abp.md](references/abp.md)
 - **Pydantic AI, OpenAI, OpenAI Agents, HTTPX, `instrument_all()`, or custom SDK patching**:
   [references/integrations.md](references/integrations.md)
@@ -74,11 +75,14 @@ current source, tests, schemas, and canonical docs before this bundled summary.
 ## Example Router
 
 - `examples/minimal`: first YAML benchmark, typed task, variants, exact scoring, matrix, comparison.
-- `examples/performance`: file dataset, repeated measurements, raw sample artifact, paired speedup,
+- `examples/advanced`: repeated measurements, raw sample artifact, paired speedup,
   policy, distribution.
-- `examples/abp-manual`: explicit workflow span plus generic method instrumentation.
-- `examples/pydantic-ai`: real Pydantic AI `TestModel`, `instrument_all()`, structured output,
+- `examples/generated_dataset`: typed pre-run generation request, review state, frozen dataset, and
+  provenance manifest.
+- `examples/abp_manual`: explicit workflow span plus generic method instrumentation.
+- `examples/pydantic_ai`: real Pydantic AI `TestModel`, `instrument_all()`, structured output,
   capabilities, tools, and automatic asset lineage.
+- `examples/otlp_export`: replay a real record into an injected offline OTLP exporter.
 
 Copy a maintained example into a new directory with:
 
@@ -144,4 +148,3 @@ Do not stop at syntax. A completed Autobench task has:
 - tests for changed behavior and edge cases;
 - current docs/examples/schema when a public surface changed;
 - no stale placeholder, generated cache, local run, credential, or case-specific framework code.
-

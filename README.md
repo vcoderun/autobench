@@ -20,6 +20,7 @@ It is a YAML-first Python framework for AI and non-AI systems:
 - native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX instrumentation
 - explicit and automatic prompt/tool/schema/agent asset lineage
 - immutable YAML records, replay, Rich reports, comparisons, and exports
+- optional immutable-record export to OTLP-compatible telemetry backends
 
 ## Install
 
@@ -31,6 +32,12 @@ For native SDK instrumentation:
 
 ```bash
 uv add 'autobench[instrumentation]'
+```
+
+For outbound OTLP HTTP/protobuf export:
+
+```bash
+uv add 'autobench[otlp]'
 ```
 
 ## First Run
@@ -70,6 +77,7 @@ policies, instrumentation, and reports.
 | `examples/pydantic_ai` | Live layered instrumentation and automatic asset discovery |
 | `examples/automatic_assets` | Offline Pydantic AI and custom SDK behavioral lineage |
 | `examples/abp_*` | Manual, concurrent, streaming, Agents and replay protocol flows |
+| `examples/otlp_export` | Offline immutable ABP record to OTLP mapping |
 | `examples/codemode` | Migration of a real external benchmark runner |
 
 Run the offline release matrix:
@@ -89,6 +97,7 @@ Full documentation: [vcoderun.github.io/autobench](https://vcoderun.github.io/au
 - [YAML Spec](https://vcoderun.github.io/autobench/yaml-spec/)
 - [Python API](https://vcoderun.github.io/autobench/python-api/)
 - [Autobench Protocol](https://vcoderun.github.io/autobench/instrumentation-and-traces/)
+- [OTLP Export](https://vcoderun.github.io/autobench/otlp-export/)
 
 LLM-readable indexes are available at
 [`llms.txt`](https://vcoderun.github.io/autobench/llms.txt) and
@@ -97,7 +106,7 @@ LLM-readable indexes are available at
 ## Development
 
 ```bash
-uv sync --extra dev --extra instrumentation --extra openai-agents
+uv sync --extra dev --extra instrumentation --extra openai-agents --extra otlp
 make prod
 make pre-commit
 ```

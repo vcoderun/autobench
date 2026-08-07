@@ -47,6 +47,32 @@ def test_dump_yaml_can_write_schema_header_and_cached_schema(
     assert expected_schema_path.exists()
     assert "benchmark" in yaml_schema("benchmark")["properties"]
     assert "payload" in yaml_schema("artifact_payload")["properties"]
+    staging_properties = yaml_schema("staging")["properties"]
+    assert set(staging_properties) == {
+        "staging",
+        "experiment",
+        "plan",
+        "runs",
+        "post_processing",
+        "environment",
+        "semantic_registry",
+        "report",
+        "benchmark_spec",
+        "spec_hash",
+        "source_files",
+    }
+    assert set(yaml_schema("staging_manifest")["properties"]) == {
+        "staging",
+        "experiment",
+        "runs",
+        "checkpoints",
+        "payloads",
+    }
+    assert set(yaml_schema("checkpoint")["properties"]) == {
+        "checkpoint",
+        "run",
+        "evidence",
+    }
     assert loose_yaml_schema("custom")["title"] == "Autobench Custom YAML"
     assert load_yaml(path) == data
     assert "items:\n  - one\n  - two\n" in rendered

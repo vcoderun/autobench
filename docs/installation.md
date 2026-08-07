@@ -47,12 +47,22 @@ autobench instrumentation doctor
 
 The command reports compatibility rather than failing because an optional SDK is absent.
 
+To export immutable ABP records to an OTLP HTTP/protobuf backend, install the independent exporter
+extra:
+
+```bash
+uv add 'autobench[otlp]'
+```
+
+Collection still uses ABP. The extra is needed only on the process that performs
+`autobench telemetry export`; see [OTLP Export](otlp-export.md).
+
 ## Development Checkout
 
 From the repository root:
 
 ```bash
-uv sync --extra dev --extra instrumentation --extra openai-agents
+uv sync --extra dev --extra instrumentation --extra openai-agents --extra otlp
 make prod
 ```
 

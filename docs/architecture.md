@@ -14,6 +14,7 @@ design constraint: the framework can benchmark any system because it does not ow
 | Tracking | behavioral asset identity, versions, representations, diffs, uses | source control or deployment promotion |
 | Records | immutable run and experiment evidence, artifacts, source hashes | mutable operational databases |
 | Reports | semantic projections, aggregation, comparison and exports | causal inference from uncontrolled changes |
+| Outbound adapters | projections such as ABP-to-OTLP delivery | canonical evidence or application instrumentation |
 
 ## One Canonical Spec
 
@@ -41,8 +42,19 @@ For each case x variant pair, Autobench:
 7. derives per-run metrics such as token cost;
 8. finalizes status and trace state.
 
-After all runs finish, it applies cross-run derivation and policy evaluation. Recording then
+The context tracks these phases explicitly. With durable recording, `await ctx.checkpoint(name)`
+commits a frozen partial snapshot through the active record session. Cooperative cancellation
+finalizes partial trace state, commits a reserved terminal checkpoint, and propagates the same
+`CancelledError`; concurrent cancellation drains sibling cleanup within a fixed bound before the
+experiment session aborts.
+
+As runs finish, an optional recorder commits their execution snapshots. After all runs finish, the
+runtime applies cross-run derivation and policy evaluation, then
 materializes immutable YAML records and referenced artifacts.
+
+Hard termination is intentionally weaker: `SIGKILL` and power loss preserve only the last staging
+manifest commit under the selected durability mode. Autobench checkpoints evidence, while the
+subject application remains responsible for resumable execution state.
 
 ## Evidence Model
 
@@ -105,6 +117,15 @@ Choose the narrowest seam that owns the behavior:
 Application-specific logic belongs in tasks and scorers. Generic SDK behavior belongs in an
 instrumentor. This prevents core Autobench from accumulating one-off integrations disguised as
 framework concepts.
+
+An external framework may retain ownership of its telemetry backend. Its adapter can use
+`InstrumentationRuntime.span()` to join the active ABP tree, while the external package owns backend
+multiplexing and conditional restoration. Autobench core therefore supplies context and evidence
+semantics without importing the framework or replacing an existing telemetry destination.
+
+After recording, the optional OTLP adapter can map immutable experiment, run, trace, and span
+evidence to an external telemetry backend. This happens outside benchmark execution and never
+turns OTLP into storage, replay lineage, or canonical semantics.
 
 ## Optimization Boundary
 

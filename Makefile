@@ -88,10 +88,15 @@ examples:
 			uv run autobench export "$$root/$$example" --format yaml --path "$$root/$$example-report.yaml"; \
 			uv run autobench export "$$root/$$example" --format csv --path "$$root/$$example-runs.csv"; \
 		done; \
+		uv run autobench dataset generate generator:generate_routing_cases \
+			--request examples/generated_dataset/request.yaml \
+			--output "$$root/generated-dataset.yaml" \
+			--id routing-generated --version v1; \
 		uv run python examples/automatic_assets/pydantic_ai_discovery.py --record "$$root/automatic-pydantic-assets"; \
 		uv run autobench replay "$$root/automatic-pydantic-assets"; \
 		uv run python examples/automatic_assets/custom_sdk_discovery.py --record "$$root/custom-sdk-assets"; \
-		uv run autobench replay "$$root/custom-sdk-assets"
+		uv run autobench replay "$$root/custom-sdk-assets"; \
+		uv run python examples/otlp_export/export_record.py "$$root/abp_manual"
 	@printf "$(GREEN)✔ Offline examples complete.$(RESET)\n"
 
 build:

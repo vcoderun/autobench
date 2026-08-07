@@ -8,6 +8,7 @@
 - [Generated and production cases](#generated-and-production-cases)
 - [Matrix planning](#matrix-planning)
 - [Execution and concurrency](#execution-and-concurrency)
+- [Execution correlation](#execution-correlation)
 - [Failure behavior](#failure-behavior)
 - [Reproducibility](#reproducibility)
 
@@ -73,18 +74,22 @@ already has a distinct meaning.
 ## Generated And Production Cases
 
 Production ingestion primitives retain provenance, reason, review status, sampling policy, and
-source metadata. Generated case batches retain generator identity and review state. Convert only
-reviewed or intentionally accepted samples into regression cases.
+source metadata. Generated dataset preparation runs before benchmark planning and retains generator
+identity, request identity, review state, usage, cost, and content hashes.
 
 Relevant public primitives include:
 
 - `ProductionSample`, `SamplingPolicy`, `SampleReason`, `ReviewStatus`;
 - `sample_to_case()`, `samples_to_cases()`;
-- `CaseGeneratorInput`, `GeneratedCaseBatch`;
+- `CaseGeneratorInput`, `CaseGenerator`, `GeneratedCaseBatch`, `GenerationResult`;
 - `mark_generated_case()`, `generated_batch_from_cases()`.
+- `generate_dataset()`, `generate_dataset_sync()`, `write_generation_result()`.
 
 Do not silently turn raw production traffic into permanent expected outcomes. Redact sensitive
-fields, record provenance, and require an explicit review policy.
+fields, record provenance, and require an explicit review policy. A complete generated batch
+publishes candidate and accepted cases as ordinary dataset YAML and preserves rejected cases only in
+the generation manifest. An incomplete batch writes only an incomplete sidecar and must not replace
+a dataset. Never run generation inside an active case x variant matrix.
 
 ## Matrix Planning
 
@@ -118,6 +123,17 @@ Concurrency invariants:
 
 Do not add batch-level candidate injection without defining its concurrency and isolation model.
 
+## Execution Correlation
+
+Use `ExecutionCorrelation` to group separate benchmark invocations by `group_id`, positive
+`attempt`, `phase`, external experiment associations, and scalar labels. Define it in YAML under
+`execution.correlation`, through `Benchmark.correlation(...)`, or as a run/CLI override. Explicit
+overrides merge field by field and labels merge by key.
+
+Correlation is static for one invocation and must be identical on the experiment and every run. It
+does not alter case x variant planning, represent replay ancestry, or imply that Autobench resumes
+application workflow state. Use `filter_experiments()` and `build_grouped_reports()` for analysis.
+
 ## Failure Behavior
 
 Run statuses distinguish passed, failed, errored, and skipped outcomes:
@@ -145,4 +161,3 @@ Record:
 
 Portable records use paths relative to the experiment directory. Do not infer reproducibility from
 a run ID alone; the source, factors, assets, environment, and artifacts form the actual lineage.
-

@@ -18,6 +18,11 @@ _prepend_path(ROOT)
 _prepend_path(ROOT / "src")
 
 
+@pytest.fixture(autouse=True)
+def isolated_autobench_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTOBENCH_HOME", str(tmp_path / ".autobench"))
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addini(
         "asyncio_mode",

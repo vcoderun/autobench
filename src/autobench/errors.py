@@ -35,6 +35,10 @@ class TaskResolutionError(AutobenchError):
     """Raised when a Python task target cannot be resolved."""
 
 
+class GenerationError(AutobenchError):
+    """Raised when generated dataset preparation cannot produce valid evidence."""
+
+
 class ErrorRecord(BaseModel):
     error_type: str
     message: str
@@ -65,6 +69,7 @@ class ErrorRecord(BaseModel):
 __all__ = (
     "AutobenchError",
     "ErrorRecord",
+    "GenerationError",
     "SpecLoadError",
     "SpecValidationError",
     "TaskResolutionError",

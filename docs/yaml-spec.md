@@ -12,6 +12,7 @@ named benchmark:
 | Section | Required | Purpose |
 | --- | --- | --- |
 | `description` | No | Human-readable benchmark intent |
+| `execution` | No | Static cross-invocation correlation metadata |
 | `dataset` | Yes | Inline or file-backed cases, defaults, version, and metadata |
 | `run` | For execution | Python task target |
 | `variants` | Yes | Named factor combinations |
@@ -29,6 +30,15 @@ named benchmark:
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
+    execution:
+      correlation:
+        group_id: routing-proposal-42
+        attempt: 1
+        phase: validation
+        parent_experiment_id: routing-baseline-17
+        labels:
+          owner: evaluation
+          seed: 7
     dataset:
       source: file://datasets/cases.yaml
       version: v2
@@ -98,6 +108,15 @@ benchmark:
               metric: quality.correctness
               aggregate: ratio_true
 ```
+
+`execution.correlation` groups separate benchmark invocations without changing matrix identity.
+`attempt` must be positive, and labels accept only stable string, integer, finite float, or boolean
+values. Correlation is copied unchanged to the experiment and every run record. It is not replay
+lineage and does not claim that Autobench can resume application workflow state.
+
+Python or CLI overrides merge field by field. An omitted override keeps the YAML value; supplied
+labels replace matching keys and preserve the other YAML labels. Per-case or per-variant correlation
+resolvers are intentionally not part of this surface.
 
 ## Resolution Rules
 
@@ -453,6 +472,31 @@ dataset:
         subject: Refund
 ```
 
+Generated datasets use this exact dataset format. Generation itself has two additional schemas. A
+request is a portable input to an application-owned generator:
+
+```yaml
+# yaml-language-server: $schema=schemas/0.3.0/generation_request_schema.json
+generation:
+  request:
+    seed: 17
+    prompt:
+      content: Generate privacy-safe routing cases.
+      asset_version: prompt.routing-generator@v1
+    settings:
+      count: 20
+    seed_cases:
+      - id: reviewed-refund
+        input: {message: Refund a duplicate charge}
+        expected: {route: billing}
+```
+
+The resulting `.generation.yaml` or `.incomplete.yaml` manifest uses
+`generation_schema.json`. It records generator/provider/model identity, determinism, request and
+case hashes, usage, cost, review states, rejected-case reasons, output counts, and the published
+dataset reference. Prompt content is represented by its hash and tracked asset version rather than
+duplicated into the manifest. See [Generated Datasets](generated-datasets.md).
+
 ## Exported Semantic Registry YAML
 
 Semantic registry exports use stable type ids with compact metadata:
@@ -565,11 +609,20 @@ Experiment records keep replay data structured, but the outer shape stays readab
 ```yaml
 record:
   type: experiment
-  version: 4
+  version: 5
 
 experiment:
   id: exp_support_routing_20260507T120000Z
   benchmark: support-routing
+  termination:
+    status: completed
+    partial: false
+    post_processing:
+      cross_run_derivation: true
+      policies: true
+    planned_runs: [run_ticket_1_route_v1]
+    recorded_runs: [run_ticket_1_route_v1]
+    missing_runs: []
 
 benchmark:
   id: support-routing
@@ -597,8 +650,11 @@ runs:
   failed: 1
   errored: 0
   skipped: 0
+  cancelled: 0
   paths:
     - cases/ticket_1/route_v1/run.yaml
+
+manifest: manifest.yaml
 
 files:
   /abs/path/autobench.yaml: 3c4d...
@@ -617,6 +673,35 @@ semantic_registry:
       unit: usd
       shape: number
 ```
+
+The corresponding integrity manifest is also human-readable and schema-backed:
+
+```yaml
+record:
+  type: manifest
+  version: 1
+
+experiment:
+  id: exp_support_routing_20260507T120000Z
+
+files:
+  - path: experiment.yaml
+    sha256: 58f4...
+    bytes: 2148
+    kind: experiment
+    identity: exp_support_routing_20260507T120000Z
+  - path: cases/ticket_1/route_v1/run.yaml
+    sha256: 2c91...
+    bytes: 4892
+    kind: run
+    identity: run_ticket_1_route_v1
+```
+
+Run records in format version 5 add `run.partial` and `run.end_reason`. Format version 6 adds
+optional execution correlation to experiment, summary, run, staging, and checkpoint documents.
+Existing records without
+these fields remain loadable; Autobench infers completed, failed, deferred, or cancelled lifecycle
+state from their legacy status.
 
 ## Exported Artifact YAML
 

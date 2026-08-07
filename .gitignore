@@ -78,6 +78,7 @@ site/
 tmp/
 
 # Cache & Config
+.cache/
 .pytest_cache/
 .ruff_cache
 .logfire

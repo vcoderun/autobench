@@ -130,6 +130,67 @@
           "description": {
             "type": "string"
           },
+          "execution": {
+            "additionalProperties": false,
+            "properties": {
+              "correlation": {
+                "additionalProperties": false,
+                "properties": {
+                  "attempt": {
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "group_id": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "labels": {
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "integer",
+                        "number",
+                        "boolean"
+                      ]
+                    },
+                    "type": "object"
+                  },
+                  "parent_experiment_id": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "phase": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "resumed_from_experiment_id": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
           "instrumentation": {
             "additionalProperties": false,
             "description": "Native ABP instrumentors installed for benchmark execution.",

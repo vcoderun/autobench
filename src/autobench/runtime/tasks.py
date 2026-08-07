@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from autobench.data.datasets import Case
 from autobench.errors import ErrorRecord, TaskResolutionError
 from autobench.metrics.observations import Observation
+from autobench.protocol import EndReason
 from autobench.records.artifacts import ArtifactRef
 from autobench.runtime.context import RunContext, SpanRecord
 from autobench.runtime.instrumentation import reset_active_run_context, set_active_run_context
@@ -24,11 +25,14 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
     ERRORED = "errored"
     SKIPPED = "skipped"
+    CANCELLED = "cancelled"
 
 
 class TaskResult(BaseModel):
     output: Any = None
     status: TaskStatus
+    partial: bool = False
+    end_reason: EndReason = EndReason.COMPLETED
     error: ErrorRecord | None = None
     errors: list[ErrorRecord] = Field(default_factory=list)
     observations: list[Observation] = Field(default_factory=list)
@@ -86,6 +90,7 @@ async def run_python_task(
         return TaskResult(
             output=None,
             status=TaskStatus.ERRORED,
+            end_reason=EndReason.FAILED,
             error=error,
             errors=list(ctx.errors),
             observations=list(ctx.observations),
@@ -97,6 +102,7 @@ async def run_python_task(
         return TaskResult(
             output=None,
             status=TaskStatus.FAILED,
+            end_reason=EndReason.FAILED,
             error=error,
             errors=list(ctx.errors),
             observations=list(ctx.observations),

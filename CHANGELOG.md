@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added incremental crash-recoverable recording, cooperative cancellation checkpoints, typed
+  progress dispatch, file-backed streaming artifacts, and cross-invocation execution correlation.
+- Added typed pre-run generated dataset preparation with review states, determinism claims,
+  provenance manifests, content hashes, safe complete publication, and explicit incomplete
+  sidecars.
+- Added an optional ABP-to-OTLP HTTP/protobuf exporter with immutable record replay, hierarchy and
+  identity preservation, privacy-first content omission, Rich CLI output, and offline examples.
 - Added verified OpenAI Python 2.53 compatibility and a dedicated CI matrix target while retaining
   OpenAI 2.52 as the minimum supported release.
 - Made behavioral asset definitions full-capture by default while retaining metadata-first runtime

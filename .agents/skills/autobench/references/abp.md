@@ -21,8 +21,9 @@ is not an OpenTelemetry wrapper and does not require OpenTelemetry.
 
 ABP is subject- and experiment-oriented. It preserves measurements, errors, events, artifacts,
 usage, factors, links, and behavioral assets needed for evaluation, replay, and optimization.
-Future exporters may send ABP evidence to OTLP-compatible systems, but ABP semantics remain owned
-by Autobench.
+The optional outbound exporter can send immutable ABP evidence to OTLP-compatible systems, but ABP
+semantics remain owned by Autobench. Install `autobench[otlp]`; do not make OTel an instrumentation
+or replay dependency.
 
 ## Protocol Model
 
@@ -211,4 +212,3 @@ Do not import provider SDKs from core protocol or records modules.
 - Scoped suppression prevents nested wrappers from duplicating one operation.
 - Instrumentation never changes a subject result, exception identity, cancellation, or stream
   semantics.
-

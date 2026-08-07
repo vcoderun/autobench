@@ -664,6 +664,11 @@ def test_dataset_dsl_source_supports_empty_body_multi_entry_fallback_and_errors(
     multi_dataset.write_text("dataset:\n  first: {}\n  second: {}\n", encoding="utf-8")
     bad_dataset = tmp_path / "bad-dataset.yaml"
     bad_dataset.write_text("dataset:\n  bad: scalar\n", encoding="utf-8")
+    flat_dataset = tmp_path / "flat-dataset.yaml"
+    flat_dataset.write_text(
+        "dataset:\n  id: flat\n  defaults:\n    tags: [generated]\n  cases:\n    - id: one\n",
+        encoding="utf-8",
+    )
     spec_path = tmp_path / "autobench.yaml"
 
     spec_path.write_text("benchmark:\n  empty:\n    cases: empty-dataset.yaml\n", encoding="utf-8")
@@ -675,6 +680,11 @@ def test_dataset_dsl_source_supports_empty_body_multi_entry_fallback_and_errors(
     multi_spec = load_benchmark_spec(spec_path)
     assert multi_spec.dataset.id is None
     assert multi_spec.dataset.cases == []
+
+    spec_path.write_text("benchmark:\n  flat:\n    cases: flat-dataset.yaml\n", encoding="utf-8")
+    flat_spec = load_benchmark_spec(spec_path)
+    assert flat_spec.dataset.id == "flat"
+    assert flat_spec.dataset.cases[0].tags == ["generated"]
 
     spec_path.write_text("benchmark:\n  bad:\n    cases: bad-dataset.yaml\n", encoding="utf-8")
     with pytest.raises(SpecValidationError, match="dataset.<id> must be a mapping"):

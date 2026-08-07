@@ -16,6 +16,7 @@ infrastructure begins.
 | Track prompts/tools/schemas | explicit tracking or automatic asset discovery |
 | Turn production failures into regressions | `ProductionSample`, sampling policy, reviewed cases |
 | Feed an optimizer | objectives, constraints, factors, asset versions, feedback records |
+| Publish evidence to telemetry | immutable records, optional ABP-to-OTLP export |
 
 ## Application Regression Benchmark
 
@@ -364,21 +365,37 @@ reviewed cases into a versioned YAML dataset before using them as a release gate
 
 ## Synthetic Case Generation With Provenance
 
-Autobench does not own a model-based generator, but it preserves generated-data lineage:
+Autobench does not prescribe a model-based generator, but it owns the typed preparation and
+generated-data lineage boundary:
 
 ```python
-from autobench import Case, generated_batch_from_cases
+from pathlib import Path
 
-batch = generated_batch_from_cases(
-    [Case(id="edge-1", input={"message": "..."})],
-    generator_asset_version="prompt.generate_cases@82ab39",
-    model_provider="openrouter",
-    model_name="openai/gpt-5.6-luna",
+from autobench import (
+    Case,
+    CaseGeneratorInput,
+    GeneratedCaseBatch,
+    generate_dataset_sync,
+    write_generation_result,
 )
+
+result = generate_dataset_sync(
+    lambda request: GeneratedCaseBatch(
+        cases=(Case(id="edge-1", input={"message": "..."}),),
+        generator_asset_version="prompt.generate_cases@82ab39",
+        model_provider="openrouter",
+        model_name="openai/gpt-5.6-luna",
+    ),
+    CaseGeneratorInput(seed=17),
+    generator_id="generation:generate_cases",
+    dataset_id="routing-edge-cases",
+)
+write_generation_result(result, Path("datasets/routing-edge-cases.yaml"))
 ```
 
-Generated cases remain candidates until reviewed. This keeps generator behavior and benchmark truth
-from collapsing into the same untracked process.
+Candidate, accepted, and rejected states remain visible in the generation manifest. Generation is a
+separate operation, so review and freezing happen before variants see the dataset. See
+[Generated Datasets](generated-datasets.md).
 
 ## CI Regression Gate
 
@@ -440,3 +457,15 @@ report = build_report(experiment)
 
 This is the correct boundary for dashboards, offline reports, audits, post-hoc extraction, and
 optimizer data ingestion.
+
+To publish the same immutable evidence into an OTLP-compatible operations backend without rerunning
+the subject:
+
+```bash
+autobench telemetry export runs/latest \
+  --endpoint https://collector.example/v1/traces \
+  --service-name routing-benchmark
+```
+
+The outbound adapter preserves experiment/run/trace identity and semantic events. It is not an
+alternative record format; see [OTLP Export](otlp-export.md).

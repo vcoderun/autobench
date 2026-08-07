@@ -31,6 +31,8 @@ dev = [
     "mkdocstrings-python",
     "openai==2.52.0",
     "openai-agents==0.19.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
+    "opentelemetry-sdk>=1.44,<2",
     "pre-commit",
     "pydantic>=2.7",
     "pytest",
@@ -47,7 +49,7 @@ instrumentation = [
     "httpx>=0.28,<0.29",
     "openai>=2.52,<2.54",
     "openai-agents>=0.19.2,<0.20",
-    "pydantic-ai-slim>=2.22,<2.23",
+    "pydantic-ai-slim>=2.22,<2.24",
 ]
 openai = [
     "openai>=2.52,<2.54",
@@ -56,7 +58,11 @@ openai-agents = [
     "openai-agents>=0.19.2,<0.20",
 ]
 pydantic-ai = [
-    "pydantic-ai-slim>=2.22,<2.23",
+    "pydantic-ai-slim>=2.22,<2.24",
+]
+otlp = [
+    "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
+    "opentelemetry-sdk>=1.44,<2",
 ]
 
 [project.scripts]
@@ -81,13 +87,22 @@ packages = ["src/autobench"]
 exclude = [
     "/.agents",
     "/.autobench",
+    "/.cache",
+    "/.codex",
+    "/.env",
+    "/.env.*",
+    "/.pytest_cache",
+    "/.ruff_cache",
+    "/.venv",
     "/AGENTS.md",
     "/autobench-opus-export-final",
     "/COVERAGE",
+    "/coverage.*",
     "/docs/*-plan.md",
     "/docs/_markdown",
     "/docs/plans",
     "/docs/plans.md",
+    "/htmlcov",
     "/mocks",
     "/plans",
     "/references",
@@ -171,5 +186,5 @@ dev = [
     "httpx==0.28.1",
     "openai==2.52.0",
     "openai-agents==0.19.2",
-    "pydantic-ai-slim==2.22.0",
+    "pydantic-ai-slim==2.23.0",
 ]

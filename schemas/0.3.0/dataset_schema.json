@@ -1,14 +1,167 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "dataset": {
-      "description": "Autobench dataset 'dataset' section."
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cases": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "attachments": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "expected": {},
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "input": {},
+                  "metadata": {
+                    "type": "object"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "defaults": {
+              "type": "object"
+            },
+            "id": {
+              "minLength": 1,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "metadata": {
+              "type": "object"
+            },
+            "source": {
+              "minLength": 1,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "cases": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "attachments": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "expected": {},
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "input": {},
+                    "metadata": {
+                      "type": "object"
+                    },
+                    "tags": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "defaults": {
+                "type": "object"
+              },
+              "id": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "source": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "maxProperties": 1,
+          "minProperties": 1,
+          "type": "object"
+        }
+      ]
     },
     "record": {
-      "description": "Autobench dataset 'record' section."
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "dataset"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "version"
+      ],
+      "type": "object"
     }
   },
+  "required": [
+    "dataset"
+  ],
   "title": "Autobench Dataset YAML",
   "type": "object"
 }

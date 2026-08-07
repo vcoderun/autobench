@@ -50,12 +50,14 @@ from autobench.evaluation.scoring import PassFailScorer
 from autobench.io import dump_yaml, load_yaml
 from autobench.metrics.observations import Observation, ObservationKind, ObservationRole
 from autobench.records.recording import (
-    _benchmark_spec_snapshot_payload,
-    _benchmark_spec_snapshot_view,
     experiment_record_payload_from_yaml_view,
     experiment_record_to_yaml_view,
     run_record_payload_from_yaml_view,
     run_record_to_yaml_view,
+)
+from autobench.records.views import (
+    _benchmark_spec_snapshot_payload,
+    _benchmark_spec_snapshot_view,
 )
 from autobench.runtime.context import SpanRecord
 from autobench.tracking import AssetCandidate, TrackingRegistry

@@ -5,7 +5,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from autobench.data.datasets import (
     DatasetSpec,
@@ -26,7 +26,7 @@ from autobench.io import load_yaml, resolve_file_ref
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
 from autobench.protocol.capture import CapturePolicy
 from autobench.reports.reporting import ReportSpec
-from autobench.runtime.pipeline import BenchmarkPlan
+from autobench.runtime.models import BenchmarkPlan, ExecutionCorrelation
 
 from .spec import (
     _normalize_benchmark_dsl,
@@ -45,9 +45,16 @@ class TaskSpec(BaseModel):
     module_search_paths: tuple[str, ...] = Field(default_factory=tuple, exclude=True)
 
 
+class ExecutionSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    correlation: ExecutionCorrelation | None = None
+
+
 class BenchmarkSpec(BaseModel):
     benchmark: BenchmarkInfo
     capture: CapturePolicy | None = None
+    execution: ExecutionSpec = Field(default_factory=ExecutionSpec)
     dataset: DatasetSpec = Field(default_factory=DatasetSpec)
     task: TaskSpec | None = None
     variants: list[Variant] = Field(default_factory=list)
@@ -222,7 +229,11 @@ def _resolve_dataset_section(raw_dataset: Any, *, base_path: Path) -> dict[str, 
         loaded = _load_dataset_source(source, base_path=base_path)
         resolved = (
             loaded
-            | {key: value for key, value in resolved.items() if key != "source"}
+            | {
+                key: value
+                for key, value in resolved.items()
+                if key != "source" and (key != "cases" or value)
+            }
             | {"source": source}
         )
     return resolved
@@ -278,6 +289,11 @@ def _normalize_dataset_dsl(raw: dict[str, Any]) -> dict[str, Any]:
     raw_dataset = raw.get("dataset")
     if not isinstance(raw_dataset, dict):
         return raw
+    if "id" in raw_dataset or isinstance(raw_dataset.get("cases"), list):
+        normalized = dict(raw_dataset)
+        if "defaults" in normalized and "case_defaults" not in normalized:
+            normalized["case_defaults"] = normalized.pop("defaults")
+        return normalized
     if len(raw_dataset) != 1:
         return raw
     dataset_id, body = next(iter(raw_dataset.items()))
@@ -520,6 +536,7 @@ def _validate_unique_ids(ids: list[str], *, kind: str) -> None:
 __all__ = (
     "BenchmarkInfo",
     "BenchmarkSpec",
+    "ExecutionSpec",
     "TaskSpec",
     "benchmark_spec_payload_from_yaml_view",
     "benchmark_spec_to_yaml_view",

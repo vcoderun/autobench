@@ -15,16 +15,20 @@ from autobench.metrics.mappings import SourceMap, recanonicalize
 from autobench.metrics.observations import Observation, ObservationKind, ObservationSource
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
 from autobench.protocol.traces import Trace
-from autobench.records.recording import (
+from autobench.records.files import RecordManifest, hash_and_size, validate_manifest
+from autobench.records.models import (
     RECORD_VERSION,
     ExperimentRecord,
     RecordLineage,
     ReplayKind,
     RunRecord,
+)
+from autobench.records.views import (
     experiment_record_payload_from_yaml_view,
+    manifest_payload_from_yaml_view,
     run_record_payload_from_yaml_view,
 )
-from autobench.runtime.pipeline import ExperimentResult, RunResult
+from autobench.runtime.models import ExperimentResult, RunResult
 from autobench.runtime.tasks import TaskResult
 from autobench.runtime.traces import trace_payload_from_yaml_view
 
@@ -37,7 +41,25 @@ def load_experiment_record(run_dir: Path) -> ExperimentRecord:
     raw = load_yaml(run_dir / "experiment.yaml")
     if isinstance(raw, dict):
         raw = experiment_record_payload_from_yaml_view(raw)
-    return ExperimentRecord.model_validate(raw)
+    record = ExperimentRecord.model_validate(raw)
+    if record.manifest_path is not None:
+        resolved_root = run_dir.resolve()
+        manifest_path = (resolved_root / record.manifest_path).resolve()
+        if not manifest_path.is_relative_to(resolved_root):
+            raise ReplayError("Manifest path must stay inside the experiment directory.")
+        try:
+            manifest_raw = load_yaml(manifest_path)
+            if isinstance(manifest_raw, dict):
+                manifest_raw = manifest_payload_from_yaml_view(manifest_raw)
+            manifest = RecordManifest.model_validate(manifest_raw)
+            if manifest.experiment_id != record.experiment_id:
+                raise ReplayError("Manifest experiment identity does not match experiment record.")
+            validate_manifest(run_dir, manifest)
+        except ReplayError:
+            raise
+        except (AutobenchError, OSError, ValueError) as exc:
+            raise ReplayError(f"Invalid experiment manifest: {manifest_path}") from exc
+    return record
 
 
 def load_run_record(path: Path, *, root_dir: Path | None = None) -> RunRecord:
@@ -45,12 +67,27 @@ def load_run_record(path: Path, *, root_dir: Path | None = None) -> RunRecord:
     if isinstance(raw, dict):
         raw = run_record_payload_from_yaml_view(raw)
     record = RunRecord.model_validate(raw)
+    active_root = _record_root(path) if root_dir is None else root_dir
+    resolved_root = active_root.resolve()
+    for artifact in record.artifacts:
+        if artifact.sha256 is None or artifact.byte_count is None:
+            continue
+        if not isinstance(artifact.value, str):
+            raise ReplayError(f"Artifact payload path must be a string: {artifact.id}")
+        payload_path = (resolved_root / artifact.value).resolve()
+        if not payload_path.is_relative_to(resolved_root):
+            raise ReplayError(f"Artifact payload path escapes the experiment: {artifact.id}")
+        if not payload_path.is_file():
+            raise ReplayError(f"Artifact payload does not exist: {artifact.id}")
+        digest, byte_count = hash_and_size(payload_path)
+        if digest != artifact.sha256:
+            raise ReplayError(f"Artifact payload hash mismatch: {artifact.id}")
+        if byte_count != artifact.byte_count:
+            raise ReplayError(f"Artifact payload byte count mismatch: {artifact.id}")
     if record.trace is not None or record.trace_artifact is None:
         return record
     if not isinstance(record.trace_artifact.value, str):
         raise ReplayError("Trace artifact path must be a string.")
-    active_root = _record_root(path) if root_dir is None else root_dir
-    resolved_root = active_root.resolve()
     artifact_path = (resolved_root / record.trace_artifact.value).resolve()
     if not artifact_path.is_relative_to(resolved_root):
         raise ReplayError("Trace artifact path must stay inside the experiment directory.")
@@ -84,10 +121,12 @@ def replay_experiment(run_dir: Path) -> ExperimentResult:
         plan=record.plan,
         runs=runs,
         environment=record.environment,
+        termination=record.termination,
         report_spec_data=record.report_spec_data,
         semantic_registry=record.semantic_registry,
         spec_snapshot=record.spec_snapshot,
         spec_hash=record.spec_hash,
+        correlation=record.correlation,
     )
 
 
@@ -95,6 +134,8 @@ def _run_result_from_record(record: RunRecord) -> RunResult:
     task_result = TaskResult(
         output=record.task_output,
         status=record.task_status,
+        partial=record.partial,
+        end_reason=record.end_reason,
         error=record.error,
         errors=list(record.errors),
         observations=list(record.observations),
@@ -109,6 +150,8 @@ def _run_result_from_record(record: RunRecord) -> RunResult:
         variant_id=record.variant_id,
         status=record.status,
         evaluation_status=record.evaluation_status,
+        partial=record.partial,
+        end_reason=record.end_reason,
         case=record.case,
         task_result=task_result,
         scores=list(record.scores),
@@ -119,6 +162,7 @@ def _run_result_from_record(record: RunRecord) -> RunResult:
         error=record.error,
         trace=record.trace,
         source_snapshots=record.source_snapshots,
+        correlation=record.correlation,
     )
 
 

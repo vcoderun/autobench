@@ -80,10 +80,55 @@ reports separate execution reliability from evaluation quality.
 
 ## Progress Events
 
-`ProgressEvent` and `ProgressEventKind` provide typed lifecycle notifications. Known event fields
-remain stable while event-specific data is carried in the payload. This is the extension surface
-for terminal progress, service runners, and future UIs without coupling the core runtime to one
-frontend.
+`ProgressEvent` is a live, typed observer surface for terminals, service runners, and UIs. Pass one
+or more synchronous or asynchronous handlers to any execution entry point:
+
+```python
+from autobench import ProgressEvent, ProgressEventKind, run_benchmark_spec
+
+
+async def publish(event: ProgressEvent) -> None:
+    if event.kind is ProgressEventKind.RUN_FINISHED:
+        await send_status(event.run_id, event.run_status, event.sequence)
+
+
+result = await run_benchmark_spec(spec, progress_handlers=(publish,))
+```
+
+Runtime delivery has these guarantees:
+
+- `benchmark_started` is emitted once after Autobench owns execution.
+- Each emitted `run_started` receives exactly one `run_finished` on cooperative success, failure,
+  error, skip, or cancellation.
+- `run_finished.run_status` is the final status after cross-run derivation and policies.
+- Failed policies emit `policy_violation`; passing policies do not create noise.
+- `benchmark_finished.experiment_status` is `completed`, `cancelled`, or `aborted`.
+- `sequence` is unique and monotonic for one benchmark execution. Concurrent producers are
+  serialized by the dispatcher; final run events follow logical matrix order.
+
+Handlers run in registration order. A synchronous handler runs inline. An asynchronous handler is
+awaited before the next handler or event, so a slow handler applies deliberate backpressure to the
+benchmark.
+
+Library execution is strict by default. A handler that raises is disabled, remaining handlers still
+receive terminal events, durable recording is finalized, and Autobench then raises
+`ProgressDispatchError`. CLI progress explicitly uses `ProgressErrorPolicy.BEST_EFFORT` and reports
+renderer failures to stderr:
+
+```python
+from autobench import ProgressErrorPolicy, run_benchmark_spec
+
+result = await run_benchmark_spec(
+    spec,
+    progress_handlers=(optional_dashboard,),
+    progress_error_policy=ProgressErrorPolicy.BEST_EFFORT,
+    progress_error_handler=report_dashboard_failure,
+)
+```
+
+Progress is not persistence. The recorder stages evidence through its own lifecycle even when a
+progress handler fails. A hard process death cannot emit terminal events; inspect durable staging
+to recover the last committed evidence.
 
 ## Python Builder
 

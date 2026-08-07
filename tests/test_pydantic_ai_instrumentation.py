@@ -49,6 +49,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets.external import ExternalToolset
 from pydantic_ai.usage import RequestUsage, RunUsage
 
+import autobench.instrumentation.manager as manager_module
 from autobench import (
     DEFAULT_SEMANTIC_REGISTRY,
     Case,
@@ -140,7 +141,7 @@ def test_instrumentor_declares_and_checks_supported_public_capabilities() -> Non
 
     assert compatibility.status is CompatibilityStatus.COMPATIBLE
     assert instrumentor.info.id == "autobench.pydantic_ai"
-    assert instrumentor.info.supported_versions == ">=2.22,<2.23"
+    assert instrumentor.info.supported_versions == ">=2.22,<2.24"
     assert instrumentor.info.capabilities.model_dump(by_alias=True) == {
         "sync": True,
         "async": True,
@@ -157,6 +158,28 @@ def test_instrumentor_declares_and_checks_supported_public_capabilities() -> Non
             "toolset",
         ),
     }
+
+
+@pytest.mark.parametrize(
+    ("target_version", "expected"),
+    [
+        ("2.21.9", CompatibilityStatus.UNSUPPORTED),
+        ("2.22.0", CompatibilityStatus.COMPATIBLE),
+        ("2.23.0", CompatibilityStatus.COMPATIBLE),
+        ("2.24.0", CompatibilityStatus.UNSUPPORTED),
+    ],
+)
+def test_instrumentor_enforces_tested_minor_version_boundaries(
+    target_version: str,
+    expected: CompatibilityStatus,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(manager_module, "version", lambda _distribution: target_version)
+
+    compatibility = InstrumentationManager().check(PydanticAI())
+
+    assert compatibility.status is expected
+    assert compatibility.target_version == target_version
 
 
 def test_instrumentor_reports_missing_broken_and_unsupported_pydantic_ai(
