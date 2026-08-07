@@ -87,7 +87,7 @@ _INFO: dict[InstrumentorName, InstrumentorInfo] = {
         id="autobench.openai",
         version=__version__,
         target_distribution="openai",
-        supported_versions=">=2.52,<2.53",
+        supported_versions=">=2.52,<2.54",
         mechanism=CaptureMechanism.PATCH,
         layer=AbstractionLayer.CLIENT,
         span_kinds=("llm",),

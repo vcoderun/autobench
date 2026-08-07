@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added verified OpenAI Python 2.53 compatibility and a dedicated CI matrix target while retaining
+  OpenAI 2.52 as the minimum supported release.
 - Made behavioral asset definitions full-capture by default while retaining metadata-first runtime
   evidence, and added an independent `asset_default_level` privacy control.
 - Externalized versioned asset snapshots and diffs into one transaction-safe, content-addressed

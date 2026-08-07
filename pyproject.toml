@@ -45,12 +45,12 @@ httpx = [
 ]
 instrumentation = [
     "httpx>=0.28,<0.29",
-    "openai>=2.52,<2.53",
+    "openai>=2.52,<2.54",
     "openai-agents>=0.19.2,<0.20",
     "pydantic-ai-slim>=2.22,<2.23",
 ]
 openai = [
-    "openai>=2.52,<2.53",
+    "openai>=2.52,<2.54",
 ]
 openai-agents = [
     "openai-agents>=0.19.2,<0.20",
