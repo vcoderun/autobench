@@ -19,13 +19,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
 concurrency:
   group: github-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -37,17 +37,12 @@ jobs:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       - run: uv sync --extra dev --frozen
-      - run: make docs
-      - name: Publish generated site branch
-        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./site
-          force_orphan: true
-          full_commit_message: "docs: deploy ${{ github.sha }}"
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
+      - name: Build documentation
+        run: make docs
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+      - name: Upload documentation artifact
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
