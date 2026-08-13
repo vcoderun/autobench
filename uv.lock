@@ -195,9 +195,9 @@ requires-dist = [
     { name = "pydantic", marker = "extra == 'dev'", specifier = ">=2.7" },
     { name = "pydantic-ai-slim", marker = "extra == 'instrumentation'", specifier = ">=2.22,<2.24" },
     { name = "pydantic-ai-slim", marker = "extra == 'pydantic-ai'", specifier = ">=2.22,<2.24" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'dev'", editable = "../pydantic-gepa" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'instrumentation'", editable = "../pydantic-gepa" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'pydantic-gepa'", editable = "../pydantic-gepa" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'dev'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=897925f8ba68849a6454324f3f65a063f2ad65b2" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'instrumentation'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=897925f8ba68849a6454324f3f65a063f2ad65b2" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'pydantic-gepa'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=897925f8ba68849a6454324f3f65a063f2ad65b2" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
@@ -215,7 +215,7 @@ dev = [
     { name = "openai", specifier = "==2.52.0" },
     { name = "openai-agents", specifier = "==0.19.2" },
     { name = "pydantic-ai-slim", specifier = "==2.23.0" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", editable = "../pydantic-gepa" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=897925f8ba68849a6454324f3f65a063f2ad65b2" },
 ]
 matrix = [
     { name = "httpx", specifier = "==0.28.1" },
@@ -224,7 +224,7 @@ matrix = [
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.44,<2" },
     { name = "opentelemetry-sdk", specifier = ">=1.44,<2" },
     { name = "pydantic-ai-slim", specifier = "==2.23.0" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", editable = "../pydantic-gepa" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=897925f8ba68849a6454324f3f65a063f2ad65b2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -1981,7 +1981,8 @@ wheels = [
 
 [[package]]
 name = "pydantic-gepa"
-source = { editable = "../pydantic-gepa" }
+version = "0.1.0a0"
+source = { git = "https://github.com/vcoderun/pydantic-gepa.git?rev=897925f8ba68849a6454324f3f65a063f2ad65b2#897925f8ba68849a6454324f3f65a063f2ad65b2" }
 dependencies = [
     { name = "click", marker = "python_full_version < '3.14'" },
     { name = "pydantic", marker = "python_full_version < '3.14'" },
@@ -1996,42 +1997,6 @@ integrations = [
     { name = "pydantic-ai", marker = "python_full_version < '3.14'" },
     { name = "pydantic-evals", marker = "python_full_version < '3.14'" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "basedpyright", marker = "extra == 'dev'" },
-    { name = "click", specifier = ">=8.1" },
-    { name = "gepa", marker = "extra == 'dev'", git = "https://github.com/gepa-ai/gepa.git?rev=81dbae904bed94f5f3b8b4c704c0a81c7510b986" },
-    { name = "gepa", marker = "extra == 'integrations'", git = "https://github.com/gepa-ai/gepa.git?rev=81dbae904bed94f5f3b8b4c704c0a81c7510b986" },
-    { name = "gepa", extras = ["full"], marker = "extra == 'examples'", git = "https://github.com/gepa-ai/gepa.git?rev=81dbae904bed94f5f3b8b4c704c0a81c7510b986" },
-    { name = "gepa", extras = ["full"], marker = "extra == 'optimize-anything'", git = "https://github.com/gepa-ai/gepa.git?rev=81dbae904bed94f5f3b8b4c704c0a81c7510b986" },
-    { name = "logfire", marker = "extra == 'examples'", specifier = ">=3" },
-    { name = "logfire", marker = "extra == 'logfire'", specifier = ">=3" },
-    { name = "mkdocstrings-python", marker = "extra == 'docs'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pydantic-ai", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "pydantic-ai", marker = "extra == 'examples'", specifier = ">=0.1.0" },
-    { name = "pydantic-ai", marker = "extra == 'integrations'", specifier = ">=0.1.0" },
-    { name = "pydantic-ai", marker = "extra == 'optimize-anything'", specifier = ">=0.1.0" },
-    { name = "pydantic-evals", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "pydantic-evals", marker = "extra == 'examples'", specifier = ">=0.1.0" },
-    { name = "pydantic-evals", marker = "extra == 'integrations'", specifier = ">=0.1.0" },
-    { name = "pydantic-evals", marker = "extra == 'optimize-anything'", specifier = ">=0.1.0" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "python-dotenv", marker = "extra == 'examples'", specifier = ">=1" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "rich", specifier = ">=13" },
-    { name = "rich", marker = "extra == 'dev'", specifier = ">=13" },
-    { name = "rich", marker = "extra == 'progress'", specifier = ">=13" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "ty", marker = "extra == 'dev'" },
-    { name = "typing-extensions", specifier = ">=4.12" },
-    { name = "zensical", marker = "extra == 'docs'" },
-]
-provides-extras = ["dev", "docs", "examples", "integrations", "logfire", "optimize-anything", "progress"]
 
 [[package]]
 name = "pydantic-graph"
