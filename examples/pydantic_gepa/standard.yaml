@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../schemas/0.3.0/benchmark_schema.json
+benchmark:
+  standard-prompt-optimizer:
+    description: Record the standard GEPA backend with a deterministic reflective proposer.
+    cases:
+      - id: routing-instructions
+        input:
+          seed: Return a generic support label.
+          target: Return refund_request.
+        expected:
+          candidate: Return refund_request.
+        tags: [optimizer, offline, standard]
+    run:
+      python: standard_benchmark:run
+    variants:
+      standard_v1:
+        factors:
+          optimizer_backend:
+            value: standard
+            optimize: false
+    instrumentation:
+      pydantic_gepa:
+        detail: full
+        assets:
+          discover: true
+          representations: [definition, effective]
+    score:
+      final_candidate:
+        exact:
+          actual: output.candidate
+          expected: case.expected.candidate
+        semantic: quality.correctness
+        goal: maximize
+        role: objective

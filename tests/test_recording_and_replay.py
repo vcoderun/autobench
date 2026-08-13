@@ -962,6 +962,7 @@ def test_run_record_from_result_serializes_artifacts_and_rejects_collisions(
         factors=[],
         scores=[],
         error=task_error,
+        extensions={"integration/v1": {"status": "partial"}},
     )
     artifacts_dir = tmp_path / "artifacts"
 
@@ -973,6 +974,7 @@ def test_run_record_from_result_serializes_artifacts_and_rejects_collisions(
         "ValueError",
     ]
     assert record.artifacts[0].value == "artifacts/unnamed/unnamed.yaml"
+    assert record.extensions == {"integration/v1": {"status": "partial"}}
     artifact_payload = load_yaml(tmp_path / record.artifacts[0].value)
     assert artifact_payload["record"] == {"type": "artifact_payload", "version": 1}
     assert artifact_payload["artifact"]["id"] == "???"

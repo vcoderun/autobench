@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=../../schemas/0.3.0/benchmark_schema.json
+benchmark:
+  multi-component-optimizer:
+    description: Optimize prompt, tool schema, and output schema as one typed candidate.
+    cases:
+      - id: support-components
+        input:
+          prompt: Route refund requests to the refund workflow.
+          tool_schema: search_refunds(order_id)
+          output_schema: "decision: refund_request"
+        expected:
+          prompt: Route refund requests to the refund workflow.
+          tool_schema: search_refunds(order_id)
+          output_schema: "decision: refund_request"
+        tags: [optimizer, offline, multi-component]
+    run:
+      python: multi_component_benchmark:run
+    variants:
+      components_v1:
+        factors:
+          candidate_mode:
+            value: components
+            optimize: false
+    instrumentation:
+      pydantic_gepa:
+        detail: evaluations
+        assets:
+          discover: true
+          representations: [definition, effective]
+          include: [prompt, tool, output_schema]
+    score:
+      prompt:
+        exact:
+          actual: output.prompt
+          expected: case.expected.prompt
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+      tool_schema:
+        exact:
+          actual: output.tool_schema
+          expected: case.expected.tool_schema
+        semantic: agent.tool.quality
+        goal: maximize
+        role: diagnostic
+      output_schema:
+        exact:
+          actual: output.output_schema
+          expected: case.expected.output_schema
+        semantic: quality.schema
+        goal: maximize
+        role: diagnostic

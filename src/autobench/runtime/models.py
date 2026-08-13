@@ -4,7 +4,7 @@ from enum import StrEnum
 from math import isfinite
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 from autobench.data.datasets import Case
 from autobench.data.variants import FactorValue, Variant
@@ -201,6 +201,7 @@ class RunResult(BaseModel):
     error: ErrorRecord | None = None
     trace: Trace | None = None
     source_snapshots: tuple[SourceSnapshot, ...] = ()
+    extensions: dict[str, JsonValue] = Field(default_factory=dict)
     correlation: ExecutionCorrelation | None = None
 
 

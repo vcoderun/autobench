@@ -13,7 +13,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, BinaryIO, Literal, Protocol, TypeVar, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, model_validator
 
 from autobench.errors import ErrorRecord
 from autobench.io import dump_yaml, load_yaml
@@ -197,6 +197,7 @@ class PartialRunSnapshot(BaseModel):
     asset_versions: tuple[AssetVersion, ...] = ()
     asset_uses: tuple[AssetUse, ...] = ()
     source_snapshots: tuple[SourceSnapshot, ...] = ()
+    extensions: dict[str, JsonValue] = Field(default_factory=dict)
     trace: Trace | None = None
     signal_sequence_watermark: int = Field(default=0, ge=0)
     correlation: ExecutionCorrelation | None = None
@@ -1702,6 +1703,7 @@ def partial_snapshot_to_yaml_view(snapshot: PartialRunSnapshot) -> dict[str, Any
             "source_snapshots": [
                 item.model_dump(mode="json") for item in snapshot.source_snapshots
             ],
+            "extensions": snapshot.extensions,
             "trace": None if snapshot.trace is None else snapshot.trace.model_dump(mode="json"),
         },
     }
@@ -1740,6 +1742,7 @@ def partial_snapshot_from_yaml_view(value: Any) -> PartialRunSnapshot:
             "asset_versions": evidence.get("asset_versions", []),
             "asset_uses": evidence.get("asset_uses", []),
             "source_snapshots": evidence.get("source_snapshots", []),
+            "extensions": evidence.get("extensions", {}),
             "trace": evidence.get("trace"),
             "correlation": run.get("correlation"),
         }
@@ -1989,6 +1992,7 @@ def checkpoint_run_record(
         asset_versions=snapshot.asset_versions,
         asset_uses=snapshot.asset_uses,
         source_snapshots=snapshot.source_snapshots,
+        extensions=snapshot.extensions,
         errors=errors,
         error=errors[0] if errors else None,
         correlation=snapshot.correlation,

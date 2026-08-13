@@ -444,6 +444,7 @@ def _render_report_tables(
     report: BenchmarkReport,
 ) -> None:
     console.print(_status_table(report))
+    _render_optimization_tables(console, report)
     console.print(_variant_config_table(report))
     for table in _leaderboard_tables(report):
         console.print(table)
@@ -467,6 +468,198 @@ def _render_report_tables(
             row.extend(_format_value(summaries.get(summary_name)) for summary_name in summary_names)
             table.add_row(*row)
         console.print(table)
+
+
+def _render_optimization_tables(console: Console, report: BenchmarkReport) -> None:
+    if report.optimization_warnings:
+        console.print(_warnings_panel(report.optimization_warnings))
+    if not report.optimizations:
+        return
+
+    summary = _data_table("Pydantic-GEPA Optimizations")
+    summary.add_column("Case", no_wrap=True)
+    summary.add_column("Variant", no_wrap=True)
+    summary.add_column("Recipe", style="bold")
+    summary.add_column("Status", no_wrap=True)
+    summary.add_column("Score", justify="right", no_wrap=True)
+    for optimization in report.optimizations:
+        execution = optimization.execution
+        optimizer = execution.engine or execution.composition or "-"
+        summary.add_row(
+            optimization.case_id,
+            optimization.variant_id,
+            optimizer,
+            execution.status,
+            _format_value(execution.final_score),
+        )
+    console.print(summary)
+
+    resources = _data_table("Optimization Resources")
+    resources.add_column("Case", style="bold", no_wrap=True)
+    resources.add_column("Variant", no_wrap=True)
+    resources.add_column("Evaluation Calls")
+    resources.add_column("Optimizer Cost")
+    resources.add_column("Evaluator Cost", justify="right", no_wrap=True)
+    resources.add_column("Total Cost", justify="right", no_wrap=True)
+    for optimization in report.optimizations:
+        execution = optimization.execution
+        evaluations = str(execution.evaluations_used)
+        if execution.evaluations_limit is not None:
+            evaluations = f"{evaluations} / {execution.evaluations_limit}"
+        if execution.evaluations_remaining is not None:
+            evaluations = f"{evaluations} ({execution.evaluations_remaining} left)"
+        optimizer_cost = _format_value(execution.optimizer_cost_used)
+        if execution.optimizer_cost_limit is not None:
+            optimizer_cost = f"{optimizer_cost} / {_format_value(execution.optimizer_cost_limit)}"
+        if execution.optimizer_cost_remaining is not None:
+            optimizer_cost = (
+                f"{optimizer_cost} ({_format_value(execution.optimizer_cost_remaining)} left)"
+            )
+        resources.add_row(
+            optimization.case_id,
+            optimization.variant_id,
+            evaluations,
+            optimizer_cost,
+            _format_value(execution.evaluation_cost_used),
+            _format_value(execution.total_cost_used),
+        )
+    console.print(resources)
+
+    engines = _data_table("Optimization Engines")
+    engines.add_column("Engine Run", style="bold", no_wrap=True)
+    engines.add_column("Engine", no_wrap=True)
+    engines.add_column("Step / Branch", no_wrap=True)
+    engines.add_column("Status", no_wrap=True)
+    engines.add_column("Score", justify="right", no_wrap=True)
+    engine_count = 0
+    engine_resource_count = 0
+    engine_resources = _data_table("Optimization Engine Resources")
+    engine_resources.add_column("Engine Run", style="bold", no_wrap=True)
+    engine_resources.add_column("Evaluations", justify="right", no_wrap=True)
+    engine_resources.add_column("Optimizer Cost", justify="right", no_wrap=True)
+    engine_resources.add_column("Evaluator Cost", justify="right", no_wrap=True)
+    engine_resources.add_column("Total Cost", justify="right", no_wrap=True)
+    for optimization in report.optimizations:
+        for engine in optimization.execution.engines:
+            engine_count += 1
+            engines.add_row(
+                _short_identifier(engine.execution_id),
+                engine.engine or "-",
+                " / ".join(value for value in (engine.step_id, engine.branch_id) if value) or "-",
+                engine.status,
+                _format_value(engine.score),
+            )
+            if any(
+                value is not None
+                for value in (
+                    engine.evaluations_used,
+                    engine.optimizer_cost_used,
+                    engine.evaluation_cost_used,
+                    engine.total_cost_used,
+                )
+            ):
+                engine_resource_count += 1
+                evaluations = _format_value(engine.evaluations_used)
+                if engine.evaluations_limit is not None:
+                    evaluations = f"{evaluations} / {engine.evaluations_limit}"
+                optimizer_cost = _format_value(engine.optimizer_cost_used)
+                if engine.optimizer_cost_limit is not None:
+                    optimizer_cost = (
+                        f"{optimizer_cost} / {_format_value(engine.optimizer_cost_limit)}"
+                    )
+                engine_resources.add_row(
+                    _short_identifier(engine.execution_id),
+                    evaluations,
+                    optimizer_cost,
+                    _format_value(engine.evaluation_cost_used),
+                    _format_value(engine.total_cost_used),
+                )
+    if engine_count:
+        console.print(engines)
+    if engine_resource_count:
+        console.print(engine_resources)
+
+    candidates = _data_table("Candidate Lineage")
+    candidates.add_column("Candidate", style="bold", no_wrap=True)
+    candidates.add_column("Lifecycle")
+    candidates.add_column("Parents")
+    candidates.add_column("Score", justify="right", no_wrap=True)
+    candidates.add_column("Generation", justify="right", no_wrap=True)
+    candidate_count = 0
+    for optimization in report.optimizations:
+        for candidate in optimization.execution.candidates:
+            candidate_count += 1
+            statuses = candidate.statuses or (candidate.status,)
+            candidates.add_row(
+                _short_identifier(candidate.id),
+                " -> ".join(statuses),
+                ", ".join(_short_identifier(parent) for parent in candidate.parent_ids) or "-",
+                _format_value(candidate.score),
+                _format_value(candidate.generation),
+            )
+    if candidate_count:
+        console.print(candidates)
+
+    components = _data_table("Optimization Component Versions")
+    components.add_column("Candidate", style="bold", no_wrap=True)
+    components.add_column("Component")
+    components.add_column("Asset Version")
+    component_count = 0
+    for optimization in report.optimizations:
+        for candidate in optimization.execution.candidates:
+            for component, version in candidate.component_versions.items():
+                component_count += 1
+                components.add_row(
+                    _short_identifier(candidate.id),
+                    component,
+                    _short_identifier(version.rsplit("@", 1)[-1]),
+                )
+    if component_count:
+        console.print(components)
+
+    selections = _data_table("Optimization Selections")
+    selections.add_column("Method", no_wrap=True)
+    selections.add_column("Winner", style="bold", no_wrap=True)
+    selections.add_column("Contenders")
+    selections.add_column("Score", justify="right", no_wrap=True)
+    selections.add_column("Reason")
+    selection_count = 0
+    for optimization in report.optimizations:
+        for selection in optimization.execution.selections:
+            selection_count += 1
+            selections.add_row(
+                selection.method,
+                _short_identifier(selection.selected_execution_id),
+                "\n".join(
+                    _short_identifier(contender) for contender in selection.contender_execution_ids
+                ),
+                _format_value(selection.score),
+                selection.reason or "-",
+            )
+    if selection_count:
+        console.print(selections)
+
+    evidence_warnings = [
+        f"execution {optimization.execution.execution_id}: "
+        f"status={optimization.execution.status}, "
+        f"diagnostics={optimization.execution.diagnostic_count}"
+        for optimization in report.optimizations
+        if optimization.execution.status == "partial" or optimization.execution.diagnostic_count > 0
+    ]
+    if evidence_warnings:
+        console.print(_warnings_panel(evidence_warnings))
+
+
+def _short_identifier(value: str, *, limit: int = 20) -> str:
+    if len(value) <= limit:
+        return value
+    parts = value.split(":")
+    if len(parts) > 2:
+        scoped = ":".join(parts[-2:])
+        if len(scoped) <= limit:
+            return scoped
+    edge = (limit - 3) // 2
+    return f"{value[:edge]}...{value[-edge:]}"
 
 
 def _leaderboard_tables(report: BenchmarkReport) -> list[Table]:
@@ -627,6 +820,32 @@ def _run_metric_tables(report: BenchmarkReport) -> list[Table]:
                         "cost_per_function_usd",
                     ),
                 ),
+                (
+                    "Run Metrics: Optimization Outcome",
+                    (
+                        "optimizer_score",
+                        "final_score",
+                        "final_rescore",
+                    ),
+                ),
+                (
+                    "Run Metrics: Optimization Evaluation",
+                    (
+                        "score",
+                        "evaluation_score",
+                        "candidate_score",
+                        "stage_score",
+                    ),
+                ),
+                (
+                    "Run Metrics: Optimization Budget",
+                    (
+                        "optimizer_evaluations",
+                        "evaluation_call_limit",
+                        "evaluation_calls_used",
+                        "evaluation_calls_remaining",
+                    ),
+                ),
             ),
         )
     ]
@@ -712,20 +931,31 @@ _COLUMN_ALIASES: Mapping[str, str] = {
     "cost_usd": "cost",
     "coverage": "coverage",
     "error_snippet_count": "err snippets",
+    "evaluation_call_limit": "eval limit",
+    "evaluation_calls_remaining": "eval left",
+    "evaluation_calls_used": "eval used",
+    "evaluation_score": "eval score",
     "exploration_model": "exploration model",
     "function_count": "functions",
+    "final_candidate": "final",
+    "final_rescore": "rescore",
+    "final_score": "final score",
     "input_tokens": "input toks",
     "latency": "latency",
     "median_latency_s": "med latency",
     "model_slug": "model slug",
     "output_tokens": "output toks",
+    "optimizer_evaluations": "evals",
+    "optimizer_score": "opt score",
     "p95_latency_s": "p95 latency",
     "pass_rate": "pass rate",
     "raises_count": "raises",
     "refinement_rounds": "rounds",
     "request_count": "requests",
+    "candidate_score": "cand score",
     "snippet_count": "snippets",
     "spec_model": "spec model",
+    "stage_score": "stage score",
     "success": "success",
     "total_cost": "total cost",
     "total_cost_usd": "total cost",
@@ -763,7 +993,15 @@ def _metric_groups(
             remaining = [metric_name for metric_name in remaining if metric_name not in selected]
     if remaining:
         grouped.append((f"{default_title}: Other", remaining))
-    return grouped
+    bounded: list[tuple[str, list[str]]] = []
+    max_metrics = 3
+    for title, names in grouped:
+        chunk_count = (len(names) + max_metrics - 1) // max_metrics
+        for index in range(0, len(names), max_metrics):
+            chunk = names[index : index + max_metrics]
+            suffix = "" if chunk_count == 1 else f" ({index // max_metrics + 1}/{chunk_count})"
+            bounded.append((f"{title}{suffix}", chunk))
+    return bounded
 
 
 def _ordered_metric_names(report: BenchmarkReport) -> list[str]:

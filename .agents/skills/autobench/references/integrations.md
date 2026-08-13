@@ -9,6 +9,7 @@
 - [OpenAI Python](#openai-python)
 - [OpenAI Agents](#openai-agents)
 - [HTTPX](#httpx)
+- [Pydantic-GEPA](#pydantic-gepa)
 - [Custom SDKs](#custom-sdks)
 - [Diagnostics](#diagnostics)
 
@@ -21,11 +22,43 @@ uv add 'autobench[pydantic-ai]'
 uv add 'autobench[openai]'
 uv add 'autobench[openai-agents]'
 uv add 'autobench[httpx]'
+uv add 'autobench[pydantic-gepa]'
 uv add 'autobench[instrumentation]'
 ```
 
-The combined instrumentation extra includes the supported Pydantic AI, OpenAI, OpenAI Agents, and
-HTTPX versions. Check the target package's `pyproject.toml` rather than assuming version ranges.
+The combined instrumentation extra includes the supported Pydantic AI, OpenAI, OpenAI Agents,
+HTTPX, and pydantic-gepa versions. Check the target package's `pyproject.toml` rather than assuming
+version ranges.
+
+## Pydantic-GEPA
+
+Use `autobench[pydantic-gepa]` to record optimizer lifecycle without a handwritten observer. YAML
+configuration is:
+
+```yaml
+instrumentation:
+  pydantic_gepa:
+    detail: full
+    assets:
+      representations: [definition, effective]
+```
+
+The instrumentor subscribes to pydantic-gepa event contract `1` and records optimization,
+composition, engine, evaluation, candidate, reflection, and final-rescore lifecycle. It also
+records objective and dataset declarations, evaluation/optimizer budgets, selection contenders,
+candidate parentage, and effective component asset versions. `summary`, `evaluations`, and `full`
+control high-cardinality spans; the replay-safe `autobench.pydantic_gepa/v1` extension is retained
+in every mode.
+
+Do not write a second Autobench observer or duplicate Pydantic AI/OpenAI usage on optimizer spans.
+Those nested native instrumentors own direct model/token/request evidence. Use the maintained
+`examples/pydantic_gepa` project and the canonical
+`docs/pydantic-gepa-instrumentation.md` page for the full contract.
+
+The maintained offline matrix covers the standard GEPA backend, an Optimize Anything Omni
+pipeline, one coupled prompt/tool/output-schema candidate, and checkpoint resume. The optional
+live example proves that optimizer evidence can contain native Pydantic AI and HTTPX evidence
+without assigning model usage to optimizer spans a second time.
 
 ## Automatic Instrumentation
 
@@ -181,4 +214,3 @@ When native evidence is missing:
 5. verify the SDK version is supported;
 6. inspect trace composition for suppression or duplicate layers;
 7. use manual spans only for application operations no native boundary can observe.
-

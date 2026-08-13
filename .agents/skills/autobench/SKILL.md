@@ -82,6 +82,8 @@ current source, tests, schemas, and canonical docs before this bundled summary.
 - `examples/abp_manual`: explicit workflow span plus generic method instrumentation.
 - `examples/pydantic_ai`: real Pydantic AI `TestModel`, `instrument_all()`, structured output,
   capabilities, tools, and automatic asset lineage.
+- `examples/pydantic_gepa`: standard GEPA, Optimize Anything Omni, multi-component candidate,
+  checkpoint/resume, and optional live Pydantic AI optimizer instrumentation.
 - `examples/otlp_export`: replay a real record into an injected offline OTLP exporter.
 
 Copy a maintained example into a new directory with:

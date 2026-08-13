@@ -162,6 +162,7 @@ def _run_result_from_record(record: RunRecord) -> RunResult:
         error=record.error,
         trace=record.trace,
         source_snapshots=record.source_snapshots,
+        extensions=record.extensions,
         correlation=record.correlation,
     )
 

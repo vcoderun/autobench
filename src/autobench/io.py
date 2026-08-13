@@ -446,6 +446,7 @@ def benchmark_schema() -> SchemaDocument:
                                     "type": "string",
                                     "enum": [
                                         "pydantic_ai",
+                                        "pydantic_gepa",
                                         "openai",
                                         "openai_agents",
                                         "httpx",
@@ -463,6 +464,28 @@ def benchmark_schema() -> SchemaDocument:
             "pydantic_ai": {
                 **semantic_switch,
                 "description": "Pydantic AI agent, model, tool, and validation capture.",
+            },
+            "pydantic_gepa": {
+                "description": (
+                    "pydantic-gepa optimizer lifecycle, candidate, score, budget, and asset "
+                    "capture."
+                ),
+                "oneOf": [
+                    {"type": "boolean"},
+                    {
+                        "type": "object",
+                        "properties": {
+                            "enabled": {"type": "boolean", "default": True},
+                            "detail": {
+                                "type": "string",
+                                "enum": ["summary", "evaluations", "full"],
+                                "default": "full",
+                            },
+                            "assets": asset_discovery,
+                        },
+                        "additionalProperties": False,
+                    },
+                ],
             },
             "openai": {
                 **semantic_switch,

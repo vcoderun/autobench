@@ -138,6 +138,22 @@ benchmark run is active. Check:
 Run the offline `examples/automatic_assets/` programs to separate environment issues from
 application behavior.
 
+## Pydantic-GEPA Optimization Evidence Is Missing
+
+The observer records only while an Autobench run context is active. Check:
+
+- `autobench[pydantic-gepa]` is installed on Python 3.11-3.13;
+- `autobench instrumentation doctor` reports event contract version `1` as compatible;
+- the YAML contains `instrumentation.pydantic_gepa` or `instrument_all()` selected it;
+- the optimization call occurs inside `task(ctx, case)`;
+- the instrumentor is not disabled or suppressed;
+- the record contains the `autobench.pydantic_gepa/v1` extension.
+
+Use `detail: evaluations` or `detail: full` when per-candidate and per-case spans are expected.
+`summary` intentionally omits those spans but still records budgets, selections, candidates, and
+the durable projection. The complete workflow is in
+[Pydantic-GEPA Instrumentation](pydantic-gepa-instrumentation.md).
+
 ## Duplicate Or Conflicting Instrumentation
 
 Autobench prevents unsafe double patching. Do not install two instrumentors with the same ID or

@@ -8,6 +8,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from autobench.instrumentation.pydantic_gepa.projection import (
+    EXTENSION_KEY as PYDANTIC_GEPA_EXTENSION,
+)
+from autobench.instrumentation.pydantic_gepa.projection import (
+    OptimizationExecution,
+    PydanticGEPAEvidence,
+)
 from autobench.metrics.observations import Observation, ObservationKind
 from autobench.metrics.projection import observation_priority, source_priority
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, Semantic, SemanticRegistry
@@ -110,6 +117,13 @@ class MetricDistribution(BaseModel):
     summaries: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
+class OptimizationRunReport(BaseModel):
+    benchmark_run_id: str
+    case_id: str
+    variant_id: str
+    execution: OptimizationExecution
+
+
 class BenchmarkReport(BaseModel):
     benchmark_id: str
     experiment_id: str
@@ -121,6 +135,8 @@ class BenchmarkReport(BaseModel):
     case_matrix: CaseMatrix
     comparisons: list[ComparisonReport] = Field(default_factory=list)
     distributions: list[MetricDistribution] = Field(default_factory=list)
+    optimizations: list[OptimizationRunReport] = Field(default_factory=list)
+    optimization_warnings: list[str] = Field(default_factory=list)
     correlation: ExecutionCorrelation | None = None
 
 
@@ -167,6 +183,7 @@ def build_report(
         active_report_spec = ReportSpec.model_validate(result.report_spec_data)
     if active_report_spec is None:
         active_report_spec = ReportSpec()
+    optimizations, optimization_warnings = build_optimization_runs(result)
     return BenchmarkReport(
         benchmark_id=result.benchmark_id,
         experiment_id=result.experiment_id,
@@ -204,8 +221,36 @@ def build_report(
             )
             for distribution in active_report_spec.distributions
         ],
+        optimizations=optimizations,
+        optimization_warnings=optimization_warnings,
         correlation=result.correlation,
     )
+
+
+def build_optimization_runs(
+    result: ExperimentResult,
+) -> tuple[list[OptimizationRunReport], list[str]]:
+    reports: list[OptimizationRunReport] = []
+    warnings: list[str] = []
+    for run in result.runs:
+        payload = run.extensions.get(PYDANTIC_GEPA_EXTENSION)
+        if payload is None:
+            continue
+        try:
+            evidence = PydanticGEPAEvidence.model_validate(payload)
+        except ValueError as error:
+            warnings.append(f"run {run.run_id}: invalid pydantic-gepa evidence: {error}")
+            continue
+        reports.extend(
+            OptimizationRunReport(
+                benchmark_run_id=run.run_id,
+                case_id=run.case_id,
+                variant_id=run.variant_id,
+                execution=execution,
+            )
+            for execution in evidence.executions
+        )
+    return reports, warnings
 
 
 def correlation_matches(
@@ -677,6 +722,115 @@ def render_markdown_report(report: BenchmarkReport) -> str:
                     + " | ".join(_format_value(summaries.get(name)) for name in summary_names)
                     + " |"
                 )
+
+    if report.optimizations:
+        lines.extend(["", "## Pydantic-GEPA Optimizations", ""])
+        lines.append(
+            "| run | case | variant | execution | backend | engine/composition | status | "
+            "final score | evaluations | optimizer cost | evaluator cost | total cost |"
+        )
+        lines.append(
+            "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |"
+        )
+        for optimization in report.optimizations:
+            execution = optimization.execution
+            optimizer = execution.engine or execution.composition or ""
+            evaluations = str(execution.evaluations_used)
+            if execution.evaluations_limit is not None:
+                evaluations = f"{evaluations}/{execution.evaluations_limit}"
+            optimizer_cost = _format_value(execution.optimizer_cost_used)
+            if execution.optimizer_cost_limit is not None:
+                optimizer_cost = f"{optimizer_cost}/{_format_value(execution.optimizer_cost_limit)}"
+            lines.append(
+                "| "
+                + " | ".join(
+                    (
+                        optimization.benchmark_run_id,
+                        optimization.case_id,
+                        optimization.variant_id,
+                        execution.execution_id,
+                        execution.backend or "",
+                        optimizer,
+                        execution.status,
+                        _format_value(execution.final_score),
+                        evaluations,
+                        optimizer_cost,
+                        _format_value(execution.evaluation_cost_used),
+                        _format_value(execution.total_cost_used),
+                    )
+                )
+                + " |"
+            )
+
+        engines = [
+            engine
+            for optimization in report.optimizations
+            for engine in optimization.execution.engines
+        ]
+        if engines:
+            lines.extend(["", "### Engine Runs", ""])
+            lines.append(
+                "| execution | engine | step | branch | status | score | evaluations | "
+                "optimizer cost | evaluator cost | total cost |"
+            )
+            lines.append("| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |")
+            for engine in engines:
+                evaluations = _format_value(engine.evaluations_used)
+                if engine.evaluations_limit is not None:
+                    evaluations = f"{evaluations}/{engine.evaluations_limit}"
+                optimizer_cost = _format_value(engine.optimizer_cost_used)
+                if engine.optimizer_cost_limit is not None:
+                    optimizer_cost = (
+                        f"{optimizer_cost}/{_format_value(engine.optimizer_cost_limit)}"
+                    )
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        (
+                            engine.execution_id,
+                            engine.engine or "",
+                            engine.step_id or "",
+                            engine.branch_id or "",
+                            engine.status,
+                            _format_value(engine.score),
+                            evaluations,
+                            optimizer_cost,
+                            _format_value(engine.evaluation_cost_used),
+                            _format_value(engine.total_cost_used),
+                        )
+                    )
+                    + " |"
+                )
+
+        candidates = [
+            (optimization.execution.execution_id, candidate)
+            for optimization in report.optimizations
+            for candidate in optimization.execution.candidates
+        ]
+        if candidates:
+            lines.extend(["", "### Candidate Lineage", ""])
+            lines.append("| execution | candidate | lifecycle | parents | score | components |")
+            lines.append("| --- | --- | --- | --- | ---: | ---: |")
+            for execution_id, candidate in candidates:
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        (
+                            execution_id,
+                            candidate.id,
+                            " -> ".join(candidate.statuses or (candidate.status,)),
+                            ", ".join(candidate.parent_ids),
+                            _format_value(candidate.score),
+                            str(len(candidate.component_versions)),
+                        )
+                    )
+                    + " |"
+                )
+    if report.optimization_warnings:
+        lines.extend(
+            ["", "### Optimization Evidence Warnings", ""]
+            + [f"- {warning}" for warning in report.optimization_warnings]
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -722,6 +876,7 @@ __all__ = (
     "LeaderboardRow",
     "MetricDistribution",
     "MetricAggregation",
+    "OptimizationRunReport",
     "ReportSpec",
     "RunMetricRow",
     "VariantConfigRow",
@@ -729,6 +884,7 @@ __all__ = (
     "build_case_matrix",
     "build_leaderboard",
     "build_metric_distribution",
+    "build_optimization_runs",
     "build_report",
     "build_run_metric_rows",
     "build_status_counts",

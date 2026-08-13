@@ -15,6 +15,7 @@ from autobench.instrumentation.config import (
     OpenAIAgentsInstrumentation,
     OpenAIInstrumentation,
     PydanticAIInstrumentation,
+    PydanticGEPAInstrumentation,
 )
 from autobench.instrumentation.manager import InstrumentationManager
 from autobench.instrumentation.models import (
@@ -42,6 +43,7 @@ class InstrumentorStatus(BaseModel):
 
 _CONFIGS: tuple[BuiltinInstrumentationConfig, ...] = (
     PydanticAIInstrumentation(),
+    PydanticGEPAInstrumentation(),
     OpenAIInstrumentation(),
     OpenAIAgentsInstrumentation(),
     HTTPXInstrumentation(),
@@ -49,6 +51,7 @@ _CONFIGS: tuple[BuiltinInstrumentationConfig, ...] = (
 
 _EXTRAS: dict[InstrumentorName, str] = {
     "pydantic_ai": "pydantic-ai",
+    "pydantic_gepa": "pydantic-gepa",
     "openai": "openai",
     "openai_agents": "openai-agents",
     "httpx": "httpx",
@@ -80,6 +83,46 @@ _INFO: dict[InstrumentorName, InstrumentorInfo] = {
                 "prompt",
                 "tool",
                 "toolset",
+            ),
+        ),
+    ),
+    "pydantic_gepa": InstrumentorInfo(
+        id="autobench.pydantic_gepa",
+        version=__version__,
+        target_distribution="pydantic-gepa",
+        supported_versions=">=0.1.0a0,<0.2",
+        mechanism=CaptureMechanism.CALLBACK,
+        layer=AbstractionLayer.FRAMEWORK,
+        span_kinds=(
+            "optimization",
+            "workflow",
+            "candidate",
+            "evaluation",
+            "reflection",
+            "scorer",
+        ),
+        semantic_families=(
+            "optimization",
+            "evaluation",
+            "candidate",
+            "asset",
+            "checkpoint",
+        ),
+        source_convention="pydantic-gepa",
+        source_convention_version="1",
+        capabilities=InstrumentorCapabilities(
+            sync=True,
+            async_=True,
+            native_hooks=True,
+            asset_discovery=True,
+            asset_kinds=(
+                "prompt",
+                "tool",
+                "input_schema",
+                "output_schema",
+                "field_description",
+                "schema_description",
+                "optimization_component",
             ),
         ),
     ),
@@ -160,6 +203,10 @@ def resolve_instrumentor(config: BuiltinInstrumentationConfig) -> Instrumentor:
             from autobench.instrumentation.pydantic_ai import PydanticAI
 
             return PydanticAI(discovery=config.assets)
+        if isinstance(config, PydanticGEPAInstrumentation):
+            from autobench.instrumentation.pydantic_gepa import PydanticGEPA
+
+            return PydanticGEPA(detail=config.detail, discovery=config.assets)
         if isinstance(config, OpenAIInstrumentation):
             from autobench.instrumentation.openai import OpenAIClient
 
@@ -207,6 +254,7 @@ def resolve_instrumentors(
                     config,
                     (
                         PydanticAIInstrumentation,
+                        PydanticGEPAInstrumentation,
                         OpenAIInstrumentation,
                         OpenAIAgentsInstrumentation,
                     ),
@@ -298,6 +346,8 @@ def _capture_mode(config: BuiltinInstrumentationConfig) -> str:
         capture = config.capture
         bodies = "bodies" if capture.request_body or capture.response_body else "no bodies"
         return f"path={capture.path}, {bodies}, selected headers"
+    if isinstance(config, PydanticGEPAInstrumentation):
+        return f"detail={config.detail}, optimizer lifecycle, scores, budgets, assets"
     return "metadata, lifecycle, usage"
 
 

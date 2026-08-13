@@ -5,8 +5,8 @@ Autobench supports four collection styles that can be mixed in one run:
 1. Explicit `RunContext` and `Span` calls inside a task.
 2. Lightweight method instrumentation for existing application classes.
 3. Trace-envelope adapters for an external agent or workflow runtime.
-4. Native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX instrumentors configured from Python or
-   YAML.
+4. Native Pydantic AI, pydantic-gepa, OpenAI, OpenAI Agents, and HTTPX instrumentors configured
+   from Python or YAML.
 
 OpenTelemetry is not a core dependency. The optional outbound
 [OTLP exporter](otlp-export.md) can replay immutable Autobench evidence to compatible backends,
@@ -14,6 +14,10 @@ while ABP remains the canonical evidence model.
 
 See [Native Instrumentation](native-instrumentation.md) for the typed fluent API, YAML DSL,
 compatibility doctor, privacy defaults, layered traces, and provider examples.
+
+Optimizer runs use the same ABP collector through the typed pydantic-gepa event subscription. See
+[Pydantic-GEPA Instrumentation](pydantic-gepa-instrumentation.md) for keyed detached lifecycle,
+candidate lineage, budgets, and Optimize Anything composition evidence.
 
 ABP is the native collection protocol underneath these APIs. It owns signal ordering, task-local
 context, capture policy, instrumentation scope, trace materialization, and compatibility

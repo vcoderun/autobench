@@ -66,10 +66,11 @@ See [Tasks And Runtime](tasks-and-runtime.md).
 See [Observations And Semantics](observations-and-semantics.md) and
 [Instrumentation And Traces](instrumentation-and-traces.md).
 
-Native Pydantic AI, OpenAI, OpenAI Agents, and HTTPX integrations can be selected through typed
-Python settings or the YAML `instrumentation` section. They emit ABP directly, compose across
-framework/client/transport layers, preserve streaming lifecycle, and remain optional for replay.
-See [Native Instrumentation](native-instrumentation.md).
+Native Pydantic AI, pydantic-gepa, OpenAI, OpenAI Agents, and HTTPX integrations can be selected
+through typed Python settings or the YAML `instrumentation` section. They emit ABP directly,
+compose across optimizer/framework/client/transport layers, preserve lifecycle, and remain optional
+for replay. See [Native Instrumentation](native-instrumentation.md) and
+[Pydantic-GEPA Instrumentation](pydantic-gepa-instrumentation.md).
 
 Semantic instrumentors automatically discover SDK-visible prompt, tool, output-schema, capability,
 agent, guardrail, handoff, policy, and toolset versions. Definition/effective relationships,
@@ -153,6 +154,7 @@ typing. See [Asset Tracking](asset-tracking.md) and
 | Correlated reports | Field filters and `group_id` report groups across independent experiment results |
 | Replay | Load records without importing task or scorer modules |
 | Rich terminal reports | Status, variant configuration, leaderboard, run metrics, case matrix, comparisons, and distributions |
+| Optimizer reports | pydantic-gepa outcome/resources, engine branches, candidate lineage, component versions, selections, and diagnostics |
 | Exports | Human-readable YAML summary, CSV run projection, and Markdown report |
 | Optimization feedback | Failure category, score, reasons, factors, asset versions, and selected evidence |
 

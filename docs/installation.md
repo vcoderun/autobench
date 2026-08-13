@@ -39,6 +39,15 @@ environment. OpenAI Agents support has its own extra:
 uv add 'autobench[openai-agents]'
 ```
 
+Install only the native pydantic-gepa optimizer integration with:
+
+```bash
+uv add 'autobench[pydantic-gepa]'
+```
+
+It records optimizer lifecycle, evaluation evidence, budgets, candidate lineage, and component
+asset versions. See [Pydantic-GEPA Instrumentation](pydantic-gepa-instrumentation.md).
+
 Inspect what the current environment can instrument:
 
 ```bash

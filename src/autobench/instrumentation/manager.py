@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from enum import Enum, auto
 from importlib.metadata import PackageNotFoundError, version
+from threading import RLock
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
+from pydantic import JsonValue
 
 from autobench.instrumentation.models import (
     Compatibility,
@@ -23,8 +26,16 @@ from autobench.metrics.observations import Direction, ObservationRole, Observati
 from autobench.metrics.semantics import SemanticType
 from autobench.protocol.collector import Emitter
 from autobench.protocol.context import get_context
-from autobench.protocol.signals import InstrumentationScope
+from autobench.protocol.ids import TraceId
+from autobench.protocol.signals import (
+    EndReason,
+    InstrumentationScope,
+    LinkRelation,
+    LinkTarget,
+    SpanStatus,
+)
 from autobench.protocol.traces import DiagnosticSeverity
+from autobench.protocol.values import SerializedValue
 from autobench.tracking import AssetCandidate, RegisteredAsset, TrackingRegistry, track
 
 if TYPE_CHECKING:
@@ -39,6 +50,16 @@ class _Installation:
     handle: InstrumentationHandle
     compatibility: Compatibility
     references: int = 1
+
+
+@dataclass(slots=True)
+class _KeyedSpan:
+    context: RunContext
+    span: Span
+
+
+class _Unset(Enum):
+    VALUE = auto()
 
 
 class CurrentSpan:
@@ -76,6 +97,13 @@ class CurrentSpan:
         record.usage[name] = value
         return True
 
+    def set_output(self, value: Any) -> bool:
+        record = self._context._span_by_id(self._span_id)
+        if record is None or record.ended_at is not None or self._context.finalized:
+            return False
+        record.output = value
+        return True
+
     def event(
         self,
         name: str,
@@ -96,6 +124,26 @@ class CurrentSpan:
     def record_exception(self, error: BaseException | str) -> ErrorRecord:
         return self._context.error(error, span_id=self._span_id)
 
+    def link_to(
+        self,
+        target: CurrentSpan,
+        *,
+        relation: LinkRelation = LinkRelation.RUN_LINEAGE,
+        attributes: dict[str, SerializedValue] | None = None,
+    ) -> bool:
+        if not self.is_recording() or target._context._span_by_id(target.id) is None:
+            return False
+        self._context._emitter_for_legacy_span(self._span_id).link(
+            self._context._abp_span_id(self._span_id),
+            relation,
+            LinkTarget(
+                trace_id=target._context._emitter.trace_id,
+                span_id=target._context._abp_span_id(target.id),
+            ),
+            attributes=attributes,
+        )
+        return True
+
 
 class InstrumentationRuntime:
     def __init__(
@@ -107,6 +155,8 @@ class InstrumentationRuntime:
         self.patches = PatchManager() if patches is None else patches
         self.registry = registry
         self._installed_ids: set[str] = set()
+        self._keyed_spans: dict[tuple[TraceId, str, str], _KeyedSpan] = {}
+        self._keyed_span_lock = RLock()
 
     @property
     def installed_ids(self) -> tuple[str, ...]:
@@ -189,6 +239,7 @@ class InstrumentationRuntime:
         tags: dict[str, Any] | None = None,
         target_version: str | None = None,
         suppression_keys: tuple[str, ...] = (),
+        parent_span_id: str | None = None,
     ) -> Span | None:
         """Create an unentered span in the active benchmark run, when one exists."""
 
@@ -209,7 +260,149 @@ class InstrumentationRuntime:
             usage=usage,
             tags=tags,
             instrumentation_scope=self.scope(info, target_version=target_version),
+            parent_span_id=parent_span_id,
         )
+
+    def start_span(
+        self,
+        info: InstrumentorInfo,
+        key: str,
+        operation: str,
+        *,
+        parent_key: str | None = None,
+        parent_span_id: str | None = None,
+        kind: str = "custom",
+        input: Any = None,
+        attributes: dict[str, Any] | None = None,
+        usage: dict[str, Any] | None = None,
+        tags: dict[str, Any] | None = None,
+        target_version: str | None = None,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> CurrentSpan | None:
+        """Start a detached span identified by an external lifecycle key."""
+
+        if not key:
+            raise ValueError("Span keys must not be empty.")
+        if parent_key is not None and parent_span_id is not None:
+            raise ValueError("Use parent_key or parent_span_id, not both.")
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return None
+
+        from autobench.runtime.context import active_run_context
+
+        run_context = active_run_context()
+        if run_context is None:
+            return None
+        lookup = (active.trace_id, info.id, key)
+        with self._keyed_span_lock:
+            existing = self._keyed_spans.get(lookup)
+            if existing is not None:
+                self.diagnose(
+                    info,
+                    "keyed_span_duplicate_start",
+                    f"span key '{key}' is already active",
+                )
+                return CurrentSpan(existing.context, existing.span.id)
+
+            resolved_parent_id = parent_span_id
+            if parent_key is not None:
+                parent = self._keyed_spans.get((active.trace_id, info.id, parent_key))
+                if parent is None or parent.span.record.ended_at is not None:
+                    self.diagnose(
+                        info,
+                        "keyed_span_parent_missing",
+                        f"parent span key '{parent_key}' is not active for '{key}'",
+                    )
+                    return None
+                resolved_parent_id = parent.span.id
+
+            span = run_context.span(
+                operation,
+                kind=kind,
+                input=input,
+                attributes=attributes,
+                usage=usage,
+                tags=tags,
+                instrumentation_scope=self.scope(info, target_version=target_version),
+                parent_span_id=resolved_parent_id,
+            )
+            span.start()
+            self._keyed_spans[lookup] = _KeyedSpan(run_context, span)
+            return CurrentSpan(run_context, span.id)
+
+    def span_for_key(
+        self,
+        info: InstrumentorInfo,
+        key: str,
+        *,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> CurrentSpan | None:
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return None
+        lookup = (active.trace_id, info.id, key)
+        with self._keyed_span_lock:
+            keyed = self._keyed_spans.get(lookup)
+            if keyed is None:
+                return None
+            if keyed.context.finalized or keyed.span.record.ended_at is not None:
+                del self._keyed_spans[lookup]
+                return None
+            return CurrentSpan(keyed.context, keyed.span.id)
+
+    def end_span(
+        self,
+        info: InstrumentorInfo,
+        key: str,
+        *,
+        output: Any | _Unset = _Unset.VALUE,
+        attributes: dict[str, Any] | None = None,
+        usage: dict[str, Any] | None = None,
+        error: BaseException | str | None = None,
+        status: SpanStatus | None = None,
+        reason: EndReason | None = None,
+        partial: bool | None = None,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> bool:
+        """Finish one keyed span without changing the active context stack."""
+
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return False
+        lookup = (active.trace_id, info.id, key)
+        with self._keyed_span_lock:
+            keyed = self._keyed_spans.pop(lookup, None)
+        if keyed is None:
+            self.diagnose(
+                info,
+                "keyed_span_missing_end",
+                f"span key '{key}' is not active",
+            )
+            return False
+        if keyed.context.finalized or keyed.span.record.ended_at is not None:
+            self.diagnose(
+                info,
+                "keyed_span_duplicate_end",
+                f"span key '{key}' has already ended",
+            )
+            return False
+        if output is not _Unset.VALUE:
+            keyed.span.set_output(output)
+        for name, value in (attributes or {}).items():
+            keyed.span.set_attribute(name, value)
+        for name, value in (usage or {}).items():
+            keyed.span.set_usage(name, value)
+        if isinstance(error, str):
+            keyed.context.error(error, span_id=keyed.span.id)
+            keyed.span.finish(
+                status=SpanStatus.ERROR,
+                reason=EndReason.FAILED if reason is None else reason,
+                partial=partial,
+            )
+        else:
+            keyed.span.finish(error=error, status=status, reason=reason, partial=partial)
+        return True
 
     def metric(
         self,
@@ -223,6 +416,8 @@ class InstrumentationRuntime:
         role: ObservationRole | None = None,
         tags: dict[str, Any] | None = None,
         suppression_keys: tuple[str, ...] = (),
+        span_key: str | None = None,
+        span_id: str | None = None,
     ) -> Observation | None:
         """Record an instrumentation observation in the active benchmark run."""
 
@@ -235,6 +430,21 @@ class InstrumentationRuntime:
         run_context = active_run_context()
         if run_context is None:
             return None
+        if span_key is not None and span_id is not None:
+            raise ValueError("Use span_key or span_id, not both.")
+        target_span_id = span_id
+        if span_key is not None:
+            target = self.span_for_key(info, span_key, suppression_keys=suppression_keys)
+            if target is None:
+                self.diagnose(
+                    info,
+                    "keyed_span_metric_target_missing",
+                    f"span key '{span_key}' is not active",
+                )
+                return None
+            target_span_id = target.id
+        if target_span_id is None:
+            target_span_id = run_context.active_span_id
         return run_context.metric(
             name,
             value,
@@ -242,10 +452,77 @@ class InstrumentationRuntime:
             unit=unit,
             direction=direction,
             role=role,
-            span_id=run_context.active_span_id,
+            span_id=target_span_id,
             tags=tags,
             source=ObservationSource.INSTRUMENTATION,
         )
+
+    def event(
+        self,
+        info: InstrumentorInfo,
+        name: str,
+        value: Any = True,
+        *,
+        semantic_type: SemanticType | None = None,
+        tags: dict[str, Any] | None = None,
+        span_key: str | None = None,
+        span_id: str | None = None,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> Observation | None:
+        """Record an instrumentation event on the active or selected span."""
+
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return None
+
+        from autobench.runtime.context import active_run_context
+
+        run_context = active_run_context()
+        if run_context is None:
+            return None
+        if span_key is not None and span_id is not None:
+            raise ValueError("Use span_key or span_id, not both.")
+        target_span_id = span_id
+        if span_key is not None:
+            target = self.span_for_key(info, span_key, suppression_keys=suppression_keys)
+            if target is None:
+                self.diagnose(
+                    info,
+                    "keyed_span_event_target_missing",
+                    f"span key '{span_key}' is not active",
+                )
+                return None
+            target_span_id = target.id
+        if target_span_id is None:
+            target_span_id = run_context.active_span_id
+        return run_context.event(
+            name,
+            value,
+            semantic_type=semantic_type,
+            span_id=target_span_id,
+            tags=tags,
+            source=ObservationSource.INSTRUMENTATION,
+        )
+
+    def set_extension(
+        self,
+        info: InstrumentorInfo,
+        name: str,
+        value: JsonValue,
+        *,
+        suppression_keys: tuple[str, ...] = (),
+    ) -> bool:
+        active = get_context()
+        if active is None or active.is_suppressed(info.id, *suppression_keys):
+            return False
+
+        from autobench.runtime.context import active_run_context
+
+        run_context = active_run_context()
+        if run_context is None:
+            return False
+        run_context.set_extension(name, value)
+        return True
 
     def current_span(
         self,

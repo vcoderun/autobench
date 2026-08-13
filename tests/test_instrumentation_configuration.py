@@ -36,6 +36,7 @@ from autobench import (
     OpenAIAgentsInstrumentation,
     OpenAIInstrumentation,
     PydanticAIInstrumentation,
+    PydanticGEPAInstrumentation,
     RunContext,
     SpecValidationError,
     __version__,
@@ -383,7 +384,7 @@ def test_auto_instrumentation_selects_compatible_integrations(
     monkeypatch.setattr(registry_module, "_inspect_instrumentor", inspect)
 
     selected, skipped = registry_module.resolve_instrumentors(
-        [AutoInstrumentation(exclude=("pydantic_ai", "openai_agents", "httpx"))]
+        [AutoInstrumentation(exclude=("pydantic_ai", "pydantic_gepa", "openai_agents", "httpx"))]
     )
 
     assert selected == (instrumentor,)
@@ -404,7 +405,7 @@ def test_auto_instrumentation_honors_explicit_excluded_and_reserved_integrations
     )
 
     assert selected == ()
-    assert [status.name for status in skipped] == ["openai_agents"]
+    assert [status.name for status in skipped] == ["pydantic_gepa", "openai_agents"]
 
 
 def test_explicit_instrumentation_replaces_automatic_discovery(
@@ -419,7 +420,7 @@ def test_explicit_instrumentation_replaces_automatic_discovery(
     monkeypatch.setattr(registry_module, "resolve_instrumentor", resolve_explicit)
     selected, skipped = registry_module.resolve_instrumentors(
         [
-            AutoInstrumentation(exclude=("pydantic_ai", "openai_agents", "httpx")),
+            AutoInstrumentation(exclude=("pydantic_ai", "pydantic_gepa", "openai_agents", "httpx")),
             OpenAIInstrumentation(),
         ]
     )
@@ -463,7 +464,7 @@ def test_auto_instrumentation_propagates_asset_discovery_to_semantic_integration
     )
 
     assert selected == ()
-    assert len(skipped) == 4
+    assert len(skipped) == 5
     assert [
         config.assets
         for config in observed
@@ -471,11 +472,12 @@ def test_auto_instrumentation_propagates_asset_discovery_to_semantic_integration
             config,
             (
                 PydanticAIInstrumentation,
+                PydanticGEPAInstrumentation,
                 OpenAIInstrumentation,
                 OpenAIAgentsInstrumentation,
             ),
         )
-    ] == [settings, settings, settings]
+    ] == [settings, settings, settings, settings]
     assert isinstance(observed[-1], HTTPXInstrumentation)
 
 
@@ -606,6 +608,7 @@ def test_registry_reports_missing_extras_without_importing_integrations(
 
     assert [status.name for status in statuses] == [
         "pydantic_ai",
+        "pydantic_gepa",
         "openai",
         "openai_agents",
         "httpx",
@@ -690,6 +693,7 @@ def test_benchmark_schema_exposes_typed_instrumentation_completion() -> None:
     assert set(generated_instrumentation["properties"]) == {
         "all",
         "pydantic_ai",
+        "pydantic_gepa",
         "openai",
         "openai_agents",
         "httpx",
@@ -700,6 +704,7 @@ def test_benchmark_schema_exposes_typed_instrumentation_completion() -> None:
     all_properties = checked_in_instrumentation["properties"]["all"]["oneOf"][1]["properties"]
     assert all_properties["exclude"]["items"]["enum"] == [
         "pydantic_ai",
+        "pydantic_gepa",
         "openai",
         "openai_agents",
         "httpx",
@@ -715,6 +720,9 @@ def test_benchmark_schema_exposes_typed_instrumentation_completion() -> None:
         ]["discover"]["default"]
         is True
     )
+    assert checked_in_instrumentation["properties"]["pydantic_gepa"]["oneOf"][1]["properties"][
+        "detail"
+    ]["enum"] == ["summary", "evaluations", "full"]
     assert (
         "assets" not in checked_in_instrumentation["properties"]["httpx"]["oneOf"][1]["properties"]
     )

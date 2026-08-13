@@ -9,6 +9,7 @@ from autobench.instrumentation.config import (
     OpenAIAgentsInstrumentation,
     OpenAIInstrumentation,
     PydanticAIInstrumentation,
+    PydanticGEPAInstrumentation,
 )
 from autobench.instrumentation.manager import (
     CurrentSpan,
@@ -36,6 +37,16 @@ from autobench.instrumentation.patching import (
     PatchDiagnostic,
     PatchManager,
 )
+from autobench.instrumentation.pydantic_gepa import (
+    CandidateSummary,
+    DatasetSummary,
+    EngineSummary,
+    ObjectiveSummary,
+    OptimizationExecution,
+    PydanticGEPA,
+    PydanticGEPAEvidence,
+    SelectionSummary,
+)
 from autobench.instrumentation.registry import (
     InstrumentorStatus,
     instrumentor_statuses,
@@ -48,9 +59,12 @@ __all__ = (
     "AutoInstrumentation",
     "CallHandler",
     "CallLifecycle",
+    "CandidateSummary",
     "Compatibility",
     "CompatibilityStatus",
     "CurrentSpan",
+    "DatasetSummary",
+    "EngineSummary",
     "HTTPXCaptureSettings",
     "HTTPXInstrumentation",
     "InstrumentationConflictError",
@@ -71,9 +85,15 @@ __all__ = (
     "InstrumentorStatus",
     "OpenAIAgentsInstrumentation",
     "OpenAIInstrumentation",
+    "ObjectiveSummary",
+    "OptimizationExecution",
     "PatchDiagnostic",
     "PatchManager",
     "PydanticAIInstrumentation",
+    "PydanticGEPA",
+    "PydanticGEPAEvidence",
+    "PydanticGEPAInstrumentation",
+    "SelectionSummary",
     "check_package_compatibility",
     "instrumentor_statuses",
     "resolve_instrumentor",

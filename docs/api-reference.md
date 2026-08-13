@@ -40,7 +40,7 @@ accept `progress_handlers`, `progress_error_policy`, and `progress_error_handler
 | Semantics | `Observation`, `Semantic`, `SemanticRegistry`, queries and projection |
 | Evaluation | scorers, derivers, policies, expected actions, measurement, feedback |
 | Protocol | ABP signals, traces, capture, emitter, collector and context |
-| Instrumentation | settings, manager, instrumentors, method instrumentation, diagnostics, `CurrentSpan`, and `InstrumentationRuntime.span()` / `metric()` / `current_span()` for external backend composition |
+| Instrumentation | settings, manager, instrumentors, method instrumentation, diagnostics, `CurrentSpan`, keyed `InstrumentationRuntime.start_span()` / `end_span()`, and external backend composition |
 | Tracking | `track`, asset models, discovery candidates, registry and history views |
 | Records | `RunRecord`, `ExperimentRecord`, `ExperimentTermination`, `RecordManifest`, `FileRecorder`, frozen staging snapshots, inspection/recovery, atomic/synced publication, and replay helpers |
 | Reports | report models, builders, Rich renderers and exporters |
@@ -56,6 +56,10 @@ Prefer root imports for application code:
 ```python
 from autobench import Benchmark, Case, RunContext, Semantic
 ```
+
+Native pydantic-gepa integration also exposes `PydanticGEPAInstrumentation`, `PydanticGEPA`, and
+the replay-safe `PydanticGEPAEvidence` projection from the root package. Its full contract is
+documented in [Pydantic-GEPA Instrumentation](pydantic-gepa-instrumentation.md).
 
 Import a submodule when implementing an extension against that subsystem, such as a custom native
 instrumentor or source-map adapter.

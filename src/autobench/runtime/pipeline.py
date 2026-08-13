@@ -792,6 +792,7 @@ def _build_partial_snapshot(
         asset_versions=evidence.asset_versions,
         asset_uses=evidence.asset_uses,
         source_snapshots=evidence.source_snapshots,
+        extensions=evidence.extensions,
         trace=evidence.trace,
         signal_sequence_watermark=evidence.signal_sequence_watermark,
         correlation=run_spec.correlation,
@@ -1041,6 +1042,7 @@ def _build_run_result(
         error=error,
         trace=evidence.trace,
         source_snapshots=evidence.source_snapshots,
+        extensions=evidence.extensions,
         correlation=run_spec.correlation,
     )
 

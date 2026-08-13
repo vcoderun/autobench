@@ -7,7 +7,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-EXAMPLES = ("abp-manual", "minimal", "performance", "pydantic-ai")
+EXAMPLES = ("abp-manual", "minimal", "performance", "pydantic-ai", "pydantic-gepa")
 
 
 def scaffold(example: str, destination: Path) -> None:

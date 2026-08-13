@@ -30,7 +30,15 @@ from autobench.instrumentation.patching import (
     InstrumentationConflictError,
     PatchManager,
 )
-from autobench.protocol.signals import AbstractionLayer, CaptureMechanism, EndReason
+from autobench.protocol.collector import LocalCollector
+from autobench.protocol.context import ActiveContext, use_context
+from autobench.protocol.ids import new_trace_id
+from autobench.protocol.signals import (
+    AbstractionLayer,
+    CaptureMechanism,
+    EndReason,
+    SpanStatus,
+)
 from autobench.protocol.traces import DiagnosticSeverity
 from autobench.runtime.instrumentation import reset_active_run_context, set_active_run_context
 
@@ -526,6 +534,195 @@ def test_runtime_patch_and_diagnostics_share_the_active_abp_trace() -> None:
     finally:
         reset_active_run_context(token)
         handle.close()
+
+
+def test_runtime_keyed_spans_preserve_explicit_parentage_and_targeted_evidence() -> None:
+    info = InstrumentorInfo(
+        id="runtime.keyed",
+        version="1",
+        mechanism=CaptureMechanism.CALLBACK,
+        layer=AbstractionLayer.FRAMEWORK,
+    )
+    runtime = InstrumentationRuntime()
+    assert runtime.start_span(info, "outside", "outside") is None
+    assert runtime.end_span(info, "outside") is False
+
+    ctx = RunContext(benchmark_id="demo", case=Case(id="case"), variant=Variant(id="variant"))
+    token = set_active_run_context(ctx)
+    try:
+        parent = runtime.start_span(info, "run", "optimizer", kind="optimization")
+        assert parent is not None
+        first = runtime.start_span(
+            info,
+            "eval:1",
+            "evaluation",
+            parent_key="run",
+            kind="evaluation",
+        )
+        second = runtime.start_span(
+            info,
+            "eval:2",
+            "evaluation",
+            parent_key="run",
+            kind="evaluation",
+        )
+        assert first is not None
+        assert second is not None
+        assert runtime.start_span(info, "eval:1", "duplicate") is not None
+        assert runtime.start_span(info, "orphan", "orphan", parent_key="missing") is None
+
+        metric = runtime.metric(info, "score", 0.75, span_key="eval:2")
+        event = runtime.event(info, "selected", span_key="eval:1")
+        assert metric is not None and metric.span_id == second.id
+        assert event is not None and event.span_id == first.id
+        assert runtime.metric(info, "missing", 1, span_key="missing") is None
+        assert runtime.event(info, "missing", span_key="missing") is None
+        with pytest.raises(ValueError, match="span_key or span_id"):
+            runtime.metric(info, "invalid", 1, span_key="eval:1", span_id=first.id)
+        with pytest.raises(ValueError, match="span_key or span_id"):
+            runtime.event(info, "invalid", span_key="eval:1", span_id=first.id)
+
+        assert runtime.end_span(info, "eval:2", output={"score": 0.75}) is True
+        assert runtime.end_span(info, "eval:1", error="candidate failed", partial=True) is True
+        assert runtime.end_span(info, "eval:1") is False
+        assert runtime.span_for_key(info, "eval:1") is None
+        assert runtime.end_span(info, "run", attributes={"winner": "eval:2"}) is True
+        ctx.finalize()
+    finally:
+        reset_active_run_context(token)
+
+    spans = {span.id: span for span in ctx.spans}
+    assert spans[first.id].parent_id == parent.id
+    assert spans[second.id].parent_id == parent.id
+    assert spans[second.id].output == {"score": 0.75}
+    assert spans[parent.id].attributes["winner"] == "eval:2"
+    assert spans[first.id].error is not None
+    diagnostic_codes = {diagnostic.code for diagnostic in ctx.trace.diagnostics}
+    assert {
+        "keyed_span_duplicate_start",
+        "keyed_span_parent_missing",
+        "keyed_span_metric_target_missing",
+        "keyed_span_event_target_missing",
+        "keyed_span_missing_end",
+    }.issubset(diagnostic_codes)
+
+
+def test_runtime_keyed_span_validation_and_finalize_prune_stale_state() -> None:
+    info = InstrumentorInfo(
+        id="runtime.keyed",
+        version="1",
+        mechanism=CaptureMechanism.CALLBACK,
+        layer=AbstractionLayer.FRAMEWORK,
+    )
+    runtime = InstrumentationRuntime()
+    ctx = RunContext(benchmark_id="demo", case=Case(id="case"), variant=Variant(id="variant"))
+    token = set_active_run_context(ctx)
+    try:
+        with pytest.raises(ValueError, match="must not be empty"):
+            runtime.start_span(info, "", "invalid")
+        with pytest.raises(ValueError, match="parent_key or parent_span_id"):
+            runtime.start_span(
+                info,
+                "invalid",
+                "invalid",
+                parent_key="parent",
+                parent_span_id="span_1",
+            )
+        active = runtime.start_span(info, "active", "active")
+        assert active is not None and active.is_recording()
+        ctx.finalize()
+        assert runtime.span_for_key(info, "active") is None
+        assert runtime.end_span(info, "active") is False
+    finally:
+        reset_active_run_context(token)
+
+
+def test_runtime_keyed_span_mutation_links_status_and_non_run_context_boundaries() -> None:
+    info = InstrumentorInfo(
+        id="runtime.keyed.boundaries",
+        version="1",
+        mechanism=CaptureMechanism.CALLBACK,
+        layer=AbstractionLayer.FRAMEWORK,
+    )
+    runtime = InstrumentationRuntime()
+    protocol_context = ActiveContext(collector=LocalCollector(), trace_id=new_trace_id())
+
+    with use_context(protocol_context):
+        assert runtime.start_span(info, "outside", "outside") is None
+        assert runtime.metric(info, "outside", 1) is None
+        assert runtime.event(info, "outside") is None
+        assert runtime.set_extension(info, "outside", {"value": 1}) is False
+
+    context = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case"),
+        variant=Variant(id="variant"),
+    )
+    token = set_active_run_context(context)
+    try:
+        parent = runtime.start_span(info, "parent", "parent")
+        child = runtime.start_span(info, "child", "child", parent_key="parent")
+        assert parent is not None
+        assert child is not None
+        assert child.set_output({"result": "candidate"}) is True
+        assert child.set_attribute("candidate", "v2") is True
+        assert child.set_usage("evaluations", 3) is True
+        assert child.link_to(parent) is True
+
+        missing = type(child)(context, "missing-span")
+        assert child.link_to(missing) is False
+        assert runtime.event(info, "root-event") is not None
+        assert runtime.set_extension(info, "integration/v1", {"status": "captured"}) is True
+        assert runtime.end_span(
+            info,
+            "child",
+            attributes={"selected": True},
+            usage={"optimizer_calls": 2},
+            status=SpanStatus.ERROR,
+        )
+        assert child.set_output("late") is False
+        assert child.link_to(parent) is False
+        assert runtime.end_span(info, "parent")
+    finally:
+        reset_active_run_context(token)
+
+    child_record = context._span_by_id(child.id)
+    assert child_record is not None
+    assert child_record.output == {"result": "candidate"}
+    assert child_record.attributes == {"candidate": "v2", "selected": True}
+    assert child_record.usage == {"evaluations": 3, "optimizer_calls": 2}
+    child_trace = next(span for span in context.trace.spans if span.operation == "child")
+    assert child_trace.status is SpanStatus.ERROR
+    assert child_trace.end_reason is EndReason.FAILED
+    assert context.extensions["integration/v1"] == {"status": "captured"}
+
+    suppressed = RunContext(
+        benchmark_id="demo",
+        case=Case(id="suppressed"),
+        variant=Variant(id="variant"),
+    )
+    token = set_active_run_context(suppressed)
+    try:
+        with suppress_instrumentation(info.id):
+            assert runtime.span_for_key(info, "parent") is None
+            assert runtime.event(info, "suppressed") is None
+            assert runtime.set_extension(info, "integration/v1", True) is False
+    finally:
+        reset_active_run_context(token)
+
+    finalized = RunContext(
+        benchmark_id="demo",
+        case=Case(id="finalized"),
+        variant=Variant(id="variant"),
+    )
+    token = set_active_run_context(finalized)
+    try:
+        stale = runtime.start_span(info, "stale", "stale")
+        assert stale is not None
+        finalized.finalize()
+        assert runtime.end_span(info, "stale") is False
+    finally:
+        reset_active_run_context(token)
 
 
 class FaultyLifecycle(RecordingLifecycle):

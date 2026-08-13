@@ -53,6 +53,7 @@ class InstrumentationSettings(BaseModel):
 
 InstrumentorName: TypeAlias = Literal[
     "pydantic_ai",
+    "pydantic_gepa",
     "openai",
     "openai_agents",
     "httpx",
@@ -83,6 +84,17 @@ class PydanticAIInstrumentation(InstrumentationSettings):
     """Capture Pydantic AI agent, model, tool, and validation activity."""
 
     kind: Literal["pydantic_ai"] = "pydantic_ai"
+    assets: AssetDiscoverySettings | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+
+
+class PydanticGEPAInstrumentation(InstrumentationSettings):
+    """Capture pydantic-gepa optimizer lifecycle, scores, budgets, and assets."""
+
+    kind: Literal["pydantic_gepa"] = "pydantic_gepa"
+    detail: Literal["summary", "evaluations", "full"] = "full"
     assets: AssetDiscoverySettings | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
@@ -139,6 +151,7 @@ class HTTPXInstrumentation(InstrumentationSettings):
 
 BuiltinInstrumentationConfig: TypeAlias = (
     PydanticAIInstrumentation
+    | PydanticGEPAInstrumentation
     | OpenAIInstrumentation
     | OpenAIAgentsInstrumentation
     | HTTPXInstrumentation
@@ -147,6 +160,7 @@ BuiltinInstrumentationConfig: TypeAlias = (
 InstrumentationConfig: TypeAlias = Annotated[
     AutoInstrumentation
     | PydanticAIInstrumentation
+    | PydanticGEPAInstrumentation
     | OpenAIInstrumentation
     | OpenAIAgentsInstrumentation
     | HTTPXInstrumentation,
@@ -165,4 +179,5 @@ __all__ = (
     "OpenAIAgentsInstrumentation",
     "OpenAIInstrumentation",
     "PydanticAIInstrumentation",
+    "PydanticGEPAInstrumentation",
 )

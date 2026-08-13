@@ -18,6 +18,7 @@ These examples are credential-free and run in `make examples`:
 | `automatic_assets` | Pydantic AI and custom SDK | automatic behavioral asset lineage |
 | `generated_dataset` | support-routing case preparation | typed generator, request YAML, review state, frozen dataset and provenance manifest |
 | `otlp_export` | immutable ABP record | offline OTLP hierarchy mapping through an injected exporter |
+| `pydantic_gepa` | Optimize Anything Pipeline | optimizer lifecycle, engine branches, evaluation budgets, candidate lineage, and component asset versions |
 
 Run all offline examples:
 
@@ -104,6 +105,38 @@ autobench replay /tmp/autobench-openrouter
 
 `examples/pydantic_ai/agent_benchmark.py` is provider-neutral and accepts any configured Pydantic AI
 model identifier through `PYDANTIC_AI_MODEL`.
+
+## Pydantic-GEPA: Optimizer Evidence
+
+```bash
+uv run autobench run examples/pydantic_gepa/autobench.yaml \
+  --record /tmp/autobench-pydantic-gepa
+uv run autobench report /tmp/autobench-pydantic-gepa
+```
+
+The directory contains four credential-free benchmarks: standard GEPA, Optimize Anything Omni,
+multi-component prompt/tool/output-schema optimization, and staged checkpoint/resume. Native
+instrumentation records engine contenders, selection evidence, resource-specific budgets,
+candidate lineage, effective component versions, and a replayable typed projection.
+
+```bash
+for name in standard autobench multi_component resume; do
+  uv run autobench run "examples/pydantic_gepa/$name.yaml" \
+    --record "/tmp/autobench-pydantic-gepa-$name"
+done
+```
+
+An optional live example layers Pydantic AI, OpenAI-compatible OpenRouter, and HTTPX evidence under
+the optimizer evaluation without duplicate accounting:
+
+```bash
+export OPENROUTER_API_KEY=...
+uv run python examples/pydantic_gepa/live_pydantic_ai.py \
+  --record /tmp/autobench-pydantic-gepa-live
+```
+
+It uses `openrouter:openai/gpt-5.6-luna` and is intentionally excluded from offline CI. See
+[Pydantic-GEPA Instrumentation](pydantic-gepa-instrumentation.md).
 
 ## Automatic Asset Discovery
 
@@ -192,6 +225,7 @@ Copy the pattern, not generated run directories:
 - pricing and policies from `mid`;
 - measurement and paired comparison from `advanced`;
 - automatic SDK setup from `pydantic_ai`;
+- optimizer evidence from `pydantic_gepa`;
 - custom instrumentation from `automatic_assets`;
 - replay processing from `abp_replay`.
 

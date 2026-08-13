@@ -67,6 +67,10 @@ class KnownSpanKind(StrEnum):
     DATABASE = "database"
     CACHE = "cache"
     STORAGE = "storage"
+    OPTIMIZATION = "optimization"
+    CANDIDATE = "candidate"
+    EVALUATION = "evaluation"
+    REFLECTION = "reflection"
     CUSTOM = "custom"
 
 

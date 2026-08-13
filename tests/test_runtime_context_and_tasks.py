@@ -134,10 +134,12 @@ def test_context_evidence_snapshots_are_consistent_and_immutable() -> None:
 
     with ctx.span("active") as span:
         span.metric("quality", 0.5, semantic_type=Semantic.QUALITY_SCORE)
+        ctx.set_extension("integration/v1", {"items": [1]})
         active = ctx.snapshot_evidence()
 
     completed = ctx.snapshot_evidence()
     ctx.metric("later", 1.0, semantic_type=Semantic.QUALITY_SCORE)
+    ctx.set_extension("integration/v1", {"items": [1, 2]})
 
     assert len(active.spans) == 1
     assert active.spans[0].ended_at is None
@@ -147,6 +149,29 @@ def test_context_evidence_snapshots_are_consistent_and_immutable() -> None:
     assert completed.signal_sequence_watermark > active.signal_sequence_watermark
     assert len(completed.observations) == 1
     assert len(ctx.observations) == 2
+    assert active.extensions == {"integration/v1": {"items": [1]}}
+    with pytest.raises(ValueError, match="must not be empty"):
+        ctx.set_extension(" ", True)
+
+
+def test_detached_spans_validate_start_and_explicit_parent_lifecycle() -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+    )
+    parent = ctx.span("parent").start()
+    with pytest.raises(RuntimeError, match="already started"):
+        parent.start()
+    child = ctx.span("child", parent_span_id=parent.id).start()
+    assert child.record.parent_id == parent.id
+    parent.finish()
+    with pytest.raises(ValueError, match="Parent span has ended"):
+        ctx.span("late-child", parent_span_id=parent.id).start()
+    with pytest.raises(ValueError, match="Unknown parent span"):
+        ctx.span("unknown-child", parent_span_id="missing").start()
+    child.finish()
+    ctx.finalize()
 
 
 def test_context_helpers_record_measurements_bundles_checks_and_outcomes() -> None:

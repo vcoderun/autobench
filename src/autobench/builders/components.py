@@ -19,6 +19,7 @@ from autobench.instrumentation.config import (
     OpenAIAgentsInstrumentation,
     OpenAIInstrumentation,
     PydanticAIInstrumentation,
+    PydanticGEPAInstrumentation,
 )
 from autobench.instrumentation.models import Instrumentor
 from autobench.protocol.capture import CapturePolicy
@@ -142,6 +143,7 @@ class Benchmark:
                 (
                     AutoInstrumentation,
                     PydanticAIInstrumentation,
+                    PydanticGEPAInstrumentation,
                     OpenAIInstrumentation,
                     OpenAIAgentsInstrumentation,
                     HTTPXInstrumentation,

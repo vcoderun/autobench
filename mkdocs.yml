@@ -94,6 +94,7 @@ nav:
   - Autobench Protocol (ABP):
       - Protocol And Traces: instrumentation-and-traces.md
       - Native Instrumentation: native-instrumentation.md
+      - Pydantic-GEPA Instrumentation: pydantic-gepa-instrumentation.md
       - Compatibility Contract: abp-compatibility.md
       - OTLP Export: otlp-export.md
   - Reference:

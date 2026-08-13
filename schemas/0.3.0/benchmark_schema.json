@@ -246,6 +246,7 @@
                         "items": {
                           "enum": [
                             "pydantic_ai",
+                            "pydantic_gepa",
                             "openai",
                             "openai_agents",
                             "httpx"
@@ -468,6 +469,67 @@
                           }
                         },
                         "type": "object"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "pydantic_gepa": {
+                "description": "pydantic-gepa optimizer lifecycle, candidate, score, budget, and asset capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "detail": {
+                        "default": "full",
+                        "enum": [
+                          "summary",
+                          "evaluations",
+                          "full"
+                        ],
+                        "type": "string"
                       },
                       "enabled": {
                         "default": true,

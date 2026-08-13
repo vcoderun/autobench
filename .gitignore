@@ -66,6 +66,7 @@ coverage.txt
 # Generated benchmark evidence
 /.autobench/
 /runs/
+/outputs/
 /autobench-opus-export-final/
 /COVERAGE
 

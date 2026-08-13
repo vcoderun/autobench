@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added native pydantic-gepa instrumentation with typed event subscriptions, keyed ABP optimizer
+  lifecycles, Optimize Anything engine/composition evidence, semantic budgets and scores,
+  candidate/component asset lineage, replay-safe projections, and dedicated Rich reports.
+- Added credential-free standard GEPA, Optimize Anything Omni, multi-component, and checkpoint
+  resume benchmarks plus a credential-gated Pydantic AI/OpenRouter layering example.
 - Added incremental crash-recoverable recording, cooperative cancellation checkpoints, typed
   progress dispatch, file-backed streaming artifacts, and cross-invocation execution correlation.
 - Added typed pre-run generated dataset preparation with review states, determinism claims,

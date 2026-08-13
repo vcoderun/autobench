@@ -14,6 +14,7 @@ pip install 'autobench[pydantic-ai]'
 pip install 'autobench[openai]'
 pip install 'autobench[openai-agents]'
 pip install 'autobench[httpx]'
+pip install 'autobench[pydantic-gepa]'
 pip install 'autobench[instrumentation]'
 ```
 
@@ -219,9 +220,14 @@ does not own the host backend protocol and core does not import the external fra
 | Integration | Layer | Collection seam | Evidence |
 | --- | --- | --- | --- |
 | Pydantic AI | framework | public agent capability | spans plus agent/capability/prompt/tool/toolset/output-schema lineage |
+| Pydantic-GEPA | optimizer | typed event subscription | optimization/composition/engine/evaluation spans, budgets, candidate lineage, and component asset versions |
 | OpenAI Python | client | reviewed public client methods and stream types | spans plus effective prompt/tool/output-schema lineage |
 | OpenAI Agents | framework | native trace processor and public Runner surface | spans plus agent/prompt/tool/output-schema/guardrail/handoff/policy lineage |
 | HTTPX | transport | public transport methods | request method/host/path policy, status, selected headers, body metadata, stream lifecycle |
+
+The pydantic-gepa integration has its own complete guide, including Optimize Anything composition,
+detail modes, semantic accounting, assets, replay, and reports: [Pydantic-GEPA
+Instrumentation](pydantic-gepa-instrumentation.md).
 
 Run compatibility diagnostics before a benchmark:
 

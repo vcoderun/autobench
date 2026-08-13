@@ -30,6 +30,16 @@ CostSemanticType: TypeAlias = Literal[
     "lifetime.cost",
 ]
 
+OptimizationSemanticType: TypeAlias = Literal[
+    "optimization.evaluations.used",
+    "optimization.evaluations.limit",
+    "optimization.evaluations.remaining",
+    "optimization.evaluation_cost.used",
+    "optimization.optimizer_cost.used",
+    "optimization.optimizer_cost.limit",
+    "optimization.optimizer_cost.remaining",
+]
+
 TimeSemanticType: TypeAlias = Literal[
     "time.latency",
     "time.first_chunk",
@@ -195,6 +205,7 @@ AssetSemanticType: TypeAlias = Literal[
 KnownSemanticType: TypeAlias = (
     LLMSemanticType
     | CostSemanticType
+    | OptimizationSemanticType
     | TimeSemanticType
     | ResultSemanticType
     | QualitySemanticType
@@ -240,6 +251,13 @@ class Semantic:
     LLM_REQUEST_COUNT: Final[str] = "llm.request.count"
     MONEY_COST: Final[str] = "money.cost"
     OPTIMIZATION_COST: Final[str] = "optimization.cost"
+    OPTIMIZATION_EVALUATIONS_USED: Final[str] = "optimization.evaluations.used"
+    OPTIMIZATION_EVALUATIONS_LIMIT: Final[str] = "optimization.evaluations.limit"
+    OPTIMIZATION_EVALUATIONS_REMAINING: Final[str] = "optimization.evaluations.remaining"
+    OPTIMIZATION_EVALUATION_COST_USED: Final[str] = "optimization.evaluation_cost.used"
+    OPTIMIZATION_OPTIMIZER_COST_USED: Final[str] = "optimization.optimizer_cost.used"
+    OPTIMIZATION_OPTIMIZER_COST_LIMIT: Final[str] = "optimization.optimizer_cost.limit"
+    OPTIMIZATION_OPTIMIZER_COST_REMAINING: Final[str] = "optimization.optimizer_cost.remaining"
     SERVING_COST: Final[str] = "serving.cost"
     LIFETIME_COST: Final[str] = "lifetime.cost"
     TIME_LATENCY: Final[str] = "time.latency"
@@ -547,6 +565,77 @@ class SemanticRegistry(BaseModel):
                 parent=Semantic.MONEY_COST,
                 unit="usd",
                 value_shape="number",
+            ),
+            Semantic.OPTIMIZATION_EVALUATIONS_USED: SemanticTypeInfo(
+                id=Semantic.OPTIMIZATION_EVALUATIONS_USED,
+                description="Cumulative evaluator calls consumed by an optimization scope.",
+                unit="calls",
+                value_shape="integer",
+                stability=SemanticStability.EVOLVING,
+                privacy=SemanticPrivacy.PUBLIC,
+                cardinality=SemanticCardinality.LOW,
+                aggregation=SemanticAggregation.LATEST,
+            ),
+            Semantic.OPTIMIZATION_EVALUATIONS_LIMIT: SemanticTypeInfo(
+                id=Semantic.OPTIMIZATION_EVALUATIONS_LIMIT,
+                description="Configured evaluator-call limit for an optimization scope.",
+                unit="calls",
+                value_shape="integer",
+                stability=SemanticStability.EVOLVING,
+                privacy=SemanticPrivacy.PUBLIC,
+                cardinality=SemanticCardinality.LOW,
+                aggregation=SemanticAggregation.LATEST,
+            ),
+            Semantic.OPTIMIZATION_EVALUATIONS_REMAINING: SemanticTypeInfo(
+                id=Semantic.OPTIMIZATION_EVALUATIONS_REMAINING,
+                description="Evaluator calls remaining in an optimization scope.",
+                unit="calls",
+                value_shape="integer",
+                stability=SemanticStability.EVOLVING,
+                privacy=SemanticPrivacy.PUBLIC,
+                cardinality=SemanticCardinality.LOW,
+                aggregation=SemanticAggregation.LATEST,
+            ),
+            Semantic.OPTIMIZATION_EVALUATION_COST_USED: SemanticTypeInfo(
+                id=Semantic.OPTIMIZATION_EVALUATION_COST_USED,
+                description="Cumulative evaluator or task-model cost consumed.",
+                parent=Semantic.MONEY_COST,
+                unit="usd",
+                value_shape="number",
+                stability=SemanticStability.EVOLVING,
+                privacy=SemanticPrivacy.INTERNAL,
+                cardinality=SemanticCardinality.LOW,
+                aggregation=SemanticAggregation.LATEST,
+            ),
+            Semantic.OPTIMIZATION_OPTIMIZER_COST_USED: SemanticTypeInfo(
+                id=Semantic.OPTIMIZATION_OPTIMIZER_COST_USED,
+                description="Cumulative optimizer or proposer cost consumed.",
+                unit="usd",
+                value_shape="number",
+                stability=SemanticStability.EVOLVING,
+                privacy=SemanticPrivacy.INTERNAL,
+                cardinality=SemanticCardinality.LOW,
+                aggregation=SemanticAggregation.LATEST,
+            ),
+            Semantic.OPTIMIZATION_OPTIMIZER_COST_LIMIT: SemanticTypeInfo(
+                id=Semantic.OPTIMIZATION_OPTIMIZER_COST_LIMIT,
+                description="Configured optimizer or proposer cost limit.",
+                unit="usd",
+                value_shape="number",
+                stability=SemanticStability.EVOLVING,
+                privacy=SemanticPrivacy.INTERNAL,
+                cardinality=SemanticCardinality.LOW,
+                aggregation=SemanticAggregation.LATEST,
+            ),
+            Semantic.OPTIMIZATION_OPTIMIZER_COST_REMAINING: SemanticTypeInfo(
+                id=Semantic.OPTIMIZATION_OPTIMIZER_COST_REMAINING,
+                description="Optimizer or proposer cost remaining.",
+                unit="usd",
+                value_shape="number",
+                stability=SemanticStability.EVOLVING,
+                privacy=SemanticPrivacy.INTERNAL,
+                cardinality=SemanticCardinality.LOW,
+                aggregation=SemanticAggregation.LATEST,
             ),
             Semantic.SERVING_COST: SemanticTypeInfo(
                 id=Semantic.SERVING_COST,
@@ -1572,6 +1661,7 @@ __all__ = (
     "LLMSemanticType",
     "NetworkSemanticType",
     "OperationSemanticType",
+    "OptimizationSemanticType",
     "PromptSemanticType",
     "QualitySemanticType",
     "ResultSemanticType",

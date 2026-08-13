@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../../schemas/0.3.0/benchmark_schema.json
+benchmark:
+  prompt-optimizer:
+    description: Record a deterministic Optimize Anything Omni pipeline as Autobench evidence.
+    cases:
+      - id: refund-routing-prompt
+        input:
+          seed: Return a generic support label.
+          weak_candidate: Return billing for every request.
+          strong_candidate: Return refund_request.
+          continuation: Return refund_request.
+        expected:
+          candidate: Return refund_request.
+        tags: [optimizer, offline, omni]
+    run:
+      python: optimizer_benchmark:run
+    variants:
+      omni_v1:
+        label: Best-of exploration then continuation
+        factors:
+          optimizer_recipe:
+            value: best_of_then_continue
+            optimize: false
+    instrumentation:
+      pydantic_gepa:
+        detail: full
+        assets:
+          discover: true
+          representations: [definition, effective]
+          include: [prompt]
+    score:
+      final_candidate:
+        exact:
+          actual: output.candidate
+          expected: case.expected.candidate
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+      optimizer_score:
+        value: output.score
+        semantic: quality.score
+        goal: maximize
+        role: diagnostic
+      optimizer_evaluations:
+        value: output.evaluation_calls
+        semantic: optimization.evaluations.used
+        goal: minimize
+        role: diagnostic
+    report:
+      leaderboard:
+        show:
+          correctness:
+            metric: quality.correctness
+            aggregate: ratio_true
+          score:
+            metric: quality.score
+            aggregate: mean
+          evaluations:
+            metric: optimization.evaluations.used
+            aggregate: mean
+      matrix:
+        metric: quality.correctness

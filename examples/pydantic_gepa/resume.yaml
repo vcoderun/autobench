@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../schemas/0.3.0/benchmark_schema.json
+benchmark:
+  checkpoint-resume:
+    description: Record two executions of one durable plan, including checkpoint resume.
+    cases:
+      - id: resume-prompt
+        input: Initial prompt.
+        expected:
+          candidate: Improved prompt.
+        tags: [optimizer, offline, checkpoint, resume]
+    run:
+      python: resume_benchmark:run
+    variants:
+      resume_v1:
+        factors:
+          resume_mode:
+            value: required
+            optimize: false
+    instrumentation:
+      pydantic_gepa:
+        detail: summary
+    score:
+      final_candidate:
+        exact:
+          actual: output.candidate
+          expected: case.expected.candidate
+        semantic: quality.correctness
+        goal: maximize
+        role: objective
+      resume_equivalence:
+        value: output.resumed_equal
+        semantic: quality.correctness
+        goal: maximize
+        role: diagnostic

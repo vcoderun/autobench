@@ -25,12 +25,21 @@ check:
 	@printf "$(GREEN)✔ Checking complete.$(RESET)\n"
 
 check-matrix:
-	@for version in $(PYTHON_VERSIONS); do \
+	@set -e; \
+	root=$$(mktemp -d "$${TMPDIR:-/tmp}/autobench-matrix.XXXXXX"); \
+	trap 'rm -rf "$$root"' EXIT; \
+	uv run --extra dev ruff check src/autobench tests; \
+	for version in $(PYTHON_VERSIONS); do \
 		short_version=$${version%.*}; \
+		version_tmp="$$root/$$version"; \
+		mkdir -p "$$version_tmp"; \
 		printf "$(BLUE)==>$(RESET) Running validation matrix for Python $$version...\n"; \
-		uv run --isolated --extra dev --python $$version sh -c \
-			"ruff check src/autobench tests && ty check --python-version $$short_version && basedpyright --pythonversion $$short_version src tests && python -m pytest -q" \
+		uv run --extra dev ty check --python-version $$short_version; \
+		uv run --extra dev basedpyright --pythonversion $$short_version src tests; \
+		TMPDIR="$$version_tmp" uv run --isolated --no-default-groups --group matrix --python $$version sh -c \
+			"python -m pytest -q -m 'not large_artifact'" \
 			|| exit $$?; \
+		rm -rf "$$version_tmp"; \
 	done
 	@printf "$(GREEN)✔ Matrix checking complete.$(RESET)\n"
 
@@ -80,13 +89,22 @@ examples:
 	@printf "$(BLUE)==>$(RESET) Running offline examples end to end...\n"
 	@set -e; root=$$(mktemp -d "$${TMPDIR:-/tmp}/autobench-examples.XXXXXX"); \
 		trap 'rm -rf "$$root"' EXIT; \
-		for example in minimal basic mid advanced abp_manual abp_concurrent; do \
+		for example in minimal basic mid advanced abp_manual abp_concurrent pydantic_gepa; do \
 			uv run autobench validate "examples/$$example/autobench.yaml"; \
 			uv run autobench run "examples/$$example/autobench.yaml" --record "$$root/$$example"; \
 			uv run autobench replay "$$root/$$example"; \
 			uv run autobench report "$$root/$$example"; \
 			uv run autobench export "$$root/$$example" --format yaml --path "$$root/$$example-report.yaml"; \
 			uv run autobench export "$$root/$$example" --format csv --path "$$root/$$example-runs.csv"; \
+		done; \
+		for example in standard multi_component resume; do \
+			spec="examples/pydantic_gepa/$$example.yaml"; \
+			record="$$root/pydantic_gepa_$$example"; \
+			uv run autobench validate "$$spec"; \
+			uv run autobench run "$$spec" --record "$$record"; \
+			uv run autobench replay "$$record"; \
+			uv run autobench report "$$record"; \
+			uv run autobench export "$$record" --format yaml --path "$$record-report.yaml"; \
 		done; \
 		uv run autobench dataset generate generator:generate_routing_cases \
 			--request examples/generated_dataset/request.yaml \

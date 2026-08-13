@@ -93,7 +93,7 @@ See [Use Cases](use-cases.md) for complete patterns.
 | Evidence | Semantic observations, checks, events, artifacts, measurements, ABP traces |
 | Evaluation | Built-in and custom scorers, expected actions, policies, metric packs |
 | Derivation | Token cost, tiered pricing, paired baselines, comparison verdicts |
-| Instrumentation | Manual spans, method instrumentation, Pydantic AI, OpenAI, Agents, HTTPX |
+| Instrumentation | Manual spans, method instrumentation, Pydantic AI, pydantic-gepa, OpenAI, Agents, HTTPX |
 | Lineage | Explicit and automatic prompt/tool/schema/capability/agent asset versioning |
 | Persistence | Immutable YAML records, source hashes, environment metadata, portable artifacts |
 | Analysis | Replay, Rich reports, leaderboards, matrices, distributions, comparisons, exports |
@@ -109,6 +109,7 @@ See [Use Cases](use-cases.md) for complete patterns.
 | Author the full DSL | [YAML Spec](yaml-spec.md) |
 | Compose benchmarks in Python | [Python API](python-api.md) |
 | Instrument an existing SDK application | [Native Instrumentation](native-instrumentation.md) |
+| Record an optimizer run and candidate lineage | [Pydantic-GEPA Instrumentation](pydantic-gepa-instrumentation.md) |
 | Collect prompt/tool/schema lineage automatically | [Automatic Asset Discovery](automatic-asset-discovery.md) |
 | Inspect all shipped features | [Capability Map](capabilities.md) |
 

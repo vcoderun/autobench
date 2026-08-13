@@ -5,6 +5,7 @@ import json
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
 from contextvars import Token
+from copy import deepcopy
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -13,7 +14,7 @@ from types import TracebackType
 from typing import Any
 from weakref import WeakValueDictionary
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from autobench._version import __version__
 from autobench.data.datasets import Case
@@ -90,6 +91,10 @@ class SpanKind(StrEnum):
     RETRIEVER = "retriever"
     PARSER = "parser"
     WORKFLOW = "workflow"
+    OPTIMIZATION = "optimization"
+    CANDIDATE = "candidate"
+    EVALUATION = "evaluation"
+    REFLECTION = "reflection"
     CUSTOM = "custom"
 
 
@@ -143,6 +148,7 @@ class ContextEvidence(BaseModel):
     asset_versions: tuple[AssetVersion, ...]
     asset_uses: tuple[AssetUse, ...]
     source_snapshots: tuple[SourceSnapshot, ...]
+    extensions: dict[str, JsonValue] = Field(default_factory=dict)
     trace: Trace
     signal_sequence_watermark: int
 
@@ -176,6 +182,7 @@ class RunContext:
         self.asset_versions: list[AssetVersion] = []
         self.asset_uses: list[AssetUse] = []
         self.source_snapshots: list[SourceSnapshot] = []
+        self.extensions: dict[str, JsonValue] = {}
         self._evidence_lock = RLock()
         self._collector = LocalCollector()
         self._capture = CaptureSession(capture_policy)
@@ -295,6 +302,14 @@ class RunContext:
             self.source_snapshots.append(snapshot)
         return snapshot
 
+    def set_extension(self, name: str, value: JsonValue) -> None:
+        """Store one integration-owned, JSON-safe run projection."""
+
+        if not name.strip():
+            raise ValueError("Extension names must not be empty.")
+        with self._evidence_lock:
+            self.extensions[name] = deepcopy(value)
+
     def snapshot_evidence(self) -> ContextEvidence:
         with self._evidence_lock:
             trace = self.trace
@@ -308,6 +323,7 @@ class RunContext:
                 source_snapshots=tuple(
                     item.model_copy(deep=True) for item in self.source_snapshots
                 ),
+                extensions=deepcopy(self.extensions),
                 trace=trace.model_copy(deep=True),
                 signal_sequence_watermark=max(
                     (signal.sequence for signal in trace.signals),
@@ -363,6 +379,7 @@ class RunContext:
         duration_metric: DurationMetricSpec | dict[str, Any] | None = None,
         tags: dict[str, Any] | None = None,
         instrumentation_scope: InstrumentationScope | None = None,
+        parent_span_id: str | None = None,
     ) -> Span:
         metric_spec = None
         if duration_metric is not None:
@@ -381,6 +398,7 @@ class RunContext:
             duration_metric=metric_spec,
             tags=tags or {},
             instrumentation_scope=instrumentation_scope,
+            parent_span_id=parent_span_id,
         )
 
     def metric(
@@ -1126,19 +1144,28 @@ class RunContext:
         usage: dict[str, Any] | None = None,
         tags: dict[str, Any],
         instrumentation_scope: InstrumentationScope | None = None,
+        parent_span_id: str | None = None,
     ) -> tuple[SpanRecord, int]:
         with self._evidence_lock:
             if self.finalized:
                 raise RuntimeError("RunContext is finalized.")
-            active = get_context()
-            parent_abp_id = self._root_span_id
-            if (
-                active is not None
-                and active.collector is self._collector
-                and active.trace_id == self._emitter.trace_id
-                and active.current_span_id is not None
-            ):
-                parent_abp_id = active.current_span_id
+            if parent_span_id is not None:
+                parent_record = self._span_by_id(parent_span_id)
+                if parent_record is None:
+                    raise ValueError(f"Unknown parent span: {parent_span_id}")
+                if parent_record.ended_at is not None:
+                    raise ValueError(f"Parent span has ended: {parent_span_id}")
+                parent_abp_id = self._legacy_to_abp[parent_span_id]
+            else:
+                active = get_context()
+                parent_abp_id = self._root_span_id
+                if (
+                    active is not None
+                    and active.collector is self._collector
+                    and active.trace_id == self._emitter.trace_id
+                    and active.current_span_id is not None
+                ):
+                    parent_abp_id = active.current_span_id
             parent_id = self._abp_to_legacy.get(parent_abp_id)
             captured_attributes = self._capture_mapping(
                 attributes or {},
@@ -1206,6 +1233,7 @@ class RunContext:
         started_at: int,
         duration_metric: DurationMetricSpec | None,
         error: BaseException | None = None,
+        status: SpanStatus | None = None,
         reason: EndReason | None = None,
         partial: bool | None = None,
     ) -> None:
@@ -1215,13 +1243,15 @@ class RunContext:
             emitter = self._span_emitters[span_record.id]
             abp_span_id = self._legacy_to_abp[span_record.id]
             error_refs = tuple(self._span_error_refs.get(span_record.id, ()))
-            status = SpanStatus.OK
+            span_status = SpanStatus.OK if status is None else status
             end_reason = EndReason.COMPLETED if reason is None else reason
             is_partial = False if partial is None else partial
             if error is not None or error_refs:
-                status = SpanStatus.ERROR
+                span_status = SpanStatus.ERROR
                 if reason is None or reason is EndReason.COMPLETED:
                     end_reason = EndReason.FAILED
+            elif span_status is SpanStatus.ERROR and reason is None:
+                end_reason = EndReason.FAILED
             if isinstance(error, asyncio.CancelledError):
                 end_reason = EndReason.CANCELLED
                 is_partial = True
@@ -1243,7 +1273,7 @@ class RunContext:
                 ),
                 output=None if captured_output.reference is not None else captured_output.value,
                 output_reference=captured_output.reference,
-                status=status,
+                status=span_status,
                 reason=end_reason,
                 errors=error_refs,
                 partial=is_partial,
@@ -1485,6 +1515,7 @@ class Span(AbstractContextManager["Span"]):
         duration_metric: DurationMetricSpec | None,
         tags: dict[str, Any],
         instrumentation_scope: InstrumentationScope | None,
+        parent_span_id: str | None,
     ) -> None:
         self._context = context
         self._name = name
@@ -1495,6 +1526,7 @@ class Span(AbstractContextManager["Span"]):
         self._duration_metric = duration_metric
         self._tags = tags
         self._instrumentation_scope = instrumentation_scope
+        self._parent_span_id = parent_span_id
         self._record: SpanRecord | None = None
         self._started_at: int | None = None
         self._active_token: Token[ActiveContext | None] | None = None
@@ -1512,6 +1544,15 @@ class Span(AbstractContextManager["Span"]):
         return self._record
 
     def __enter__(self) -> Span:
+        self.start()
+        self.resume()
+        return self
+
+    def start(self) -> Span:
+        """Start this span without changing the active context stack."""
+
+        if self._record is not None:
+            raise RuntimeError("Span has already started.")
         self._record, self._started_at = self._context._start_span(
             self._name,
             kind=self._kind,
@@ -1520,8 +1561,8 @@ class Span(AbstractContextManager["Span"]):
             usage=self._usage,
             tags=self._tags,
             instrumentation_scope=self._instrumentation_scope,
+            parent_span_id=self._parent_span_id,
         )
-        self.resume()
         return self
 
     def resume(self) -> None:
@@ -1551,6 +1592,7 @@ class Span(AbstractContextManager["Span"]):
         self,
         *,
         error: BaseException | None = None,
+        status: SpanStatus | None = None,
         reason: EndReason | None = None,
         partial: bool | None = None,
     ) -> None:
@@ -1563,6 +1605,7 @@ class Span(AbstractContextManager["Span"]):
                     started_at=self._started_at,
                     duration_metric=self._duration_metric,
                     error=error,
+                    status=status,
                     reason=reason,
                     partial=partial,
                 )

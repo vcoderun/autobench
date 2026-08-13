@@ -73,6 +73,15 @@ def report_to_yaml_view(report: BenchmarkReport) -> dict[str, Any]:
         }
         for distribution in report.distributions
     }
+    optimizations = [
+        {
+            "run": optimization.benchmark_run_id,
+            "case": optimization.case_id,
+            "variant": optimization.variant_id,
+            "execution": optimization.execution.model_dump(mode="json", exclude_none=True),
+        }
+        for optimization in report.optimizations
+    ]
     return {
         "record": {
             "type": "report",
@@ -97,6 +106,12 @@ def report_to_yaml_view(report: BenchmarkReport) -> dict[str, Any]:
             },
             "compare": comparisons,
             "distributions": distributions,
+            **({"optimizations": optimizations} if optimizations else {}),
+            **(
+                {"optimization_warnings": report.optimization_warnings}
+                if report.optimization_warnings
+                else {}
+            ),
         },
     }
 

@@ -964,6 +964,7 @@ async def test_checkpoint_commits_prepared_payload_and_detects_corruption(tmp_pa
     assert ctx.run_id in inspection.corrupt_run_ids
 
 
+@pytest.mark.large_artifact
 async def test_generated_500_mib_stream_has_bounded_python_memory(tmp_path: Path) -> None:
     ctx, session, staging = await open_artifact_context(tmp_path)
     chunk = b"x" * (1024 * 1024)

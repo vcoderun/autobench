@@ -234,6 +234,7 @@ def run_record_from_result(
         source_snapshots=run.source_snapshots,
         errors=tuple(errors),
         error=run.error,
+        extensions=run.extensions,
         correlation=run.correlation,
     )
 
