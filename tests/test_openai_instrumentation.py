@@ -443,6 +443,7 @@ def _runtime_spans(ctx: RunContext, operation: str) -> list[RuntimeSpanRecord]:
 def test_openai_client_check_and_sync_chat_capture_provider_evidence() -> None:
     instrumentor = OpenAIClient()
     assert instrumentor.check().installable is True
+    assert instrumentor.info.supported_versions == ">=2.52,<2.55"
     assert instrumentor.info.capabilities.streaming is True
     ctx = _run_context()
     client = OpenAI(

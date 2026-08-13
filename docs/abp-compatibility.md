@@ -130,7 +130,7 @@ The initial integration extras are reserved as follows:
 | Extra | Research baseline | First implementation phase |
 | --- | ---: | ---: |
 | `autobench[pydantic-ai]` | Pydantic AI 2.22.0 and 2.23.0 | 10 |
-| `autobench[openai]` | OpenAI Python 2.52.0 and 2.53.0 | 11 |
+| `autobench[openai]` | OpenAI Python 2.52.0 through 2.54.0 | 11 |
 | `autobench[openai-agents]` | OpenAI Agents 0.19.2 | 11 |
 | `autobench[httpx]` | HTTPX 0.28.1 | 12 |
 | `autobench[instrumentation]` | all integrations above | 13 |
