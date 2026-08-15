@@ -165,12 +165,10 @@ async def test_leaderboard_case_matrix_and_comparison_use_semantic_metrics(
         }
     )
     assert metric_value(accounted_run, Semantic.LLM_TOKENS_INPUT) == 30
-    accounted_result = result.model_copy(
-        update={"runs": [accounted_run, *result.runs[1:]]}
+    accounted_result = result.model_copy(update={"runs": [accounted_run, *result.runs[1:]]})
+    assert (
+        build_run_metric_rows(accounted_result)[0].metrics["tokens.direct (llm.tokens.input)"] == 30
     )
-    assert build_run_metric_rows(accounted_result)[0].metrics[
-        "tokens.direct (llm.tokens.input)"
-    ] == 30
 
 
 async def test_report_variant_labels_support_nested_spec_snapshots_and_bad_entries(

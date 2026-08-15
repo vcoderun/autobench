@@ -676,7 +676,10 @@ def test_full_event_contract_projects_spans_metrics_assets_lineage_and_summary()
         for observation in context.observations
         if observation.semantic_type == Semantic.OPTIMIZATION_EVALUATIONS_USED
     ]
-    assert [(observation.value, observation.tags["abp.measurement_scope"]) for observation in evaluation_usage] == [
+    assert [
+        (observation.value, observation.tags["abp.measurement_scope"])
+        for observation in evaluation_usage
+    ] == [
         (6, "direct"),
         (12, "direct"),
         (20, "aggregate"),
