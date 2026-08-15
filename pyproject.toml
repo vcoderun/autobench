@@ -209,4 +209,4 @@ matrix = [
 ]
 
 [tool.uv.sources]
-pydantic-gepa = { git = "https://github.com/vcoderun/pydantic-gepa.git", rev = "897925f8ba68849a6454324f3f65a063f2ad65b2" }
+pydantic-gepa = { git = "https://github.com/vcoderun/pydantic-gepa.git", rev = "467b704f9d99d12517fdd75d3fcea0e3f187c16b" }
