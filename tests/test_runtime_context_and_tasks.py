@@ -555,6 +555,24 @@ def test_capture_policy_diagnostics_are_retained_on_manual_trace() -> None:
     assert custom.attributes["capture_omitted"] is True
 
 
+def test_capture_diagnostic_limit_never_interrupts_the_observed_workload() -> None:
+    ctx = RunContext(
+        benchmark_id="demo",
+        case=Case(id="case_1"),
+        variant=Variant(id="variant_1"),
+        capture_policy=CapturePolicy.none(),
+    )
+
+    for index in range(150):
+        with ctx.span("task", input={"index": index}):
+            pass
+
+    trace = ctx.finalize()
+
+    assert len(trace.diagnostics) == 100
+    assert len(ctx.spans) == 150
+
+
 @pytest.mark.parametrize(
     ("exception", "reason"),
     [

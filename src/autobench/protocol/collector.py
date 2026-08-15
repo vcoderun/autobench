@@ -419,6 +419,30 @@ class Emitter:
         semantic_type: SemanticType | None = None,
         details: dict[str, SerializedValue] | None = None,
     ) -> Diagnostic:
+        diagnostic = self.try_diagnostic(
+            code,
+            message,
+            severity=severity,
+            span_id=span_id,
+            path=path,
+            semantic_type=semantic_type,
+            details=details,
+        )
+        if diagnostic is None:
+            raise RuntimeError("collector rejected diagnostic")
+        return diagnostic
+
+    def try_diagnostic(
+        self,
+        code: str,
+        message: str,
+        *,
+        severity: DiagnosticSeverity = DiagnosticSeverity.WARNING,
+        span_id: SpanId | None = None,
+        path: str | None = None,
+        semantic_type: SemanticType | None = None,
+        details: dict[str, SerializedValue] | None = None,
+    ) -> Diagnostic | None:
         diagnostic = Diagnostic(
             code=code,
             message=message,
@@ -429,7 +453,7 @@ class Emitter:
             details={} if details is None else details,
         )
         if not self.collector.add_diagnostic(self.trace_id, diagnostic):
-            raise RuntimeError("collector rejected diagnostic")
+            return None
         return diagnostic
 
     def span(

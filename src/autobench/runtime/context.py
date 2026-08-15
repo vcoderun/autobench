@@ -1424,7 +1424,7 @@ class RunContext:
             media_type=media_type,
         )
         for diagnostic in captured.diagnostics:
-            self._emitter_for_abp_span(span_id).diagnostic(
+            self._emitter_for_abp_span(span_id).try_diagnostic(
                 diagnostic.code,
                 diagnostic.message,
                 severity=diagnostic.severity,

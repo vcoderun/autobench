@@ -23,6 +23,8 @@
 - Reorganized and expanded the documentation around installation, architecture, first-run workflow,
   practical AI and non-AI use cases, current Python/CLI APIs, automatic asset discovery, and
   troubleshooting.
+- Made capture diagnostics best-effort after the per-trace diagnostic limit is reached so
+  instrumentation saturation cannot interrupt the observed workload.
 
 ## 0.2.0
 

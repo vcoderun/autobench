@@ -299,6 +299,7 @@ def test_diagnostics_are_bounded_materialized_and_rejected_after_finish() -> Non
         )
         is False
     )
+    assert emitter.try_diagnostic("overflow", "not retained") is None
 
     trace = collector.finish(emitter.trace_id)
     assert trace.diagnostics == (diagnostic,)
