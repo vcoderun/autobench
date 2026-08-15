@@ -322,13 +322,12 @@ class EventAdapter(_EventEvidence):
             )
             state.evaluation_cost_used = budget.evaluation_cost
             state.total_cost_used = budget.total_cost
-            if not state.budget_event_seen:
-                self._snapshot_metrics(
-                    state,
-                    event.budget,
-                    include_evaluation_limit=not evaluation_limit_declared,
-                    include_optimizer_limit=not optimizer_limit_declared,
-                )
+            self._snapshot_metrics(
+                state,
+                event.budget,
+                include_evaluation_limit=not evaluation_limit_declared,
+                include_optimizer_limit=not optimizer_limit_declared,
+            )
         if event.score is not None:
             self._metric(
                 state,
@@ -422,7 +421,11 @@ class EventAdapter(_EventEvidence):
                 state,
                 event.budget,
                 span_key=key,
-                tags={"accounting": "aggregate_component", "resource_scope": "engine"},
+                tags={
+                    "abp.measurement_scope": "direct",
+                    "accounting": "aggregate_component",
+                    "resource_scope": "engine",
+                },
             )
         self._finish_engine(state, event, status="completed", score=event.score)
         self._close(state, key, output=None if event.score is None else {"score": event.score})
@@ -830,7 +833,6 @@ class EventAdapter(_EventEvidence):
             )
 
     def _budget_updated(self, state: _Execution, event: BudgetUpdated) -> None:
-        state.budget_event_seen = True
         state.evaluations_used = event.used
         state.evaluations_remaining = event.remaining
         state.optimizer_cost_used = event.optimizer_cost
@@ -843,6 +845,7 @@ class EventAdapter(_EventEvidence):
             event.used,
             Semantic.OPTIMIZATION_EVALUATIONS_USED,
             unit="calls",
+            tags={"abp.measurement_scope": "direct"},
         )
         if event.remaining is not None:
             self._metric(
@@ -851,6 +854,7 @@ class EventAdapter(_EventEvidence):
                 event.remaining,
                 Semantic.OPTIMIZATION_EVALUATIONS_REMAINING,
                 unit="calls",
+                tags={"abp.measurement_scope": "direct"},
             )
         if event.optimizer_cost is not None:
             self._metric(
@@ -859,7 +863,11 @@ class EventAdapter(_EventEvidence):
                 event.optimizer_cost,
                 Semantic.OPTIMIZATION_OPTIMIZER_COST_USED,
                 unit="usd",
-                tags={"cost_scope": "optimizer", "accounting": "aggregate_component"},
+                tags={
+                    "abp.measurement_scope": "direct",
+                    "cost_scope": "optimizer",
+                    "accounting": "aggregate_component",
+                },
             )
         if event.optimizer_cost_remaining is not None:
             self._metric(
@@ -868,6 +876,7 @@ class EventAdapter(_EventEvidence):
                 event.optimizer_cost_remaining,
                 Semantic.OPTIMIZATION_OPTIMIZER_COST_REMAINING,
                 unit="usd",
+                tags={"abp.measurement_scope": "direct"},
             )
         if event.evaluation_cost is not None:
             self._metric(
@@ -876,7 +885,11 @@ class EventAdapter(_EventEvidence):
                 event.evaluation_cost,
                 Semantic.OPTIMIZATION_EVALUATION_COST_USED,
                 unit="usd",
-                tags={"cost_scope": "evaluation", "accounting": "aggregate_component"},
+                tags={
+                    "abp.measurement_scope": "direct",
+                    "cost_scope": "evaluation",
+                    "accounting": "aggregate_component",
+                },
             )
         if event.total_cost is not None:
             self._metric(
@@ -885,7 +898,11 @@ class EventAdapter(_EventEvidence):
                 event.total_cost,
                 Semantic.OPTIMIZATION_COST,
                 unit="usd",
-                tags={"cost_scope": "optimization", "accounting": "aggregate"},
+                tags={
+                    "abp.measurement_scope": "direct",
+                    "cost_scope": "optimization",
+                    "accounting": "aggregate",
+                },
             )
 
     def _snapshot_metrics(
@@ -898,7 +915,12 @@ class EventAdapter(_EventEvidence):
         include_evaluation_limit: bool = True,
         include_optimizer_limit: bool = True,
     ) -> None:
-        metric_tags = dict(tags or {"accounting": "aggregate"})
+        metric_tags: dict[str, SerializedValue] = {
+            "abp.measurement_scope": "aggregate",
+            "accounting": "aggregate",
+        }
+        if tags is not None:
+            metric_tags.update(tags)
         if budget.evaluation_calls is not None:
             self._metric(
                 state,

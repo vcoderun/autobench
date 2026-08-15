@@ -671,6 +671,16 @@ def test_full_event_contract_projects_spans_metrics_assets_lineage_and_summary()
         observation.semantic_type is not None and observation.semantic_type.startswith("llm.tokens")
         for observation in context.observations
     )
+    evaluation_usage = [
+        observation
+        for observation in context.observations
+        if observation.semantic_type == Semantic.OPTIMIZATION_EVALUATIONS_USED
+    ]
+    assert [(observation.value, observation.tags["abp.measurement_scope"]) for observation in evaluation_usage] == [
+        (6, "direct"),
+        (12, "direct"),
+        (20, "aggregate"),
+    ]
 
     evidence = PydanticGEPAEvidence.model_validate(context.extensions[EXTENSION_KEY])
     execution = evidence.executions[0]

@@ -79,7 +79,6 @@ class _Execution:
     optimizer_cost_remaining: float | None = None
     evaluation_cost_used: float | None = None
     total_cost_used: float | None = None
-    budget_event_seen: bool = False
     components: dict[str, CandidateComponent] = field(default_factory=dict)
     candidates: dict[str, _Candidate] = field(default_factory=dict)
     engines: dict[str, EngineSummary] = field(default_factory=dict)
