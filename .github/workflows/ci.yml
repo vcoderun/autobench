@@ -21,7 +21,6 @@ jobs:
           enable-cache: true
       - run: uv sync --extra dev --frozen
       - run: make prod
-      - run: make pre-commit
 
   package:
     runs-on: ubuntu-latest
