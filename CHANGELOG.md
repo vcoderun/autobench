@@ -25,6 +25,7 @@
   troubleshooting.
 - Made capture diagnostics best-effort after the per-trace diagnostic limit is reached so
   instrumentation saturation cannot interrupt the observed workload.
+- Made per-run metric reports prefer aggregate measurements over earlier progress snapshots.
 
 ## 0.2.0
 

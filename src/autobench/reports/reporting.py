@@ -16,7 +16,7 @@ from autobench.instrumentation.pydantic_gepa.projection import (
     PydanticGEPAEvidence,
 )
 from autobench.metrics.observations import Observation, ObservationKind
-from autobench.metrics.projection import observation_priority, source_priority
+from autobench.metrics.projection import observation_priority
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, Semantic, SemanticRegistry
 from autobench.runtime.models import ExecutionCorrelation, ExperimentResult, RunResult
 
@@ -530,7 +530,7 @@ def _run_metric_values(
     values: dict[str, Any] = {}
     observations = sorted(
         run.task_result.observations,
-        key=lambda observation: source_priority(observation.source),
+        key=observation_priority,
     )
     for observation in observations:
         if observation.kind is not ObservationKind.METRIC:
