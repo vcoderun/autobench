@@ -3,7 +3,7 @@ GREEN := \033[1;32m
 RESET := \033[0m
 PYTHON_VERSIONS := 3.11.13 3.12.10 3.13.9 3.14.6
 
-.PHONY: format check-formatted check check-matrix tests coverage-branch check-coverage save-coverage docs-llms docs docs-serve examples build wheel-smoke release all prod pre-commit
+.PHONY: format check-formatted lint typecheck check check-version check-matrix tests coverage-branch check-coverage save-coverage docs-llms docs docs-serve examples build wheel-smoke release all prod pre-commit
 
 format:
 	@printf "$(BLUE)==>$(RESET) Formatting code with ruff...\n"
@@ -15,31 +15,42 @@ check-formatted:
 	@uv run --extra dev ruff format --check
 	@printf "$(GREEN)✔ Formatting check complete.$(RESET)\n"
 
-check:
+lint:
 	@printf "$(BLUE)==>$(RESET) Running ruff checks...\n"
 	@uv run --extra dev ruff check
+	@printf "$(GREEN)✔ Linting complete.$(RESET)\n"
+
+typecheck:
 	@printf "$(BLUE)==>$(RESET) Type checking with ty...\n"
 	@uv run --extra dev ty check
 	@printf "$(BLUE)==>$(RESET) Type checking with basedpyright...\n"
 	@uv run --extra dev basedpyright
-	@printf "$(GREEN)✔ Checking complete.$(RESET)\n"
+	@printf "$(GREEN)✔ Type checking complete.$(RESET)\n"
+
+check: lint typecheck
+
+check-version:
+	@if [ -z "$(PYTHON_VERSION)" ]; then \
+		printf "PYTHON_VERSION is required (for example, make check-version PYTHON_VERSION=3.11.13).\n" >&2; \
+		exit 2; \
+	fi
+	@set -e; \
+		short_version="$(PYTHON_VERSION)"; \
+		short_version=$${short_version%.*}; \
+		version_tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/autobench-matrix.$(PYTHON_VERSION).XXXXXX"); \
+		trap 'rm -rf "$$version_tmp"' EXIT; \
+		printf "$(BLUE)==>$(RESET) Running validation for Python $(PYTHON_VERSION)...\n"; \
+		uv run --extra dev ty check --python-version "$$short_version"; \
+		uv run --extra dev basedpyright --pythonversion "$$short_version" src tests; \
+		TMPDIR="$$version_tmp" uv run --isolated --no-default-groups --group matrix --python "$(PYTHON_VERSION)" sh -c \
+			"python -m pytest -q -m 'not large_artifact'"
+	@printf "$(GREEN)✔ Python $(PYTHON_VERSION) validation complete.$(RESET)\n"
 
 check-matrix:
+	@uv run --extra dev ruff check src/autobench tests
 	@set -e; \
-	root=$$(mktemp -d "$${TMPDIR:-/tmp}/autobench-matrix.XXXXXX"); \
-	trap 'rm -rf "$$root"' EXIT; \
-	uv run --extra dev ruff check src/autobench tests; \
 	for version in $(PYTHON_VERSIONS); do \
-		short_version=$${version%.*}; \
-		version_tmp="$$root/$$version"; \
-		mkdir -p "$$version_tmp"; \
-		printf "$(BLUE)==>$(RESET) Running validation matrix for Python $$version...\n"; \
-		uv run --extra dev ty check --python-version $$short_version; \
-		uv run --extra dev basedpyright --pythonversion $$short_version src tests; \
-		TMPDIR="$$version_tmp" uv run --isolated --no-default-groups --group matrix --python $$version sh -c \
-			"python -m pytest -q -m 'not large_artifact'" \
-			|| exit $$?; \
-		rm -rf "$$version_tmp"; \
+		$(MAKE) --no-print-directory check-version PYTHON_VERSION="$$version" || exit $$?; \
 	done
 	@printf "$(GREEN)✔ Matrix checking complete.$(RESET)\n"
 
