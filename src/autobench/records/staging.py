@@ -6,7 +6,16 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import AsyncIterable, AsyncIterator, Collection, Coroutine, Iterable, Iterator
+from collections.abc import (
+    AsyncIterable,
+    AsyncIterator,
+    Callable,
+    Collection,
+    Coroutine,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -32,10 +41,12 @@ from autobench.records.artifacts import (
     SymlinkPolicy,
 )
 from autobench.records.files import (
+    ExperimentFile,
     LogicalRecordTarget,
     ManifestEntry,
     RecordDurability,
     RecordFileKind,
+    atomic_write_bytes,
     atomic_write_text,
     build_manifest,
     create_temporary_record_directory,
@@ -92,6 +103,12 @@ STAGING_STATE_PATH = "staging.yaml"
 STAGING_MANIFEST_PATH = "staging-manifest.yaml"
 
 OperationResultT = TypeVar("OperationResultT")
+
+
+ExperimentPublisher = Callable[
+    [ExperimentResult, ExperimentRecord, Path],
+    Sequence[ExperimentFile],
+]
 
 _SESSION_OPERATION_SETTLE_SECONDS = 5.0
 
@@ -323,6 +340,7 @@ class FileRecorder:
         durability: RecordDurability = "atomic",
         trace_inline_limit_bytes: int = TRACE_INLINE_LIMIT_BYTES,
         asset_registry: TrackingRegistry = track,
+        experiment_publishers: Sequence[ExperimentPublisher] = (),
     ) -> None:
         if trace_inline_limit_bytes < 1:
             raise ValueError("trace_inline_limit_bytes must be at least 1")
@@ -333,6 +351,7 @@ class FileRecorder:
         self.durability: RecordDurability = durability
         self.trace_inline_limit_bytes = trace_inline_limit_bytes
         self.asset_registry = asset_registry
+        self.experiment_publishers = tuple(experiment_publishers)
 
     async def open(self, start: ExperimentStart) -> FileRecordSession:
         return await asyncio.to_thread(self.open_sync, start)
@@ -1298,10 +1317,12 @@ class FileRecordSession:
                 run_paths=tuple(run_paths),
                 file_hashes=self.start.file_hashes,
             )
+            publication_targets = self.write_experiment_files(result, record, finalizing)
             write_final_metadata(
                 finalizing,
                 record,
                 durability=self.recorder.durability,
+                extra_targets=publication_targets,
             )
             publish_record_directory(
                 finalizing,
@@ -1311,6 +1332,34 @@ class FileRecordSession:
             return record
         finally:
             remove_temporary_record_directory(finalizing)
+
+    def write_experiment_files(
+        self,
+        result: ExperimentResult,
+        record: ExperimentRecord,
+        root: Path,
+    ) -> tuple[LogicalRecordTarget, ...]:
+        files = tuple(
+            file
+            for publisher in self.recorder.experiment_publishers
+            for file in publisher(result, record, root)
+        )
+        targets = validate_logical_targets(
+            tuple(
+                LogicalRecordTarget(path=file.path, kind=file.kind, identity=file.identity)
+                for file in files
+            )
+        )
+        for file in files:
+            target = root / file.path
+            if target.exists() or target.is_symlink():
+                raise RecordingError(f"Experiment publication path already exists: {file.path}")
+            atomic_write_bytes(
+                target,
+                file.content,
+                durability=self.recorder.durability,
+            )
+        return tuple(targets[path] for path in sorted(targets))
 
 
 def inspect_staging(path: Path) -> StagingInspection:
@@ -2004,6 +2053,7 @@ def write_final_metadata(
     record: ExperimentRecord,
     *,
     durability: RecordDurability,
+    extra_targets: tuple[LogicalRecordTarget, ...] = (),
 ) -> None:
     atomic_write_text(
         root / "experiment.yaml",
@@ -2015,9 +2065,9 @@ def write_final_metadata(
         dump_yaml(experiment_summary(record), schema_name="summary"),
         durability=durability,
     )
-    targets = {
-        target.path: target
-        for target in (
+    targets = validate_logical_targets(
+        (
+            *extra_targets,
             LogicalRecordTarget(
                 path="experiment.yaml",
                 kind=RecordFileKind.EXPERIMENT,
@@ -2037,7 +2087,7 @@ def write_final_metadata(
                 for path in record.run_paths
             ),
         )
-    }
+    )
     manifest = build_manifest(root, experiment_id=record.experiment_id, targets=targets)
     atomic_write_text(
         root / "manifest.yaml",
@@ -2061,6 +2111,8 @@ def source_file_hashes(
 
 __all__ = (
     "ExecutionSnapshot",
+    "ExperimentFile",
+    "ExperimentPublisher",
     "ExperimentStart",
     "FileRecordSession",
     "FileRecorder",

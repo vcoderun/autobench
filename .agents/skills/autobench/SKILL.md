@@ -1,6 +1,6 @@
 ---
 name: autobench
-description: Design, implement, run, debug, review, or document Autobench benchmarks and integrations. Use for Autobench YAML specs, Python Benchmark builders, task(ctx, case) functions, datasets and variants, semantic metrics, scoring and derivation, policies, ABP spans/traces, native Pydantic AI/OpenAI/Agents/HTTPX instrumentation, behavioral asset tracking, immutable records, replay, Rich reports, comparisons, exports, optional OTLP delivery, optimizer evidence, or Autobench repository development.
+description: Design, implement, run, debug, review, or document Autobench benchmarks and integrations. Use for Autobench YAML specs, Python Benchmark builders, task(ctx, case) functions, datasets and variants, semantic metrics, scoring and derivation, policies, ABP spans/traces, native Pydantic AI/OpenAI/Agents/HTTPX instrumentation, behavioral asset tracking, immutable records, replay, Rich or evidence-linked Markdown reports, comparisons, exports, optional OTLP delivery, optimizer evidence, or Autobench repository development.
 ---
 
 # Autobench
@@ -36,6 +36,12 @@ router. Load only the reference and example required by the current task.
 - Native instrumentation must never change subject results, exceptions, cancellation, or streams.
 - Runtime capture is metadata-first; behavioral assets are full by default for reconstruction.
 - Run records are immutable. Replay/report/compare/export do not execute the subject.
+- Markdown reports are deterministic files or bundles built from typed evidence. `summary` and
+  `full` are decision-facing: quality gate, scores, purposeful inline SVG charts, case outcomes,
+  comparisons, and evaluator feedback. Technical traces, hashes, run inventories, assets, and raw
+  evidence belong to `audit`. Terminal report commands remain Rich-first and never dump Markdown.
+- Execution success is not benchmark success. Prefer a typed task output with `hard_pass`, `score`,
+  `metrics`, and `feedback` when a report needs case-level quality outcomes.
 - Comparisons report deltas and confounding; they do not assert causality.
 - Keep domain-specific behavior in the task, scorer, adapter, or example. Add only reusable generic
   primitives to Autobench core.
@@ -62,7 +68,7 @@ Read one or more direct references based on the task:
   [references/integrations.md](references/integrations.md)
 - **Prompts, tools, schemas, automatic assets, hashes, versions, diffs, or candidate lineage**:
   [references/assets.md](references/assets.md)
-- **RunRecord, persistence, replay, Rich reports, comparison, exports, or optimizer handoff**:
+- **RunRecord, persistence, replay, Rich/Markdown reports, report bundles, comparison, exports, or optimizer handoff**:
   [references/records-reports.md](references/records-reports.md)
 - **CLI commands, schemas, troubleshooting, quality gates, or release readiness**:
   [references/cli-operations.md](references/cli-operations.md)

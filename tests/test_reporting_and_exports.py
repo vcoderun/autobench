@@ -27,7 +27,7 @@ from autobench import (
     run_benchmark_spec,
 )
 from autobench.data.variants import FactorValue
-from autobench.io import load_yaml
+from autobench.io import benchmark_schema, load_yaml
 from autobench.reports.exporting import (
     export_markdown_report,
     export_runs_csv,
@@ -37,6 +37,7 @@ from autobench.reports.reporting import (
     DEFAULT_LEADERBOARD_METRICS,
     AggregationFn,
     ComparisonReport,
+    MarkdownReportConfig,
     MetricAggregation,
     MetricDistribution,
     ReportSpec,
@@ -75,6 +76,50 @@ async def test_report_replays_the_same_semantic_experiment_data(
     assert build_report(fresh).model_dump(mode="json") == build_report(replayed).model_dump(
         mode="json"
     )
+
+
+def test_markdown_report_config_is_portable_and_audit_remains_explicit() -> None:
+    config = MarkdownReportConfig.model_validate(
+        {
+            "profile": "audit",
+            "layout": "bundle",
+            "output": "reports/audit",
+            "limits": {"table_rows": 40},
+        }
+    )
+
+    assert config.output == Path("reports/audit")
+    assert config.limits.table_rows == 40
+    assert config.content.include_captured is False
+
+    for unsafe_output in ("../audit.md", "/tmp/audit.md"):
+        with pytest.raises(ValueError, match="portable relative path"):
+            MarkdownReportConfig(output=Path(unsafe_output))
+
+
+def test_report_spec_round_trips_markdown_defaults_and_overrides() -> None:
+    default_spec = ReportSpec()
+    configured = ReportSpec.model_validate(
+        {
+            "markdown": {
+                "profile": "summary",
+                "layout": "single",
+                "output": "reports/summary.md",
+                "traces": {"top_slowest": 5},
+                "assets": {"diffs": "none"},
+            }
+        }
+    )
+
+    assert default_spec.markdown.profile == "full"
+    assert ReportSpec.model_validate(configured.model_dump(mode="json")) == configured
+
+    report_schema = benchmark_schema()["properties"]["benchmark"]["additionalProperties"][
+        "properties"
+    ]["report"]
+    markdown_schema = report_schema["properties"]["markdown"]
+    assert markdown_schema["properties"]["profile"]["enum"] == ["summary", "full", "audit"]
+    assert markdown_schema["properties"]["layout"]["enum"] == ["single", "bundle", "auto"]
 
 
 async def test_leaderboard_case_matrix_and_comparison_use_semantic_metrics(
@@ -479,7 +524,7 @@ async def test_markdown_report_handles_empty_leaderboard_and_missing_cells(
 
     markdown = render_markdown_report(sparse_report)
 
-    assert "| variant | runs |  |" in markdown
+    assert "## Leaderboard" not in markdown
     assert "| case_sparse |  |  |" in markdown
     assert "| case_label | manual-pass |  |" in markdown
 

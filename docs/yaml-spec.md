@@ -107,7 +107,16 @@ benchmark:
             accuracy:
               metric: quality.correctness
               aggregate: ratio_true
+      markdown:
+        profile: full
+        layout: auto
+        output: reports/benchmark.md
 ```
+
+`report.markdown` also accepts bounded `limits`, `traces.top_slowest`, `assets.diffs`, and
+`content.include_captured`. A configured output is staged before a CLI-recorded experiment is
+sealed. See [Markdown Reports](markdown-reports.md) for the complete document, audit, and
+publication contracts.
 
 `execution.correlation` groups separate benchmark invocations without changing matrix identity.
 `attempt` must be positive, and labels accept only stable string, integer, finite float, or boolean

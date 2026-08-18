@@ -1761,7 +1761,14 @@ def test_optimizer_projection_replays_exports_and_renders_without_optional_runti
     yaml_view = report_to_yaml_view(report)
     assert yaml_view["report"]["optimizations"][0]["execution"]["final_score"] == 0.97
     assert "optimization_warnings" in yaml_view["report"]
-    markdown = render_markdown_report(report)
+    reader_markdown = render_markdown_report(report)
+    assert "## Optimization Outcome" in reader_markdown
+    assert "Some optimizer evidence was incomplete" in reader_markdown
+    assert "## Pydantic-GEPA Optimizations" not in reader_markdown
+    audit_report = report.model_copy(
+        update={"markdown": report.markdown.model_copy(update={"profile": "audit"})}
+    )
+    markdown = render_markdown_report(audit_report)
     assert "## Pydantic-GEPA Optimizations" in markdown
     assert "### Candidate Lineage" in markdown
     assert "### Optimization Evidence Warnings" in markdown
@@ -1833,7 +1840,10 @@ def test_optimizer_reports_render_empty_lineage_partial_state_and_engine_resourc
     terminal = rendered.getvalue()
     assert "Optimization Engine Resources" in terminal
     assert "status=partial" in terminal
-    markdown = render_markdown_report(boundary_report)
+    audit_report = boundary_report.model_copy(
+        update={"markdown": boundary_report.markdown.model_copy(update={"profile": "audit"})}
+    )
+    markdown = render_markdown_report(audit_report)
     assert "### Engine Runs" in markdown
     assert "resource-without-limits" in markdown
 
@@ -1846,7 +1856,10 @@ def test_optimizer_reports_render_empty_lineage_partial_state_and_engine_resourc
             ]
         }
     )
-    assert "### Engine Runs" not in render_markdown_report(no_engine_report)
+    no_engine_audit = no_engine_report.model_copy(
+        update={"markdown": no_engine_report.markdown.model_copy(update={"profile": "audit"})}
+    )
+    assert "### Engine Runs" not in render_markdown_report(no_engine_audit)
     assert "Candidate Lineage" not in terminal
     assert "Optimization Component Versions" not in terminal
     assert "Optimization Selections" not in terminal
@@ -1873,7 +1886,6 @@ def test_optimizer_reports_render_empty_lineage_partial_state_and_engine_resourc
     )
     assert "Optimization Engines" not in empty_rendered.getvalue()
 
-    markdown = render_markdown_report(boundary_report)
     assert "| partial |  | 0 |  |" in markdown
     assert "### Candidate Lineage" not in markdown
 

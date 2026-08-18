@@ -34,7 +34,7 @@ from autobench.errors import (
 from autobench.exporters.otlp import OTLPSettings, export_record_otlp
 from autobench.instrumentation import InstrumentationError, instrumentor_statuses
 from autobench.records.recording import RecordingError
-from autobench.records.replay import replay_experiment
+from autobench.records.replay import load_experiment_record, replay_experiment
 from autobench.records.staging import (
     FileRecorder,
     archive_staging,
@@ -43,10 +43,15 @@ from autobench.records.staging import (
     inspect_staging,
 )
 from autobench.reports.exporting import (
-    export_markdown_report,
     export_runs_csv,
     export_summary_yaml,
 )
+from autobench.reports.markdown import (
+    MarkdownExperimentPublisher,
+    ReportPublicationError,
+    write_markdown_report,
+)
+from autobench.reports.models import ReportLayout, ReportProfile, ReportSpec
 from autobench.reports.reporting import build_report, compare_variants
 from autobench.reports.rich import (
     render_comparison,
@@ -54,6 +59,7 @@ from autobench.reports.rich import (
     render_export_preview,
     render_generation_result,
     render_instrumentor_statuses,
+    render_markdown_publication,
     render_otlp_export,
     render_report,
     render_staging_inspection,
@@ -309,6 +315,7 @@ def run(
             active_record_path,
             source_files=collect_benchmark_source_files(spec_path),
             path_root=Path.cwd(),
+            experiment_publishers=(MarkdownExperimentPublisher(),),
         )
     )
     try:
@@ -359,10 +366,94 @@ def replay(run_dir: Path) -> None:
 
 @cli.command("report")
 @click.argument("run_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
-def report(run_dir: Path) -> None:
-    """Render the Rich terminal report from recorded evidence."""
+@click.option(
+    "--format",
+    "report_format",
+    type=click.Choice(("markdown",)),
+    default=None,
+    help="Write a durable report instead of rendering the terminal view.",
+)
+@click.option(
+    "--profile",
+    type=click.Choice(("summary", "full", "audit")),
+    default=None,
+    help="Markdown detail profile.",
+)
+@click.option(
+    "--layout",
+    type=click.Choice(("single", "bundle", "auto")),
+    default=None,
+    help="Markdown publication layout.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Markdown file or bundle directory.",
+)
+@click.option(
+    "--include-captured-content",
+    is_flag=True,
+    default=False,
+    help="Allow recorded captured content in an audit report.",
+)
+def report(
+    run_dir: Path,
+    report_format: str | None,
+    profile: ReportProfile | None,
+    layout: ReportLayout | None,
+    output_path: Path | None,
+    include_captured_content: bool,
+) -> None:
+    """Render Rich evidence or publish a Markdown report from a record."""
     result = replay_experiment(run_dir)
-    render_report(_console, build_report(result))
+    record = load_experiment_record(run_dir)
+    if report_format is None:
+        if (
+            profile is not None
+            or layout is not None
+            or output_path is not None
+            or include_captured_content
+        ):
+            raise click.UsageError("Markdown report options require --format markdown.")
+        render_report(
+            _console,
+            build_report(result, experiment_record=record, experiment_root=run_dir),
+        )
+        return
+    report_spec = (
+        ReportSpec()
+        if result.report_spec_data is None
+        else ReportSpec.model_validate(result.report_spec_data)
+    )
+    markdown = report_spec.markdown
+    if profile is not None:
+        markdown = markdown.model_copy(update={"profile": profile})
+    if layout is not None:
+        markdown = markdown.model_copy(update={"layout": layout})
+    if include_captured_content:
+        markdown = markdown.model_copy(
+            update={"content": markdown.content.model_copy(update={"include_captured": True})}
+        )
+    report_spec = report_spec.model_copy(update={"markdown": markdown})
+    report_model = build_report(
+        result,
+        report_spec=report_spec,
+        experiment_record=record,
+        experiment_root=run_dir,
+    )
+    destination = output_path or markdown.output or Path(f"{run_dir.name}-report.md")
+    try:
+        publication = write_markdown_report(
+            report_model,
+            destination,
+            immutable_root=run_dir,
+        )
+    except ReportPublicationError as exc:
+        _console.print(f"[red]Report publication failed:[/red] {escape(str(exc))}")
+        raise SystemExit(1) from exc
+    render_markdown_publication(_console, publication, report_model)
 
 
 @cli.command("export")
@@ -387,7 +478,25 @@ def export(run_dir: Path, export_format: str, output_path: Path) -> None:
     if export_format == "csv":
         export_runs_csv(result, output_path)
     elif export_format == "markdown":
-        export_markdown_report(result, output_path)
+        record = load_experiment_record(run_dir)
+        report_model = build_report(
+            result,
+            experiment_record=record,
+            experiment_root=run_dir,
+        )
+        try:
+            publication = write_markdown_report(
+                report_model,
+                output_path,
+                layout="single",
+                overwrite=True,
+                immutable_root=run_dir,
+            )
+        except ReportPublicationError as exc:
+            _console.print(f"[red]Report publication failed:[/red] {escape(str(exc))}")
+            raise SystemExit(1) from exc
+        render_markdown_publication(_console, publication, report_model)
+        return
     else:
         export_summary_yaml(result, output_path)
     render_export_preview(

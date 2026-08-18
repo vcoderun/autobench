@@ -39,7 +39,7 @@ Read only the page relevant to the task:
 | Metrics and semantics | `docs/observations-and-semantics.md` |
 | Scoring/derivation | `docs/scoring-and-derivation.md` |
 | Agent evaluation | `docs/agentic-evaluation.md` |
-| Records/reports | `docs/recording-and-reporting.md` |
+| Records/reports | `docs/recording-and-reporting.md`, `docs/markdown-reports.md` |
 | Explicit assets | `docs/asset-tracking.md` |
 | Native asset discovery | `docs/automatic-asset-discovery.md` |
 | ABP protocol | `docs/instrumentation-and-traces.md`, `docs/abp-compatibility.md` |
@@ -84,7 +84,7 @@ copy-ready patterns.
 | `metrics` | observations, semantics, mappings, queries, projections, packs |
 | `protocol` | ABP signals, collector, capture, trace materialization |
 | `records` | artifacts, immutable recording, storage, replay |
-| `reports` | projections, aggregation, Rich rendering, exports |
+| `reports` | typed analysis, aggregation, Rich rendering, Markdown publication, exports |
 | `runtime` | task execution, context, pipeline, optional eval runtime |
 | `specs` | benchmark/task/report typed specs and YAML transforms |
 | `tracking` | explicit/automatic asset models, registry, history, content store |
@@ -126,8 +126,11 @@ content registry, capture semantics, native/custom extraction, docs, and history
 
 ### Add a report/export feature
 
-Keep records unchanged. Add typed config, projection, Rich renderer or file exporter, CLI wiring,
-docs, and replay-only tests.
+Keep records unchanged unless a narrowly generic pre-seal publication seam is required. Add typed
+config, renderer-independent projection, Rich renderer or file publisher, CLI wiring, docs, and
+replay-only tests. Markdown analysis belongs in `reports/analysis.py`; purposeful inline SVG
+encodings belong in `reports/charts.py`; file rendering and atomic single/bundle publication belong
+in `reports/markdown.py`.
 
 ## External Package Boundaries
 
@@ -142,4 +145,3 @@ build its `Dataset`/`Case` types.
 External references such as DeepEval, Promptfoo, Vowel, OpenTelemetry instrumentors, or bespoke
 benchmarks are discovery sources. Borrow useful feature concepts, not their product ownership or
 entire abstraction stack.
-

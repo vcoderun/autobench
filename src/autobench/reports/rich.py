@@ -17,6 +17,7 @@ from autobench.instrumentation.registry import InstrumentorStatus
 from autobench.protocol.traces import Trace
 from autobench.records.staging import StagingInspection
 from autobench.reports.exporting import CSV_METRICS
+from autobench.reports.models import MarkdownReportPublication
 from autobench.reports.reporting import (
     BenchmarkReport,
     ComparisonReport,
@@ -103,6 +104,29 @@ def render_generation_result(
             generated_case.rejection_reason or "-",
         )
     console.print(cases)
+
+
+def render_markdown_publication(
+    console: Console,
+    publication: MarkdownReportPublication,
+    report: BenchmarkReport,
+) -> None:
+    console.print(
+        Panel.fit(
+            Text(str(publication.destination), style="bold green"),
+            title="Exported MARKDOWN Report",
+            border_style="green",
+        )
+    )
+    summary = _kv_table("Publication Summary")
+    summary.add_row("Profile", publication.profile)
+    summary.add_row("Layout", publication.layout)
+    summary.add_row("Runs", str(report.run_count))
+    summary.add_row("Sections", str(_report_section_count(report)))
+    summary.add_row("Files", str(len(publication.files)))
+    summary.add_row("Bytes", str(sum(file.byte_count for file in publication.files)))
+    summary.add_row("Notices", str(len(report.notices)))
+    console.print(summary)
 
 
 def render_otlp_export(console: Console, result: OTLPExportResult) -> None:
@@ -1060,6 +1084,28 @@ def _ordered_keys(values: Mapping[str, Mapping[str, Any]]) -> list[str]:
     return keys
 
 
+def _report_section_count(report: BenchmarkReport) -> int:
+    return sum(
+        (
+            report.summary is not None,
+            report.health is not None,
+            bool(report.variant_configs),
+            bool(report.leaderboard),
+            bool(report.policies),
+            bool(report.comparisons),
+            report.design is not None,
+            bool(report.metric_catalog),
+            bool(report.run_details),
+            bool(report.failures),
+            report.traces is not None,
+            report.assets is not None,
+            report.artifacts is not None,
+            bool(report.optimizations),
+            report.provenance is not None,
+        )
+    )
+
+
 def _model_short(model_name: str) -> str:
     return model_name.split("/")[-1]
 
@@ -1079,6 +1125,7 @@ __all__ = (
     "render_experiment_result",
     "render_export_preview",
     "render_generation_result",
+    "render_markdown_publication",
     "render_model_configurations",
     "render_otlp_export",
     "render_recorded_runs",

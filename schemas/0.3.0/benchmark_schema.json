@@ -550,6 +550,113 @@
             "type": "array"
           },
           "report": {
+            "additionalProperties": false,
+            "properties": {
+              "compare": {
+                "type": "object"
+              },
+              "distributions": {
+                "type": "array"
+              },
+              "leaderboard": {
+                "type": "object"
+              },
+              "markdown": {
+                "additionalProperties": false,
+                "properties": {
+                  "assets": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "diffs": {
+                        "enum": [
+                          "none",
+                          "summary",
+                          "full"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "content": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "include_captured": {
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "layout": {
+                    "default": "auto",
+                    "enum": [
+                      "single",
+                      "bundle",
+                      "auto"
+                    ],
+                    "type": "string"
+                  },
+                  "limits": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "failure_details": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "run_details": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "table_rows": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "value_excerpt_chars": {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "output": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "default": "full",
+                    "enum": [
+                      "summary",
+                      "full",
+                      "audit"
+                    ],
+                    "type": "string"
+                  },
+                  "traces": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "top_slowest": {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "matrix": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object"
+                  }
+                ]
+              }
+            },
             "type": "object"
           },
           "run": {

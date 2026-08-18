@@ -18,7 +18,7 @@
 | `dataset generate` | yes | generator target + request YAML | Prepare a frozen dataset before matrix planning |
 | `run` | yes | benchmark YAML | Execute, record, and render |
 | `replay` | no | record directory | Reconstruct recorded results |
-| `report` | no | record directory | Render configured analysis |
+| `report` | no | record directory | Render Rich analysis or publish Markdown |
 | `compare` | no | record directory | Compare two variants |
 | `export` | no | record directory | Write YAML, CSV, or Markdown projection |
 | `instrumentation doctor` | no | environment | Inspect integration compatibility |
@@ -38,6 +38,8 @@ autobench validate autobench.yaml
 autobench run autobench.yaml --record runs/latest
 autobench replay runs/latest
 autobench report runs/latest
+autobench report runs/latest \
+  --format markdown --profile full --layout auto --output analysis/report
 autobench compare runs/latest --baseline current --candidate proposed
 autobench export runs/latest --format csv --path analysis/runs.csv
 autobench telemetry export runs/latest --endpoint https://collector.example/v1/traces
@@ -53,6 +55,13 @@ the project intentionally checks in fixtures.
 
 The CLI renders Rich tables and panels for humans. Machine consumers should read records or exports,
 not scrape terminal formatting.
+
+`report` stays Rich-only unless `--format markdown` is explicit. Markdown supports
+`--profile summary|full|audit`, `--layout single|bundle|auto`, `--output`, and
+`--include-captured-content`. The command writes files atomically and prints a Rich publication
+summary, never the Markdown document. `full` is the user-facing benchmark narrative; use `audit`
+for run IDs, traces, assets, hashes, artifacts, provenance, and captured evidence. Post-hoc output
+must remain outside the immutable record.
 
 `dataset generate` resolves a sync or async `CaseGenerator`, records request/provider/model/review/
 usage/cost provenance, and publishes normal dataset YAML plus a generation manifest. Explicit

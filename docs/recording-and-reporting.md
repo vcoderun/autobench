@@ -414,10 +414,21 @@ report:
     - name: request_latency
       semantic_type: time.latency
       summaries: [min, median, p95, max]
+  markdown:
+    profile: full
+    layout: auto
+    output: reports/benchmark.md
 ```
 
 Aggregation functions include count, mean, sum, min, max, median, p95, standard deviation,
 geometric mean, and boolean true ratio.
+
+The default Markdown projection is decision-facing: quality gate, score range, purposeful inline
+SVG, case outcomes, paired deltas, issue totals, and priority evaluator feedback. The `audit`
+profile adds run health, metric coverage, ABP traces, asset lineage, artifact inventory, optimizer
+evidence, hashes, and provenance. A configured `output` is staged before the record manifest is
+sealed. See [Markdown Reports](markdown-reports.md) for the task-output evaluation convention,
+profiles, bundle layout, audit safety, and publication.
 
 ## Comparison Semantics
 

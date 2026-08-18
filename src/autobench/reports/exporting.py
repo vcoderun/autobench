@@ -7,6 +7,7 @@ from typing import Any
 
 from autobench.io import dump_yaml
 from autobench.metrics.semantics import Semantic
+from autobench.reports.markdown import write_markdown_report
 from autobench.reports.reporting import (
     BenchmarkReport,
     ReportSpec,
@@ -156,9 +157,10 @@ def export_markdown_report(
     *,
     report_spec: ReportSpec | None = None,
 ) -> str:
-    rendered = render_markdown_report(build_report(result, report_spec=report_spec))
+    report = build_report(result, report_spec=report_spec)
+    rendered = render_markdown_report(report)
     if path is not None:
-        path.write_text(rendered, encoding="utf-8")
+        write_markdown_report(report, path, layout="single", overwrite=True)
     return rendered
 
 

@@ -9,6 +9,7 @@
 - [Low-level specs](#low-level-specs)
 - [Scoring extensions](#scoring-extensions)
 - [Execution and persistence](#execution-and-persistence)
+- [Report projection and publication](#report-projection-and-publication)
 - [Typing and extension rules](#typing-and-extension-rules)
 
 ## Choose A Surface
@@ -195,6 +196,44 @@ behavior and should not be called as an event-loop workaround from async code.
 Replay, report, compare, export, and trace inspection operate on records and should not import or
 execute the benchmark subject.
 
+## Report Projection And Publication
+
+```python
+from pathlib import Path
+
+from autobench import (
+    build_report,
+    load_experiment_record,
+    replay_experiment,
+    write_markdown_report,
+)
+
+record_dir = Path("runs/latest")
+result = replay_experiment(record_dir)
+record = load_experiment_record(record_dir)
+report = build_report(
+    result,
+    experiment_record=record,
+    experiment_root=record_dir,
+)
+publication = write_markdown_report(
+    report,
+    Path("analysis/report"),
+    layout="bundle",
+    immutable_root=record_dir,
+)
+```
+
+`BenchmarkReport` is the typed analysis IR. Markdown is a deterministic projection of that model.
+Use `summary`, `full`, or explicitly content-enabled `audit`; use `single`, `bundle`, or `auto` for
+publication. Post-hoc reports cannot write inside the immutable record. Configured in-run reports
+use `ExperimentPublisher(result, record, experiment_root)` and return `ExperimentFile` values for
+the recorder to validate and seal.
+
+`full` is decision-facing. It projects task-output `hard_pass`, `score`, `metrics`, and `feedback`
+into quality KPIs, case outcomes, purposeful inline SVG, and priority feedback. Use `audit` for run
+inventories, traces, assets, hashes, artifacts, and captured values.
+
 ## Typing And Extension Rules
 
 - Prefer exact types, then constrained generics, then `Any` only for genuinely unconstrained data.
@@ -208,4 +247,3 @@ execute the benchmark subject.
   importable without provider extras.
 - Add a generic primitive only when multiple applications need the behavior. Keep domain-specific
   logic in tasks, scorers, adapters, or examples.
-

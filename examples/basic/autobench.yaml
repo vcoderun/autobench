@@ -49,3 +49,7 @@ benchmark:
             accuracy:
               metric: quality.correctness
               aggregate: ratio_true
+      markdown:
+        profile: full
+        layout: single
+        output: reports/benchmark.md

@@ -333,7 +333,7 @@ def _normalize_report_section(raw_report: Any) -> dict[str, Any]:
         report["case_matrix"] = _normalize_matrix_report(raw_report["matrix"])
     if "compare" in raw_report:
         report["comparisons"] = _normalize_compare_report(raw_report["compare"])
-    for key in ("distributions",):
+    for key in ("distributions", "markdown"):
         if key in raw_report:
             report[key] = raw_report[key]
     return report
@@ -528,6 +528,9 @@ def _report_to_yaml_view(report: ReportSpec) -> dict[str, Any]:
         view["distributions"] = [
             _compact_model_dump(distribution) for distribution in report.distributions
         ]
+    markdown = report.markdown.model_dump(mode="json", exclude_defaults=True)
+    if markdown:
+        view["markdown"] = markdown
     return view
 
 

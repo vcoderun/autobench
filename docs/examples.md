@@ -55,11 +55,15 @@ generation manifest, showing the boundary between data preparation and benchmark
 
 ```bash
 autobench run examples/basic/autobench.yaml --record /tmp/autobench-basic
+autobench report /tmp/autobench-basic \
+  --format markdown --layout bundle --output /tmp/autobench-basic-report
 ```
 
 The task validates typed input, reads a factor, opens a workflow span, stores its output as an
 artifact, and lets declarative scorers evaluate correctness and handling. The candidate fixes a
 known routing failure, so the case matrix and comparison contain a visible behavioral delta.
+Its YAML also publishes `reports/benchmark.md` inside the record before the manifest is sealed; the
+second command demonstrates a post-hoc bundle generated from replayed evidence.
 
 ## Mid: Quality, Cost, And Constraints
 

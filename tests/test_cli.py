@@ -9,7 +9,12 @@ from textwrap import dedent
 import pytest
 from click.testing import CliRunner
 
-from autobench import load_experiment_record
+from autobench import (
+    MarkdownExperimentPublisher,
+    ReportSpec,
+    load_experiment_record,
+    replay_experiment,
+)
 from autobench.cli import cli
 
 
@@ -379,6 +384,188 @@ def test_cli_report_export_and_compare_recorded_evidence(
     assert "Variant Comparison" in comparison_stdout.output
     assert "Factor Deltas" in comparison_stdout.output
     assert "temperature" in comparison_stdout.output
+
+
+@pytest.mark.parametrize(
+    ("layout", "output", "report_path", "artifact_link_prefix"),
+    (
+        ("single", "reports/benchmark.md", "reports/benchmark.md", "../artifacts/"),
+        ("bundle", "reports/benchmark", "reports/benchmark/index.md", "../../artifacts/"),
+    ),
+)
+def test_cli_publishes_configured_markdown_before_sealing_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    layout: str,
+    output: str,
+    report_path: str,
+    artifact_link_prefix: str,
+) -> None:
+    _write_module(
+        tmp_path,
+        "cli_published_report_task.py",
+        """
+        def run(ctx, case):
+            ctx.artifact("decision", {"success": True})
+            return {"success": True}
+        """,
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    spec_path = tmp_path / "published-report.yaml"
+    spec_path.write_text(
+        dedent(
+            f"""
+            benchmark:
+              published-report:
+                dataset:
+                  cases:
+                    - id: case_1
+                run:
+                  python: cli_published_report_task:run
+                variants:
+                  baseline: {{}}
+                evaluate:
+                  success:
+                    pass: output.success
+                    semantic: result.success
+                report:
+                  markdown:
+                    profile: audit
+                    layout: {layout}
+                    output: {output}
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    record_dir = tmp_path / "record"
+
+    result = CliRunner().invoke(
+        cli,
+        ["run", str(spec_path), "--record", str(record_dir)],
+    )
+    record = load_experiment_record(record_dir)
+
+    assert result.exit_code == 0
+    published_path = record_dir / report_path
+    published = published_path.read_text(encoding="utf-8")
+    assert published.startswith("# published-report\n")
+    assert artifact_link_prefix in published
+    assert record.manifest_path is not None
+    manifest = (record_dir / record.manifest_path).read_text(encoding="utf-8")
+    assert report_path in manifest
+
+    publisher = MarkdownExperimentPublisher()
+    replayed = replay_experiment(record_dir)
+    assert (
+        publisher(replayed.model_copy(update={"report_spec_data": None}), record, record_dir) == ()
+    )
+    without_output = replayed.model_copy(
+        update={"report_spec_data": ReportSpec().model_dump(mode="json")}
+    )
+    assert publisher(without_output, record, record_dir) == ()
+
+
+def test_cli_markdown_report_writes_without_printing_document(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_module(
+        tmp_path,
+        "cli_markdown_task.py",
+        """
+        def run(ctx, case):
+            return {"success": True}
+        """,
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    spec_path = tmp_path / "markdown.yaml"
+    spec_path.write_text(
+        dedent(
+            """
+            benchmark:
+              markdown-report:
+                dataset:
+                  cases:
+                    - id: case_1
+                run:
+                  python: cli_markdown_task:run
+                variants:
+                  baseline: {}
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    record_dir = tmp_path / "record"
+    output = tmp_path / "bundle"
+    runner = CliRunner()
+    assert runner.invoke(cli, ["run", str(spec_path), "--record", str(record_dir)]).exit_code == 0
+
+    published = runner.invoke(
+        cli,
+        [
+            "report",
+            str(record_dir),
+            "--format",
+            "markdown",
+            "--profile",
+            "audit",
+            "--layout",
+            "bundle",
+            "--output",
+            str(output),
+            "--include-captured-content",
+        ],
+    )
+    default_output = tmp_path / "default.md"
+    default_publication = runner.invoke(
+        cli,
+        [
+            "report",
+            str(record_dir),
+            "--format",
+            "markdown",
+            "--output",
+            str(default_output),
+        ],
+    )
+    immutable_publication = runner.invoke(
+        cli,
+        [
+            "report",
+            str(record_dir),
+            "--format",
+            "markdown",
+            "--output",
+            str(record_dir / "forbidden.md"),
+        ],
+    )
+    immutable_export = runner.invoke(
+        cli,
+        [
+            "export",
+            str(record_dir),
+            "--format",
+            "markdown",
+            "--path",
+            str(record_dir / "forbidden-export.md"),
+        ],
+    )
+    invalid = runner.invoke(cli, ["report", str(record_dir), "--profile", "summary"])
+
+    assert published.exit_code == 0
+    assert "Exported MARKDOWN Report" in published.output
+    assert "# markdown-report" not in published.output
+    assert (output / "index.md").is_file()
+    assert default_publication.exit_code == 0
+    assert default_output.is_file()
+    assert immutable_publication.exit_code == 1
+    assert "immutable experiment record" in immutable_publication.output
+    assert immutable_export.exit_code == 1
+    assert "immutable experiment record" in immutable_export.output
+    assert invalid.exit_code == 2
+    assert "require --format markdown" in invalid.output
 
 
 def test_dunder_main_import_and_script_execution(

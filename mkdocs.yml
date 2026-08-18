@@ -89,6 +89,7 @@ nav:
       - Agentic Evaluation: agentic-evaluation.md
   - Evidence And Lineage:
       - Recording And Reporting: recording-and-reporting.md
+      - Markdown Reports: markdown-reports.md
       - Asset Tracking: asset-tracking.md
       - Automatic Asset Discovery: automatic-asset-discovery.md
   - Autobench Protocol (ABP):

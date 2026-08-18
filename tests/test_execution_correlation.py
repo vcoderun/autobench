@@ -366,7 +366,12 @@ async def test_checkpoint_records_exports_and_grouped_reports_preserve_correlati
     report = build_report(second)
     report_view = report_to_yaml_view(report)
     assert report_view["report"]["correlation"]["attempt"] == 2
-    assert "correlation:" in render_markdown_report(report)
+    audit_report = report.model_copy(
+        update={"markdown": report.markdown.model_copy(update={"profile": "audit"})}
+    )
+    audit_markdown = render_markdown_report(audit_report)
+    assert "## Technical Evidence" in audit_markdown
+    assert "| Group id | proposal |" in audit_markdown
     csv_output = export_runs_csv(second)
     assert "correlation_group_id,correlation_attempt,correlation_phase" in csv_output
     assert "proposal,2,validation" in csv_output

@@ -574,6 +574,65 @@ def benchmark_schema() -> SchemaDocument:
         },
         "additionalProperties": False,
     }
+    report = {
+        "type": "object",
+        "properties": {
+            "leaderboard": {"type": "object"},
+            "matrix": {"oneOf": [{"type": "string"}, {"type": "object"}]},
+            "compare": {"type": "object"},
+            "distributions": {"type": "array"},
+            "markdown": {
+                "type": "object",
+                "properties": {
+                    "profile": {
+                        "type": "string",
+                        "enum": ["summary", "full", "audit"],
+                        "default": "full",
+                    },
+                    "layout": {
+                        "type": "string",
+                        "enum": ["single", "bundle", "auto"],
+                        "default": "auto",
+                    },
+                    "output": {"type": ["string", "null"]},
+                    "limits": {
+                        "type": "object",
+                        "properties": {
+                            "table_rows": {"type": "integer", "minimum": 1},
+                            "run_details": {"type": "integer", "minimum": 1},
+                            "failure_details": {"type": "integer", "minimum": 1},
+                            "value_excerpt_chars": {"type": "integer", "minimum": 1},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "traces": {
+                        "type": "object",
+                        "properties": {
+                            "top_slowest": {"type": "integer", "minimum": 1},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "assets": {
+                        "type": "object",
+                        "properties": {
+                            "diffs": {
+                                "type": "string",
+                                "enum": ["none", "summary", "full"],
+                            }
+                        },
+                        "additionalProperties": False,
+                    },
+                    "content": {
+                        "type": "object",
+                        "properties": {"include_captured": {"type": "boolean"}},
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+        "additionalProperties": False,
+    }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": f"Autobench {__version__} Benchmark DSL",
@@ -608,7 +667,7 @@ def benchmark_schema() -> SchemaDocument:
                         "derive": {"type": "array"},
                         "post_derive": {"type": "array"},
                         "policies": {"type": "array"},
-                        "report": {"type": "object"},
+                        "report": report,
                         "semantic_registry": {"type": "object"},
                         "instrumentation": instrumentation,
                     },

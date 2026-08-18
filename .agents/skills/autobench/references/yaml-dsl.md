@@ -256,6 +256,31 @@ deviation, geometric mean, and `ratio_true`. Use:
 - compare for declared baseline/candidate deltas;
 - distributions for sample shape and noise.
 
+`report.markdown` controls the replayable document projection:
+
+```yaml
+report:
+  markdown:
+    profile: full       # summary | full | audit
+    layout: auto        # single | bundle | auto
+    output: reports/benchmark.md
+    limits:
+      table_rows: 200
+      run_details: 100
+      failure_details: 100
+      value_excerpt_chars: 2000
+    traces:
+      top_slowest: 20
+    assets:
+      diffs: summary    # none | summary | full
+    content:
+      include_captured: false
+```
+
+`output` is a portable relative record path. During CLI recording, it is published before the
+manifest is sealed. Omit it for post-hoc reports. Audit content still requires explicit CLI/API
+permission and retained source evidence.
+
 Report configuration changes presentation and aggregation; it must not mutate source records.
 
 ## Rules For Agents

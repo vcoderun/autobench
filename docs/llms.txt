@@ -29,6 +29,7 @@ Use this index to load the smallest relevant page. Use the full bundle when broa
 ## Evidence And Lineage
 
 - [Recording and Reporting](https://vcoderun.github.io/autobench/_markdown/recording-and-reporting.txt): Immutable records, artifacts, replay, leaderboards, matrices, comparisons, distributions, and exports.
+- [Markdown Reports](https://vcoderun.github.io/autobench/_markdown/markdown-reports.txt): Evidence-linked summaries, profiles, single and bundle layouts, direction-aware comparisons, safe audit content, atomic publication, and replay workflows.
 - [Asset Tracking](https://vcoderun.github.io/autobench/_markdown/asset-tracking.txt): Explicit prompt, tool, Pydantic model, dataclass, class, config, version, hash, history, and diff tracking.
 - [Automatic Asset Discovery](https://vcoderun.github.io/autobench/_markdown/automatic-asset-discovery.txt): Decorator-free SDK asset lineage, definition/effective representations, capability scopes, privacy, persistence, and custom extraction.
 

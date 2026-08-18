@@ -34,6 +34,20 @@ class LogicalRecordTarget(BaseModel):
     identity: str = Field(min_length=1)
 
 
+class ExperimentFile(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = Field(min_length=1)
+    content: bytes
+    kind: RecordFileKind = RecordFileKind.OTHER
+    identity: str = Field(min_length=1)
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, path: str) -> str:
+        return normalize_logical_path(path)
+
+
 class ManifestEntry(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -260,6 +274,7 @@ def _inferred_kind(path: str) -> RecordFileKind:
 
 
 __all__ = (
+    "ExperimentFile",
     "LogicalRecordTarget",
     "ManifestEntry",
     "RecordDurability",

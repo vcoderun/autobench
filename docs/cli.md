@@ -11,7 +11,7 @@ file exports instead of raw terminal output.
 | `dataset generate` | Yes | generator target + request YAML | Prepare and freeze generated cases before planning |
 | `run` | Yes | benchmark YAML | Execute, record, and render an experiment |
 | `replay` | No | record directory | Reconstruct recorded results |
-| `report` | No | record directory | Render configured analysis views |
+| `report` | No | record directory | Render Rich analysis or publish Markdown |
 | `compare` | No | record directory | Compare two variants without causal claims |
 | `export` | No | record directory | Write a YAML, CSV, or Markdown projection |
 | `recording inspect` | No | staging directory | Diagnose committed, missing, corrupt, and conflicting evidence |
@@ -134,9 +134,24 @@ from `experiment.yaml`, per-run records, and referenced artifacts.
 autobench report runs/routing-42
 ```
 
-The report includes experiment status, variant configuration, leaderboard values, run metrics, case
-matrix, configured comparisons, and distributions. Missing metrics remain visible rather than being
-silently converted to zero.
+The Rich terminal report summarizes recorded execution evidence. The Markdown report is a separate
+decision-facing projection: quality gate, scores, case outcomes, purposeful charts, comparisons,
+and evaluator feedback. Missing metrics remain distinct from numeric zero.
+
+Write the richer evidence-linked Markdown projection without printing Markdown to the terminal:
+
+```bash
+autobench report runs/routing-42 \
+  --format markdown \
+  --profile full \
+  --layout auto \
+  --output analysis/routing-report
+```
+
+Profiles are `summary`, `full`, and `audit`; layouts are `single`, `bundle`, and `auto`. Use `audit`
+for technical runs, traces, assets, hashes, artifacts, and provenance. Captured audit detail
+additionally requires `--include-captured-content`. See
+[Markdown Reports](markdown-reports.md).
 
 ## Compare
 
@@ -168,7 +183,8 @@ autobench export runs/routing-42 \
 
 `--format` is required and accepts `yaml`, `csv`, or `markdown`. `--path` is also required. YAML
 exports include a versioned schema header; CSV is a run-level projection; Markdown is a portable
-report. The complete evidence remains the record directory.
+single-file report written through the same atomic publisher. The complete evidence remains the
+record directory.
 
 ## OTLP Telemetry Export
 

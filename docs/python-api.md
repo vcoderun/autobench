@@ -349,9 +349,16 @@ from autobench import (
     export_markdown_report,
     export_runs_csv,
     export_summary_yaml,
+    load_experiment_record,
+    write_markdown_report,
 )
 
-report = build_report(replayed)
+record = load_experiment_record(record_dir)
+report = build_report(
+    replayed,
+    experiment_record=record,
+    experiment_root=record_dir,
+)
 comparison = compare_variants(
     replayed,
     baseline="current",
@@ -361,10 +368,23 @@ comparison = compare_variants(
 export_summary_yaml(replayed, Path("analysis/summary.yaml"))
 export_runs_csv(replayed, Path("analysis/runs.csv"))
 export_markdown_report(replayed, Path("analysis/report.md"))
+publication = write_markdown_report(
+    report,
+    Path("analysis/report-bundle"),
+    layout="bundle",
+    immutable_root=record_dir,
+)
 ```
 
 `build_leaderboard`, `build_case_matrix`, `build_metric_distribution`, and
-`build_run_metric_rows` expose individual projections.
+`build_run_metric_rows` expose individual projections. `write_markdown_report()` returns profile,
+selected layout, output paths, byte counts, and SHA-256 hashes. See
+[Markdown Reports](markdown-reports.md) for configuration and safety boundaries.
+
+For a case-level benchmark verdict, return a mapping or Pydantic model containing `hard_pass`,
+`score`, `metrics`, and `feedback` from the task. `build_report()` keeps that quality outcome
+separate from task execution status and projects it into KPIs, case tables, and purposeful inline
+SVG. Technical run, trace, asset, artifact, hash, and provenance detail belongs to `audit`.
 
 Group or select several invocation results without changing their records:
 

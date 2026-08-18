@@ -154,11 +154,13 @@ typing. See [Asset Tracking](asset-tracking.md) and
 | Correlated reports | Field filters and `group_id` report groups across independent experiment results |
 | Replay | Load records without importing task or scorer modules |
 | Rich terminal reports | Status, variant configuration, leaderboard, run metrics, case matrix, comparisons, and distributions |
+| Markdown reports | Decision-facing quality gates, case outcomes, evaluator feedback, purposeful inline SVG, paired comparisons, summary/full/audit profiles, audit-only traces/assets/provenance, single/bundle/auto layouts, and atomic publication |
 | Optimizer reports | pydantic-gepa outcome/resources, engine branches, candidate lineage, component versions, selections, and diagnostics |
 | Exports | Human-readable YAML summary, CSV run projection, and Markdown report |
 | Optimization feedback | Failure category, score, reasons, factors, asset versions, and selected evidence |
 
-See [Recording And Reporting](recording-and-reporting.md).
+See [Recording And Reporting](recording-and-reporting.md) and
+[Markdown Reports](markdown-reports.md).
 
 ## Ownership Boundaries
 

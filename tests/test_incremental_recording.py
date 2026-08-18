@@ -24,6 +24,7 @@ from autobench import (
     EndReason,
     ErrorRecord,
     ExecutionSnapshot,
+    ExperimentFile,
     ExperimentResult,
     ExperimentStart,
     ExperimentStatus,
@@ -140,6 +141,37 @@ async def test_file_recorder_stages_concurrent_runs_and_publishes_in_plan_order(
     checkpoint_text = (staging_recorder.staging_dir / checkpoint_path).read_text(encoding="utf-8")
     assert checkpoint_text.startswith("# yaml-language-server: $schema=")
     assert "checkpoint:\n  version: 1\n  name: readable" in checkpoint_text
+
+
+async def test_experiment_publisher_cannot_overwrite_record_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = durable_spec(tmp_path, monkeypatch, module_name="publication_collision")
+
+    def collide_with_run(
+        result: ExperimentResult,
+        record: ExperimentRecord,
+        experiment_root: Path,
+    ) -> tuple[ExperimentFile, ...]:
+        del experiment_root, result
+        return (
+            ExperimentFile(
+                path=record.run_paths[0],
+                content=b"replacement",
+                identity="report:collision",
+            ),
+        )
+
+    recorder = FileRecorder(
+        tmp_path / "record",
+        experiment_publishers=(collide_with_run,),
+    )
+
+    with pytest.raises(RecordingError, match="publication path already exists"):
+        await run_benchmark_spec(spec, recorder=recorder)
+
+    assert recorder.staging_dir.is_dir()
 
 
 async def test_interrupted_pipeline_leaves_recoverable_partial_staging(
