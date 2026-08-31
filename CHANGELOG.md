@@ -16,6 +16,8 @@
   identity preservation, privacy-first content omission, Rich CLI output, and offline examples.
 - Added verified OpenAI Python 2.53 and 2.54 compatibility with dedicated CI matrix targets while
   retaining OpenAI 2.52 as the minimum supported release.
+- Extended native Pydantic AI instrumentation compatibility through 2.36 and added a dedicated
+  compatibility matrix target while retaining Pydantic AI 2.22 as the minimum supported release.
 - Made behavioral asset definitions full-capture by default while retaining metadata-first runtime
   evidence, and added an independent `asset_default_level` privacy control.
 - Externalized versioned asset snapshots and diffs into one transaction-safe, content-addressed
