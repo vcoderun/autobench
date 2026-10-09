@@ -18,8 +18,9 @@
   sidecars.
 - Added an optional ABP-to-OTLP HTTP/protobuf exporter with immutable record replay, hierarchy and
   identity preservation, privacy-first content omission, Rich CLI output, and offline examples.
-- Added verified OpenAI Python 2.53 and 2.54 compatibility with dedicated CI matrix targets while
-  retaining OpenAI 2.52 as the minimum supported release.
+- Updated the OpenAI integration to SDK 3 with matching dependency and discovery ranges,
+  CI targets for 3.0, 3.6, and 3.27, and an OpenAI Agents 0.22 compatibility target.
+- Pinned pydantic-gepa to the candidate-reselection lifecycle fix.
 - Extended native Pydantic AI instrumentation compatibility through 2.36 and added a dedicated
   compatibility matrix target while retaining Pydantic AI 2.22 as the minimum supported release.
 - Made behavioral asset definitions full-capture by default while retaining metadata-first runtime

@@ -116,17 +116,20 @@ jobs:
           - name: pydantic-ai-2.36.0
             package: pydantic-ai-slim==2.36.0
             tests: tests/test_pydantic_ai_instrumentation.py
-          - name: openai-2.52.0
-            package: openai==2.52.0
+          - name: openai-3.0.0
+            package: openai==3.0.0
             tests: tests/test_openai_instrumentation.py
-          - name: openai-2.53.0
-            package: openai==2.53.0
+          - name: openai-3.6.0
+            package: openai==3.6.0
             tests: tests/test_openai_instrumentation.py
-          - name: openai-2.54.0
-            package: openai==2.54.0
+          - name: openai-3.27.0
+            package: openai==3.27.0
             tests: tests/test_openai_instrumentation.py
           - name: openai-agents-0.19.2
             package: openai-agents==0.19.2
+            tests: tests/test_openai_agents_instrumentation.py
+          - name: openai-agents-0.22.0
+            package: openai-agents==0.22.0
             tests: tests/test_openai_agents_instrumentation.py
           - name: httpx-0.28.0
             package: httpx==0.28.0

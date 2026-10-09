@@ -568,7 +568,7 @@ class OpenAIClient:
             id="autobench.openai",
             version=__version__,
             target_distribution="openai",
-            supported_versions=">=2.52,<4",
+            supported_versions=">=3.0,<4",
             mechanism=CaptureMechanism.PATCH,
             layer=AbstractionLayer.CLIENT,
             span_kinds=("llm",),

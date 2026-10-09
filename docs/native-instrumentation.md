@@ -235,6 +235,10 @@ spans. To capture both layers, pass a legacy `httpx` client to OpenAI, as shown 
 `examples/abp_openai/run_openai_streaming.py`. The SDK supports that client at runtime;
 the example documents the narrow cast needed for its HTTPX2-only type annotation.
 
+Combined OpenAI client and OpenAI Agents capture requires an Agents release compatible
+with OpenAI 3; CI exercises this combination with Agents 0.22. Agents 0.19.2 pins OpenAI
+below 3 and is tested for its standalone framework spans.
+
 Run compatibility diagnostics before a benchmark:
 
 ```bash

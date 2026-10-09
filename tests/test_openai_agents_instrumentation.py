@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
+from importlib.metadata import version
 from inspect import getattr_static
 from typing import Any
 
@@ -46,6 +47,7 @@ from agents.tracing import (
 from agents.tracing.provider import DefaultTraceProvider
 from openai import OpenAI
 from openai.types.responses import Response
+from packaging.version import Version
 from pydantic import BaseModel
 
 from autobench import Case, InstrumentationManager, RunContext, Variant
@@ -433,6 +435,10 @@ async def test_openai_agents_parallel_tools_keep_the_agent_parent() -> None:
     assert {tool.parent_id for tool in tools} == {agent.id}
 
 
+@pytest.mark.skipif(
+    Version(version("openai")) < Version("3.0"),
+    reason="Combined client capture requires OpenAI 3; Agents 0.19.2 pins OpenAI <3.",
+)
 def test_openai_agents_and_client_compose_without_duplicate_llm_accounting() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
