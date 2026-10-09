@@ -147,5 +147,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --extra dev --frozen
-      - run: uv pip install --python .venv/bin/python --reinstall "${{ matrix.package }}"
-      - run: .venv/bin/python -m pytest "${{ matrix.tests }}"
+      - name: Test SDK version in an isolated environment
+        run: >-
+          uv run --frozen --isolated --extra dev
+          --with "${{ matrix.package }}"
+          python -m pytest "${{ matrix.tests }}"
