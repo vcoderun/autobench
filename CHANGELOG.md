@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Preserve skipped GEPA evaluation events without closing an evaluation span that never started
+  or has already completed.
+- Keep legacy HTTPX transport coverage type-correct with OpenAI 3's HTTPX2 annotations, and
+  document which transport layer the HTTPX instrumentor captures.
 - Added native pydantic-gepa instrumentation with typed event subscriptions, keyed ABP optimizer
   lifecycles, Optimize Anything engine/composition evidence, semantic budgets and scores,
   candidate/component asset lineage, replay-safe projections, and dedicated Rich reports.

@@ -59,7 +59,7 @@ class PydanticAI:
             span_kinds=("agent", "llm", "tool", "validation"),
             semantic_families=("agent", "llm", "tool", "message", "validation"),
             source_convention="pydantic-ai",
-            source_convention_version="2.22",
+            source_convention_version="2.36",
             capabilities=InstrumentorCapabilities(
                 sync=True,
                 async_=True,

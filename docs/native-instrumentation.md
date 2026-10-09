@@ -229,6 +229,12 @@ The pydantic-gepa integration has its own complete guide, including Optimize Any
 detail modes, semantic accounting, assets, replay, and reports: [Pydantic-GEPA
 Instrumentation](pydantic-gepa-instrumentation.md).
 
+HTTPX instrumentation targets the `httpx` package, not `httpx2`. OpenAI Python 3 uses
+HTTPX2 by default, so its native OpenAI spans remain available without HTTPX transport
+spans. To capture both layers, pass a legacy `httpx` client to OpenAI, as shown in
+`examples/abp_openai/run_openai_streaming.py`. The SDK supports that client at runtime;
+the example documents the narrow cast needed for its HTTPX2-only type annotation.
+
 Run compatibility diagnostics before a benchmark:
 
 ```bash

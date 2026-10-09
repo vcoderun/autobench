@@ -144,6 +144,10 @@ All modes preserve the typed optimization projection and candidate summaries. Se
 large production optimization jobs, `evaluations` for score debugging, and `full` when reflection
 and proposal behavior matters.
 
+A skipped evaluation is retained as an event even if it never opened a span or
+already completed. Only an active evaluation span is closed as deferred; a
+previously completed span keeps its outcome.
+
 ## ABP Trace Shape
 
 A full Pipeline can produce this hierarchy:

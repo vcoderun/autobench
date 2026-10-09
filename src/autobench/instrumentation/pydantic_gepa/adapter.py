@@ -522,10 +522,11 @@ class EventAdapter(_EventEvidence):
 
     def _evaluation_skipped(self, state: _Execution, event: EvaluationSkipped) -> None:
         self._event(state, event, value=event.reason)
-        if self._detail != "summary":
+        key = self._evaluation_key(state, event.evaluation_id)
+        if key in state.open_keys:
             self._close(
                 state,
-                self._evaluation_key(state, event.evaluation_id),
+                key,
                 attributes={"skipped": True, "reason": event.reason},
                 reason=EndReason.DEFERRED,
             )

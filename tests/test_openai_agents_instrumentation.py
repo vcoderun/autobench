@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from inspect import getattr_static
 from typing import Any
 
-import httpx
+import httpx2 as httpx
 import pytest
 from agents import (
     Agent,

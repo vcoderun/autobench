@@ -29,8 +29,8 @@ dev = [
     "basedpyright",
     "httpx==0.28.1",
     "mkdocstrings-python",
-    "openai==2.52.0",
-    "openai-agents==0.19.2",
+    "openai==3.6.0",
+    "openai-agents==0.22.0",
     "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
     "opentelemetry-sdk>=1.44,<2",
     "pre-commit",
@@ -48,16 +48,16 @@ httpx = [
 ]
 instrumentation = [
     "httpx>=0.28,<0.29",
-    "openai>=2.52,<2.55",
-    "openai-agents>=0.19.2,<0.20",
+    "openai>=3.0,<4",
+    "openai-agents>=0.19.2,<0.23",
     "pydantic-ai-slim>=2.22,<2.37",
     "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
 ]
 openai = [
-    "openai>=2.52,<2.55",
+    "openai>=3.0,<4",
 ]
 openai-agents = [
-    "openai-agents>=0.19.2,<0.20",
+    "openai-agents>=0.19.2,<0.23",
 ]
 pydantic-ai = [
     "pydantic-ai-slim>=2.22,<2.37",
@@ -191,18 +191,18 @@ fail_under = 100
 [dependency-groups]
 dev = [
     "httpx==0.28.1",
-    "openai==2.52.0",
-    "openai-agents==0.19.2",
-    "pydantic-ai-slim==2.23.0",
+    "openai==3.6.0",
+    "openai-agents==0.22.0",
+    "pydantic-ai-slim==2.36.0",
     "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
 ]
 matrix = [
     "httpx==0.28.1",
-    "openai==2.52.0",
-    "openai-agents==0.19.2",
+    "openai==3.6.0",
+    "openai-agents==0.22.0",
     "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
     "opentelemetry-sdk>=1.44,<2",
-    "pydantic-ai-slim==2.23.0",
+    "pydantic-ai-slim==2.36.0",
     "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
     "pytest",
     "pytest-asyncio",

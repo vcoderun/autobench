@@ -1,9 +1,10 @@
 from __future__ import annotations as _annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
+import httpx2
 from openai import OpenAI
 
 from autobench import (
@@ -37,7 +38,13 @@ def _response(request: httpx.Request) -> httpx.Response:
 
 
 _HTTP = httpx.Client(transport=httpx.MockTransport(_response), base_url="https://example.test")
-_CLIENT = OpenAI(api_key="offline-example", base_url="https://example.test", http_client=_HTTP)
+# OpenAI 3 accepts legacy HTTPX clients at runtime, but annotates only HTTPX2.
+# Keep HTTPX here so HTTPXInstrumentation captures the transport beneath the SDK.
+_CLIENT = OpenAI(
+    api_key="offline-example",
+    base_url="https://example.test",
+    http_client=cast(httpx2.Client, _HTTP),
+)
 
 
 def run(ctx: RunContext, case: Case) -> dict[str, Any]:

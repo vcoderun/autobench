@@ -7,9 +7,10 @@ from contextlib import contextmanager
 from importlib.metadata import PackageNotFoundError
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
+import httpx2
 import pytest
 from openai import AsyncOpenAI
 from pydantic import JsonValue
@@ -868,6 +869,44 @@ def test_assets_reuse_unchanged_versions_and_obey_discovery_and_capture_policy()
     )
 
 
+@pytest.mark.parametrize("detail", ["summary", "evaluations", "full"])
+@pytest.mark.parametrize("phase", ["not_started", "running", "completed"])
+def test_skipped_evaluations_only_close_an_active_span(detail: Detail, phase: str) -> None:
+    events: list[Event] = [RunStarted(run_id=RUN_ID)]
+    if phase != "not_started":
+        events.append(EvaluationStarted(run_id=RUN_ID, evaluation_id=EVALUATION_ID))
+    if phase == "completed":
+        events.append(
+            EvaluationCompleted(
+                run_id=RUN_ID, evaluation_id=EVALUATION_ID, scores=(1.0,), case_count=1
+            )
+        )
+    events.extend(
+        (
+            EvaluationSkipped(
+                run_id=RUN_ID,
+                evaluation_id=EVALUATION_ID,
+                reason="incumbent already has a perfect score",
+            ),
+            RunCompleted(run_id=RUN_ID),
+        )
+    )
+
+    context, trace, _registry = _capture(_sequence(tuple(events)), detail=detail)
+    assert not trace.diagnostics
+    evidence = PydanticGEPAEvidence.model_validate(context.extensions[EXTENSION_KEY])
+    assert evidence.executions[0].status == "completed"
+    evaluations = [span for span in trace.spans if span.operation == "pydantic_gepa.evaluation"]
+    if detail == "summary" or phase == "not_started":
+        assert not evaluations
+    else:
+        assert len(evaluations) == 1
+        assert evaluations[0].end_reason == (
+            EndReason.DEFERRED if phase == "running" else EndReason.COMPLETED
+        )
+        assert not evaluations[0].partial
+
+
 def test_out_of_order_duplicate_failure_and_cancellation_events_remain_bounded() -> None:
     events = _sequence(
         (
@@ -1671,10 +1710,12 @@ async def test_native_model_and_transport_evidence_remains_separate_from_optimiz
 
     context = _context()
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    # OpenAI 3 accepts legacy HTTPX at runtime but annotates only HTTPX2 clients.
+    # Keep the legacy transport so this test also verifies HTTPX instrumentation.
     openai_client = AsyncOpenAI(
         api_key="test",
         base_url="https://openai.test/v1",
-        http_client=http_client,
+        http_client=cast(httpx2.AsyncClient, http_client),
     )
     agent = Agent(OpenAIChatModel("gpt-test", provider=OpenAIProvider(openai_client=openai_client)))
     manager = InstrumentationManager()

@@ -7,6 +7,7 @@ from inspect import getattr_static
 from typing import Any, cast
 
 import httpx
+import httpx2
 import pytest
 from openai import AsyncOpenAI
 from pydantic import ValidationError
@@ -532,7 +533,12 @@ async def test_httpx_composes_under_openai_without_duplicate_usage() -> None:
 
     ctx = run_context()
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
-    client = AsyncOpenAI(api_key="test", base_url="https://openai.test/v1", http_client=http_client)
+    # OpenAI 3 supports legacy HTTPX at runtime despite its HTTPX2-only annotation.
+    client = AsyncOpenAI(
+        api_key="test",
+        base_url="https://openai.test/v1",
+        http_client=cast(httpx2.AsyncClient, http_client),
+    )
     with instrument(ctx, OpenAIClient(), HTTPX()):
         result = await client.chat.completions.create(
             model="gpt-test", messages=[{"role": "user", "content": "hello"}]
@@ -570,8 +576,12 @@ async def test_httpx_composes_with_pydantic_ai_and_openai_layers() -> None:
 
     ctx = run_context()
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    # Retain the legacy transport to exercise HTTPX instrumentation below the SDK.
+    # OpenAI 3 accepts it at runtime but annotates only HTTPX2 clients.
     openai_client = AsyncOpenAI(
-        api_key="test", base_url="https://openai.test/v1", http_client=http_client
+        api_key="test",
+        base_url="https://openai.test/v1",
+        http_client=cast(httpx2.AsyncClient, http_client),
     )
     model = OpenAIChatModel("gpt-test", provider=OpenAIProvider(openai_client=openai_client))
     agent = Agent(model)
