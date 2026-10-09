@@ -661,6 +661,94 @@ def test_run_record_yaml_view_serializes_nested_opaque_pydantic_values() -> None
     assert view["spans"]["span_1"]["input"] == {"value": "<_OpaqueValue>"}
 
 
+@pytest.mark.parametrize("kind", list(ObservationKind))
+@pytest.mark.parametrize(
+    "value",
+    [None, {}, [], "", 0, False, [None, {}, []], {"args": {}, "result": None, "items": [None, []]}],
+)
+def test_observation_values_survive_yaml_file_round_trip(
+    tmp_path: Path, kind: ObservationKind, value: Any
+) -> None:
+    observation = Observation(id="obs_1", name="payload", kind=kind, value=value)
+    record = RunRecord(
+        run_id="run_1",
+        experiment_id="exp_1",
+        benchmark_id="record-demo",
+        case_id="case_1",
+        variant_id="variant_1",
+        status=RunStatus.PASSED,
+        evaluation_status=EvaluationStatus.PASSED,
+        task_status=TaskStatus.PASSED,
+        case=Case(id="case_1"),
+        observations=(observation,),
+    )
+    path = tmp_path / "run.yaml"
+    dump_yaml(run_record_to_yaml_view(record), path)
+    restored = load_run_record(path)
+    assert restored.observations == (observation,)
+    assert type(restored.observations[0].value) is type(value)
+
+
+@pytest.mark.parametrize("incremental", [False, True])
+async def test_record_and_replay_preserve_empty_tool_observations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, incremental: bool
+) -> None:
+    from autobench import FileRecorder
+
+    _write_module(
+        tmp_path,
+        "empty_observation_task.py",
+        """
+        def run(ctx, case):
+            ctx.event("tool.arguments", {})
+            ctx.event("tool.result", {"value": None, "items": [None, {}, []]})
+            return {"success": True}
+        """,
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="empty-observation"),
+        dataset=DatasetSpec(cases=[Case(id="case_1")]),
+        task=TaskSpec(kind="python", target="empty_observation_task:run"),
+        variants=[Variant(id="variant_1")],
+    )
+    directory = tmp_path / "recorded"
+    result = await run_benchmark_spec(
+        spec,
+        experiment_id="exp_empty",
+        recorder=FileRecorder(directory) if incremental else None,
+    )
+    record = (
+        load_experiment_record(directory) if incremental else record_experiment(result, directory)
+    )
+    restored = load_run_record(directory / record.run_paths[0])
+    values = {observation.name: observation.value for observation in restored.observations}
+    assert values["tool.arguments"] == {}
+    assert values["tool.result"] == {"value": None, "items": [None, {}, []]}
+    replayed = replay_experiment(directory)
+    assert replayed.experiment_id == result.experiment_id
+    assert replayed.runs[0].status == result.runs[0].status
+    assert replayed.runs[0].task_result.observations == result.runs[0].task_result.observations
+
+
+def test_missing_observation_value_is_not_invented_as_null() -> None:
+    raw = {
+        "record": {"type": "run", "version": RECORD_VERSION},
+        "run": {
+            "id": "run_1",
+            "experiment": "exp_1",
+            "benchmark": "record-demo",
+            "case": "case_1",
+            "variant": "variant_1",
+            "status": "passed",
+        },
+        "case": {"id": "case_1"},
+        "metrics": {"events": {"payload": {"id": "obs_1", "name": "payload", "kind": "event"}}},
+    }
+    with pytest.raises(RecordingError, match="value is required"):
+        run_record_payload_from_yaml_view(raw)
+
+
 def test_run_record_yaml_view_supports_primary_and_legacy_errors() -> None:
     raw = {
         "record": {"type": "run", "version": 3},

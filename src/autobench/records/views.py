@@ -808,6 +808,8 @@ def _observations_payload(raw_metrics: Any) -> list[dict[str, Any]]:
             raise RecordingError(f"metrics.{group} must be a mapping")
         for name, raw_observation in raw_group.items():
             observation = _require_mapping(raw_observation, f"metrics.{group}.{name}")
+            if "value" not in observation:
+                raise RecordingError(f"metrics.{group}.{name}.value is required")
             sequence = observation.get("sequence")
             if sequence is not None and (
                 not isinstance(sequence, int) or isinstance(sequence, bool)
@@ -993,11 +995,15 @@ def _unique_key(mapped: dict[str, Any], key: str) -> str:
 
 def _compact(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
+        compacted = {
             key: compacted
             for key, item in value.items()
             if (compacted := _compact(item)) not in (None, {}, [], ())
         }
+        # Observation values are evidence, including nested nulls and empty containers.
+        if {"id", "name", "kind", "value"} <= value.keys():
+            compacted["value"] = value["value"]
+        return compacted
     if isinstance(value, list):
         return [compacted for item in value if (compacted := _compact(item)) is not None]
     return value
