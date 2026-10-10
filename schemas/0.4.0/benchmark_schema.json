@@ -1,0 +1,694 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "benchmark": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "capture": {
+            "additionalProperties": false,
+            "description": "Privacy and retention policy for evidence and discovered assets.",
+            "properties": {
+              "allow_paths": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "allow_semantics": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "asset_default_level": {
+                "default": "full",
+                "enum": [
+                  "none",
+                  "metadata",
+                  "hash",
+                  "redacted",
+                  "full"
+                ],
+                "type": "string"
+              },
+              "default_level": {
+                "default": "metadata",
+                "enum": [
+                  "none",
+                  "metadata",
+                  "hash",
+                  "redacted",
+                  "full"
+                ],
+                "type": "string"
+              },
+              "deny_paths": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "deny_semantics": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "max_artifact_bytes": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_collection_items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_depth": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_inline_bytes": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_string_length": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "retain_source_attributes": {
+                "type": "boolean"
+              },
+              "secret_names": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "semantic_overrides": {
+                "additionalProperties": {
+                  "enum": [
+                    "none",
+                    "metadata",
+                    "hash",
+                    "redacted",
+                    "full"
+                  ],
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "store_binary": {
+                "type": "boolean"
+              },
+              "use_semantic_defaults": {
+                "default": true,
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "cases": {
+            "oneOf": [
+              {
+                "type": "array"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "dataset": {
+            "type": "object"
+          },
+          "derive": {
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "execution": {
+            "additionalProperties": false,
+            "properties": {
+              "correlation": {
+                "additionalProperties": false,
+                "properties": {
+                  "attempt": {
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "group_id": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "labels": {
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "integer",
+                        "number",
+                        "boolean"
+                      ]
+                    },
+                    "type": "object"
+                  },
+                  "parent_experiment_id": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "phase": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "resumed_from_experiment_id": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "instrumentation": {
+            "additionalProperties": false,
+            "description": "Native ABP instrumentors installed for benchmark execution.",
+            "properties": {
+              "all": {
+                "description": "Every installed and compatible built-in instrumentor.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      },
+                      "exclude": {
+                        "items": {
+                          "enum": [
+                            "pydantic_ai",
+                            "pydantic_gepa",
+                            "openai",
+                            "openai_agents",
+                            "httpx"
+                          ],
+                          "type": "string"
+                        },
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "strict": {
+                        "default": false,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "httpx": {
+                "description": "HTTPX public transport capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "capture": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "max_body_bytes": {
+                            "default": 65536,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "path": {
+                            "default": "hash",
+                            "enum": [
+                              "omit",
+                              "hash",
+                              "full"
+                            ],
+                            "type": "string"
+                          },
+                          "request_body": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "request_headers": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "response_body": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "response_headers": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "openai": {
+                "description": "Official OpenAI Python client and streaming capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "openai_agents": {
+                "description": "OpenAI Agents native trace-processor capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "pydantic_ai": {
+                "description": "Pydantic AI agent, model, tool, and validation capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "pydantic_gepa": {
+                "description": "pydantic-gepa optimizer lifecycle, candidate, score, budget, and asset capture.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "assets": {
+                        "additionalProperties": false,
+                        "description": "Automatic behavioral asset discovery at supported SDK boundaries.",
+                        "properties": {
+                          "discover": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "include": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "representations": {
+                            "default": [
+                              "definition",
+                              "effective"
+                            ],
+                            "items": {
+                              "enum": [
+                                "definition",
+                                "effective"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "detail": {
+                        "default": "full",
+                        "enum": [
+                          "summary",
+                          "evaluations",
+                          "full"
+                        ],
+                        "type": "string"
+                      },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "policies": {
+            "type": "array"
+          },
+          "post_derive": {
+            "type": "array"
+          },
+          "report": {
+            "additionalProperties": false,
+            "properties": {
+              "compare": {
+                "type": "object"
+              },
+              "distributions": {
+                "type": "array"
+              },
+              "leaderboard": {
+                "type": "object"
+              },
+              "markdown": {
+                "additionalProperties": false,
+                "properties": {
+                  "assets": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "diffs": {
+                        "enum": [
+                          "none",
+                          "summary",
+                          "full"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "content": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "include_captured": {
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "layout": {
+                    "default": "auto",
+                    "enum": [
+                      "single",
+                      "bundle",
+                      "auto"
+                    ],
+                    "type": "string"
+                  },
+                  "limits": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "failure_details": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "run_details": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "table_rows": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "value_excerpt_chars": {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "output": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "default": "full",
+                    "enum": [
+                      "summary",
+                      "full",
+                      "audit"
+                    ],
+                    "type": "string"
+                  },
+                  "traces": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "top_slowest": {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "matrix": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "score": {
+            "type": "object"
+          },
+          "semantic_registry": {
+            "type": "object"
+          },
+          "variants": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "maxProperties": 1,
+      "minProperties": 1,
+      "type": "object"
+    }
+  },
+  "required": [
+    "benchmark"
+  ],
+  "title": "Autobench 0.4.0 Benchmark DSL",
+  "type": "object"
+}

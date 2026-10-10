@@ -151,6 +151,7 @@ pydantic-gepa = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "gepa", marker = "python_full_version < '3.14'" },
     { name = "httpx" },
     { name = "openai" },
     { name = "openai-agents" },
@@ -158,6 +159,7 @@ dev = [
     { name = "pydantic-gepa", extra = ["integrations"], marker = "python_full_version < '3.14'" },
 ]
 matrix = [
+    { name = "gepa", marker = "python_full_version < '3.14'" },
     { name = "httpx" },
     { name = "openai" },
     { name = "openai-agents" },
@@ -194,9 +196,9 @@ requires-dist = [
     { name = "pydantic", marker = "extra == 'dev'", specifier = ">=2.7" },
     { name = "pydantic-ai-slim", marker = "extra == 'instrumentation'", specifier = ">=2.22,<2.37" },
     { name = "pydantic-ai-slim", marker = "extra == 'pydantic-ai'", specifier = ">=2.22,<2.37" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'dev'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'instrumentation'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'pydantic-gepa'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'dev'", specifier = ">=0.1.1,<0.2" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'instrumentation'", specifier = ">=0.1.1,<0.2" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14' and extra == 'pydantic-gepa'", specifier = ">=0.1.1,<0.2" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
@@ -210,20 +212,22 @@ provides-extras = ["dev", "httpx", "instrumentation", "openai", "openai-agents",
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "gepa", marker = "python_full_version < '3.14'", git = "https://github.com/gepa-ai/gepa.git?rev=81dbae904bed94f5f3b8b4c704c0a81c7510b986" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "openai", specifier = "==3.6.0" },
     { name = "openai-agents", specifier = "==0.22.0" },
     { name = "pydantic-ai-slim", specifier = "==2.36.0" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", specifier = ">=0.1.1,<0.2" },
 ]
 matrix = [
+    { name = "gepa", marker = "python_full_version < '3.14'", git = "https://github.com/gepa-ai/gepa.git?rev=81dbae904bed94f5f3b8b4c704c0a81c7510b986" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "openai", specifier = "==3.6.0" },
     { name = "openai-agents", specifier = "==0.22.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.44,<2" },
     { name = "opentelemetry-sdk", specifier = ">=1.44,<2" },
     { name = "pydantic-ai-slim", specifier = "==2.36.0" },
-    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", git = "https://github.com/vcoderun/pydantic-gepa.git?rev=989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0" },
+    { name = "pydantic-gepa", extras = ["integrations"], marker = "python_full_version < '3.14'", specifier = ">=0.1.1,<0.2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -1975,14 +1979,18 @@ wheels = [
 
 [[package]]
 name = "pydantic-gepa"
-version = "0.1.0a0"
-source = { git = "https://github.com/vcoderun/pydantic-gepa.git?rev=989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0#989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0" }
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click", marker = "python_full_version < '3.14'" },
     { name = "pydantic", marker = "python_full_version < '3.14'" },
     { name = "pyyaml", marker = "python_full_version < '3.14'" },
     { name = "rich", marker = "python_full_version < '3.14'" },
     { name = "typing-extensions", marker = "python_full_version < '3.14'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/c2/4b2fef833e762682f1ae1329f32545602ec79ed9019bbcc4235fc74b120f/pydantic_gepa-0.1.1.tar.gz", hash = "sha256:b5760aa1bc123b679df5e53fe57adff365056c2293ec10a8a3c9168f2942ec4a", size = 217681, upload-time = "2026-10-10T12:28:25.848Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/b6/16e18528e18452e1abbb526d8bc6c9a944f0cbe840a2a9e83229bcd515af/pydantic_gepa-0.1.1-py3-none-any.whl", hash = "sha256:1e38e3ec29ce27b74b29d3ea43c69936d2a58ab00c154774e9e67cbf30306633", size = 113002, upload-time = "2026-10-10T12:28:23.921Z" },
 ]
 
 [package.optional-dependencies]

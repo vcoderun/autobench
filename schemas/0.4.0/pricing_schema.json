@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "pricing": {
+      "description": "Autobench pricing 'pricing' section."
+    },
+    "record": {
+      "description": "Autobench pricing 'record' section."
+    }
+  },
+  "title": "Autobench Pricing YAML",
+  "type": "object"
+}

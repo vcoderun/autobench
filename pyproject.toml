@@ -35,7 +35,7 @@ dev = [
     "opentelemetry-sdk>=1.44,<2",
     "pre-commit",
     "pydantic>=2.7",
-    "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
+    "pydantic-gepa[integrations]>=0.1.1,<0.2; python_version < '3.14'",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
@@ -51,7 +51,7 @@ instrumentation = [
     "openai>=3.0,<4",
     "openai-agents>=0.19.2,<0.23",
     "pydantic-ai-slim>=2.22,<2.37",
-    "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
+    "pydantic-gepa[integrations]>=0.1.1,<0.2; python_version < '3.14'",
 ]
 openai = [
     "openai>=3.0,<4",
@@ -63,7 +63,7 @@ pydantic-ai = [
     "pydantic-ai-slim>=2.22,<2.37",
 ]
 pydantic-gepa = [
-    "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
+    "pydantic-gepa[integrations]>=0.1.1,<0.2; python_version < '3.14'",
 ]
 otlp = [
     "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
@@ -190,23 +190,25 @@ fail_under = 100
 
 [dependency-groups]
 dev = [
+    "gepa>=0.1.4,<0.2; python_version < '3.14'",
     "httpx==0.28.1",
     "openai==3.6.0",
     "openai-agents==0.22.0",
     "pydantic-ai-slim==2.36.0",
-    "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
+    "pydantic-gepa[integrations]>=0.1.1,<0.2; python_version < '3.14'",
 ]
 matrix = [
+    "gepa>=0.1.4,<0.2; python_version < '3.14'",
     "httpx==0.28.1",
     "openai==3.6.0",
     "openai-agents==0.22.0",
     "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
     "opentelemetry-sdk>=1.44,<2",
     "pydantic-ai-slim==2.36.0",
-    "pydantic-gepa[integrations]>=0.1.0a0,<0.2; python_version < '3.14'",
+    "pydantic-gepa[integrations]>=0.1.1,<0.2; python_version < '3.14'",
     "pytest",
     "pytest-asyncio",
 ]
 
 [tool.uv.sources]
-pydantic-gepa = { git = "https://github.com/vcoderun/pydantic-gepa.git", rev = "989fe671cb3d1fa4aae4fe9f8c0d21a895a83cb0" }
+gepa = { git = "https://github.com/gepa-ai/gepa.git", rev = "81dbae904bed94f5f3b8b4c704c0a81c7510b986" }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-10-10
+
 - Preserve skipped GEPA evaluation events without closing an evaluation span that never started
   or has already completed.
 - Keep legacy HTTPX transport coverage type-correct with OpenAI 3's HTTPX2 annotations, and
@@ -20,7 +22,8 @@
   identity preservation, privacy-first content omission, Rich CLI output, and offline examples.
 - Updated the OpenAI integration to SDK 3 with matching dependency and discovery ranges,
   CI targets for 3.0, 3.6, and 3.27, and an OpenAI Agents 0.22 compatibility target.
-- Pinned pydantic-gepa to the candidate-reselection lifecycle fix.
+- Require the PyPI release of pydantic-gepa 0.1.1, including the
+  candidate-reselection lifecycle and released-GEPA compatibility fixes.
 - Extended native Pydantic AI instrumentation compatibility through 2.36 and added a dedicated
   compatibility matrix target while retaining Pydantic AI 2.22 as the minimum supported release.
 - Made behavioral asset definitions full-capture by default while retaining metadata-first runtime
