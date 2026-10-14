@@ -26,7 +26,7 @@ named benchmark:
 ## Complete Authoring Example
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
@@ -384,9 +384,9 @@ trace:
       kind: task
       scope:
         instrumentor_name: autobench.manual
-        instrumentor_version: 0.3.0
+        instrumentor_version: 0.4.0
         package_name: autobench
-        package_version: 0.3.0
+        package_version: 0.4.0
         mechanism: manual
         layer: application
       status: ok
@@ -485,7 +485,7 @@ Generated datasets use this exact dataset format. Generation itself has two addi
 request is a portable input to an application-owned generator:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/generation_request_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/generation_request_schema.json
 generation:
   request:
     seed: 17

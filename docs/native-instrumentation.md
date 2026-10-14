@@ -88,7 +88,7 @@ rather than hand-authored benchmark telemetry.
 Instrumentation belongs to the named benchmark:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-agent:
     dataset:

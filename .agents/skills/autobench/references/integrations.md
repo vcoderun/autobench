@@ -15,6 +15,11 @@
 
 ## Installation
 
+Current dependency ranges: Pydantic AI `>=2.22,<2.37`, OpenAI `>=3.0,<4`, OpenAI Agents
+`>=0.19.2,<0.23`, HTTPX `>=0.28,<0.29`, and pydantic-gepa `>=0.1.1,<0.2` (Python <3.14).
+Consult `docs/abp-compatibility.md` and `instrumentation doctor` for the installed contract;
+old OpenAI 2.x research targets are not current support guarantees.
+
 Base Autobench does not require provider SDKs. Install only the integration needed:
 
 ```bash
@@ -137,6 +142,10 @@ evidence for benchmark ownership.
 
 ## HTTPX
 
+OpenAI 3 uses `httpx2` internally. Autobench's HTTPX instrumentor targets the separate `httpx`
+package. Native OpenAI spans can therefore exist without nested HTTPX spans; that alone is
+not a failed installation. Never claim universal HTTP transport coverage.
+
 HTTPX instrumentation operates at transport boundaries and supports sync, async, redirect, error,
 and stream lifecycles. Default capture is conservative:
 
@@ -196,6 +205,11 @@ Design custom integrations generically. Do not copy one application's class name
 into Autobench core.
 
 ## Diagnostics
+
+For pydantic-gepa, `candidate_selected` is backend progress, not a fresh proposal. Skipped
+evaluation events may legitimately have no active evaluation span. Terminal budget observations
+are aggregates, not additional increments to sum with earlier snapshots. Preserve these
+distinctions when debugging apparent duplicate candidates, spans, or inflated totals.
 
 ```bash
 autobench instrumentation doctor

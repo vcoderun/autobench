@@ -65,7 +65,7 @@ second. Sync and async functions are both supported. Span duration is measured b
 Create `autobench.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 benchmark:
   text-transform:
     description: Compare deterministic text transformations.

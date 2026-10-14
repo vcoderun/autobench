@@ -300,6 +300,30 @@ the optimizer result, exception, cancellation, or checkpoint behavior.
 - duplicate event delivery is bounded and cannot overwrite another run's state;
 - calls outside an active Autobench run are no-ops.
 
+## Post-Search Evidence
+
+The native integration observes the optimizer's versioned lifecycle, not every arbitrary
+function call in the pydantic-gepa package. A standalone `compare_candidates()` call is an
+explicit post-search measurement. When using a pydantic-gepa version that provides it, preserve
+its typed result as a normal Autobench artifact inside your task:
+
+```python
+comparison = compare_candidates(evaluation, baseline, proposed, heldout_examples)
+ctx.artifact("candidate_comparison", comparison.model_dump(mode="json"))
+ctx.artifact("candidate_proposal", proposed.model_dump(mode="json"))
+```
+
+This retains paired sample identities, errors, effects, uncertainty assumptions, and supplied
+component proposal evidence without a second observer or new storage subsystem. The API is an
+addition after pydantic-gepa 0.1.1; check your installed version before using this example.
+Do not assume new proposal fields are already projected into native tracked-asset metadata.
+The generic artifact is the explicit handoff until that projection supports them.
+
+Autobench's `compare` command compares recorded benchmark variants. pydantic-gepa's comparison
+collects fresh paired evaluations; it is not report replay. Neither operation independently
+proves causality or authorizes production promotion. Captured candidate text remains subject to
+your artifact/privacy policy: explicitly attaching a candidate includes its values.
+
 ## Ownership Boundary
 
 pydantic-gepa owns typed events, upstream GEPA compatibility, engine/composition correlation,

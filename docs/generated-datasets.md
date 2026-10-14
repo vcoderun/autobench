@@ -70,7 +70,7 @@ is the application-owned adapter; its typed output is the portable evidence boun
 The CLI can pass a human-authored request to the generator:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/generation_request_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/generation_request_schema.json
 generation:
   request:
     seed: 17

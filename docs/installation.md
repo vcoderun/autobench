@@ -95,7 +95,7 @@ directory when the schema helpers run.
 For a repository-local benchmark:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 benchmark:
   smoke-test:
     cases: []

@@ -355,7 +355,8 @@ No manual span or metric calls are required. The instrumentor captures:
 The instrumentor composes with user event handlers and Pydantic AI's own
 `Instrumentation` capability. It does not configure, replace, or require
 OpenTelemetry. Autobench supports the audited public integration seam across
-Pydantic AI 2.22.x and 2.23.x; `InstrumentationManager.check()` reports incompatible
+Pydantic AI `>=2.22,<2.37`, with CI targets at 2.22.0, 2.23.0, and 2.36.0;
+`InstrumentationManager.check()` reports incompatible
 versions before installing hooks.
 
 Application outputs and exceptions are passed through unchanged. Aggregate agent

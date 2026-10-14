@@ -237,7 +237,7 @@ directory when the schema helpers run.
 For a repository-local benchmark:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 benchmark:
   smoke-test:
     cases: []
@@ -341,7 +341,7 @@ second. Sync and async functions are both supported. Span duration is measured b
 Create `autobench.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 benchmark:
   text-transform:
     description: Compare deterministic text transformations.
@@ -526,7 +526,7 @@ infrastructure begins.
 Use a file-backed dataset when the benchmark is a maintained regression suite:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-routing:
     dataset:
@@ -1734,7 +1734,7 @@ is the application-owned adapter; its typed output is the portable evidence boun
 The CLI can pass a human-authored request to the generator:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/generation_request_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/generation_request_schema.json
 generation:
   request:
     seed: 17
@@ -3833,7 +3833,7 @@ benchmark = Benchmark("support-agent").instrument_all(
 Or use the YAML DSL:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-agent:
     instrumentation:
@@ -4453,7 +4453,8 @@ No manual span or metric calls are required. The instrumentor captures:
 The instrumentor composes with user event handlers and Pydantic AI's own
 `Instrumentation` capability. It does not configure, replace, or require
 OpenTelemetry. Autobench supports the audited public integration seam across
-Pydantic AI 2.22.x and 2.23.x; `InstrumentationManager.check()` reports incompatible
+Pydantic AI `>=2.22,<2.37`, with CI targets at 2.22.0, 2.23.0, and 2.36.0;
+`InstrumentationManager.check()` reports incompatible
 versions before installing hooks.
 
 Application outputs and exceptions are passed through unchanged. Aggregate agent
@@ -4653,7 +4654,7 @@ rather than hand-authored benchmark telemetry.
 Instrumentation belongs to the named benchmark:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-agent:
     dataset:
@@ -5229,6 +5230,30 @@ the optimizer result, exception, cancellation, or checkpoint behavior.
 - duplicate event delivery is bounded and cannot overwrite another run's state;
 - calls outside an active Autobench run are no-ops.
 
+## Post-Search Evidence
+
+The native integration observes the optimizer's versioned lifecycle, not every arbitrary
+function call in the pydantic-gepa package. A standalone `compare_candidates()` call is an
+explicit post-search measurement. When using a pydantic-gepa version that provides it, preserve
+its typed result as a normal Autobench artifact inside your task:
+
+```python
+comparison = compare_candidates(evaluation, baseline, proposed, heldout_examples)
+ctx.artifact("candidate_comparison", comparison.model_dump(mode="json"))
+ctx.artifact("candidate_proposal", proposed.model_dump(mode="json"))
+```
+
+This retains paired sample identities, errors, effects, uncertainty assumptions, and supplied
+component proposal evidence without a second observer or new storage subsystem. The API is an
+addition after pydantic-gepa 0.1.1; check your installed version before using this example.
+Do not assume new proposal fields are already projected into native tracked-asset metadata.
+The generic artifact is the explicit handoff until that projection supports them.
+
+Autobench's `compare` command compares recorded benchmark variants. pydantic-gepa's comparison
+collects fresh paired evaluations; it is not report replay. Neither operation independently
+proves causality or authorizes production promotion. Captured candidate text remains subject to
+your artifact/privacy policy: explicitly attaching a candidate includes its values.
+
 ## Ownership Boundary
 
 pydantic-gepa owns typed events, upstream GEPA compatibility, engine/composition correlation,
@@ -5371,20 +5396,22 @@ Existing unrelated modules are not moved as part of ABP.
 
 ## Optional Integration Targets
 
-The initial integration extras are reserved as follows:
+Current compatibility is declared by the installed instrumentors and package extras:
 
-| Extra | Research baseline | First implementation phase |
-| --- | ---: | ---: |
-| `autobench[pydantic-ai]` | Pydantic AI 2.22.0 and 2.23.0 | 10 |
-| `autobench[openai]` | OpenAI Python 2.52.0 through 2.54.0 | 11 |
-| `autobench[openai-agents]` | OpenAI Agents 0.19.2 | 11 |
-| `autobench[httpx]` | HTTPX 0.28.1 | 12 |
-| `autobench[instrumentation]` | all integrations above | 13 |
+| Extra | Supported dependency range | CI targets |
+| --- | --- | --- |
+| `autobench[pydantic-ai]` | Pydantic AI `>=2.22,<2.37` | 2.22.0, 2.23.0, 2.36.0 |
+| `autobench[openai]` | OpenAI Python `>=3.0,<4` | 3.0.0, 3.6.0, 3.27.0 |
+| `autobench[openai-agents]` | OpenAI Agents `>=0.19.2,<0.23` | 0.22.0 with OpenAI 3 |
+| `autobench[httpx]` | HTTPX `>=0.28,<0.29` | 0.28.1 |
+| `autobench[pydantic-gepa]` | pydantic-gepa `>=0.1.1,<0.2`, event contract `1` | standard and Omni lifecycle tests |
+| `autobench[instrumentation]` | compatible native integrations above | composed instrumentation tests |
 
-These versions are the public-API research baseline captured on 2026-08-03,
-not a compatibility claim. Dependency metadata is added only when each native
-instrumentor and its version matrix exist. Autobench core remains free of
-these dependencies.
+These are optional integrations, not core dependencies. The pydantic-gepa extra is enabled on
+Python versions below 3.14. Run `autobench instrumentation doctor` in the actual application
+environment before enabling strict discovery. SDK compatibility does not imply that every
+transport is captured: the HTTPX instrumentor patches `httpx`, not OpenAI 3's `httpx2` transport.
+See [native instrumentation](native-instrumentation.md) for layering and accounting boundaries.
 
 ## Manual Span Performance Baseline
 
@@ -5652,7 +5679,7 @@ named benchmark:
 ## Complete Authoring Example
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
@@ -6010,9 +6037,9 @@ trace:
       kind: task
       scope:
         instrumentor_name: autobench.manual
-        instrumentor_version: 0.3.0
+        instrumentor_version: 0.4.0
         package_name: autobench
-        package_version: 0.3.0
+        package_version: 0.4.0
         mechanism: manual
         layer: application
       status: ok
@@ -6111,7 +6138,7 @@ Generated datasets use this exact dataset format. Generation itself has two addi
 request is a portable input to an application-owned generator:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/generation_request_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/generation_request_schema.json
 generation:
   request:
     seed: 17
@@ -7539,7 +7566,7 @@ python -c "import autobench; print(autobench.__version__)"
 ```
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 ```
 
 Run `autobench validate` and use its file/line diagnostics. Unknown scorer, policy,

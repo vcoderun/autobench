@@ -34,6 +34,8 @@ router. Load only the reference and example required by the current task.
 - ABP is Autobench-owned instrumentation, not an OpenTelemetry wrapper.
 - OTLP is an optional outbound record projection; it is not ABP collection or persistence.
 - Native instrumentation must never change subject results, exceptions, cancellation, or streams.
+- Check installed instrumentor ranges before reusing an old recipe. Current OpenAI support is
+  SDK 3; HTTPX collection covers `httpx`, not `httpx2`. Use `instrumentation doctor`, not guesses.
 - Runtime capture is metadata-first; behavioral assets are full by default for reconstruction.
 - Run records are immutable. Replay/report/compare/export do not execute the subject.
 - Markdown reports are deterministic files or bundles built from typed evidence. `summary` and
@@ -43,6 +45,8 @@ router. Load only the reference and example required by the current task.
 - Execution success is not benchmark success. Prefer a typed task output with `hard_pass`, `score`,
   `metrics`, and `feedback` when a report needs case-level quality outcomes.
 - Comparisons report deltas and confounding; they do not assert causality.
+- Optimizer progress snapshots are not additive usage. Reports prefer terminal aggregate
+  measurements. Candidate reselection and skipped evaluations must not create duplicate spans.
 - Keep domain-specific behavior in the task, scorer, adapter, or example. Add only reusable generic
   primitives to Autobench core.
 - Do not require normal users to construct Pydantic Evals datasets or cases.
@@ -64,7 +68,7 @@ Read one or more direct references based on the task:
   [references/evaluation.md](references/evaluation.md)
 - **ABP spans, capture, signals, extraction, accounting, streaming, adapters, or OTLP delivery**:
   [references/abp.md](references/abp.md)
-- **Pydantic AI, OpenAI, OpenAI Agents, HTTPX, `instrument_all()`, or custom SDK patching**:
+- **Pydantic AI, OpenAI, OpenAI Agents, HTTPX, pydantic-gepa, `instrument_all()`, or custom SDK patching**:
   [references/integrations.md](references/integrations.md)
 - **Prompts, tools, schemas, automatic assets, hashes, versions, diffs, or candidate lineage**:
   [references/assets.md](references/assets.md)

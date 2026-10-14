@@ -35,7 +35,7 @@ python -c "import autobench; print(autobench.__version__)"
 ```
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.4.0/benchmark_schema.json
 ```
 
 Run `autobench validate` and use its file/line diagnostics. Unknown scorer, policy,

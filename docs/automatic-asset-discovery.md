@@ -193,7 +193,7 @@ benchmark = Benchmark("support-agent").instrument_all(
 Or use the YAML DSL:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-agent:
     instrumentation:

@@ -296,6 +296,16 @@ benchmark YAML.
 
 ## Optimization Handoff
 
+Separate optimizer evidence from promotion. pydantic-gepa's post-search `ComparisonResult`
+can be stored through `ctx.artifact("candidate_comparison", comparison.model_dump(mode="json"))`.
+It is not the same as Autobench's aggregate variant comparison and is not automatically a
+native optimizer span. Store explicit `CandidateDelta.proposal` evidence the same way when
+the installed native projection does not expose it. Do not infer a proposer hypothesis from
+a score delta or claim the native asset projection already contains fields you have not checked.
+
+Per-run reports prefer aggregate measurements over progress snapshots. In particular, optimizer
+budget snapshots must not be added together to calculate consumed or remaining budget.
+
 `FeedbackRecord` and `OptimizationFeedbackInput` project runs into compact optimizer evidence:
 
 - objectives, constraints, diagnostics;

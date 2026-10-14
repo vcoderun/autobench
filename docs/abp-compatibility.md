@@ -125,20 +125,22 @@ Existing unrelated modules are not moved as part of ABP.
 
 ## Optional Integration Targets
 
-The initial integration extras are reserved as follows:
+Current compatibility is declared by the installed instrumentors and package extras:
 
-| Extra | Research baseline | First implementation phase |
-| --- | ---: | ---: |
-| `autobench[pydantic-ai]` | Pydantic AI 2.22.0 and 2.23.0 | 10 |
-| `autobench[openai]` | OpenAI Python 2.52.0 through 2.54.0 | 11 |
-| `autobench[openai-agents]` | OpenAI Agents 0.19.2 | 11 |
-| `autobench[httpx]` | HTTPX 0.28.1 | 12 |
-| `autobench[instrumentation]` | all integrations above | 13 |
+| Extra | Supported dependency range | CI targets |
+| --- | --- | --- |
+| `autobench[pydantic-ai]` | Pydantic AI `>=2.22,<2.37` | 2.22.0, 2.23.0, 2.36.0 |
+| `autobench[openai]` | OpenAI Python `>=3.0,<4` | 3.0.0, 3.6.0, 3.27.0 |
+| `autobench[openai-agents]` | OpenAI Agents `>=0.19.2,<0.23` | 0.22.0 with OpenAI 3 |
+| `autobench[httpx]` | HTTPX `>=0.28,<0.29` | 0.28.1 |
+| `autobench[pydantic-gepa]` | pydantic-gepa `>=0.1.1,<0.2`, event contract `1` | standard and Omni lifecycle tests |
+| `autobench[instrumentation]` | compatible native integrations above | composed instrumentation tests |
 
-These versions are the public-API research baseline captured on 2026-08-03,
-not a compatibility claim. Dependency metadata is added only when each native
-instrumentor and its version matrix exist. Autobench core remains free of
-these dependencies.
+These are optional integrations, not core dependencies. The pydantic-gepa extra is enabled on
+Python versions below 3.14. Run `autobench instrumentation doctor` in the actual application
+environment before enabling strict discovery. SDK compatibility does not imply that every
+transport is captured: the HTTPX instrumentor patches `httpx`, not OpenAI 3's `httpx2` transport.
+See [native instrumentation](native-instrumentation.md) for layering and accounting boundaries.
 
 ## Manual Span Performance Baseline
 

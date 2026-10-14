@@ -20,7 +20,7 @@ create a separate Python-only semantic model.
 Every Autobench YAML artifact must begin with a versioned schema header:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/benchmark_schema.json
 ```
 
 Use a path that is correct relative to the actual file. Repository examples can reference the
@@ -53,7 +53,7 @@ The root contains one named benchmark:
 ## Complete Skeleton
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and proposed routing behavior.
@@ -157,7 +157,7 @@ cases:
 File-backed datasets use a separate schema:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.3.0/dataset_schema.json
+# yaml-language-server: $schema=schemas/0.4.0/dataset_schema.json
 dataset:
   routing-cases:
     version: "2026-08-07"
