@@ -14,6 +14,12 @@
   its snapshot and diff, where only the latest version was written before.
 - Added `AssetCandidate.parent_version` for producers that know a non-chronological parent; lineage
   and diffs follow the declared parent.
+- Added asset trajectories: `build_asset_trajectory` and `report.trajectories` compare each recorded
+  version of an asset with its parent version on the cases both ran, with the same paired tests as
+  variant comparisons. `compare_runs` compares any two caller-selected run groups.
+- Fixed spec YAML views dropping the name, case tags, and hypothesis of comparison entries.
+- Split case-paired comparison into `autobench.reports.comparison` and metric value resolution into
+  `autobench.reports.values`; `autobench.reports.reporting` keeps its public names.
 
 ## 0.4.0 - 2026-10-10
 

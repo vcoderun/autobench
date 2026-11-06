@@ -18,6 +18,7 @@ from autobench.evaluation.scoring import (
 )
 from autobench.instrumentation.config import InstrumentationConfig
 from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
+from autobench.reports.models import AssetTrajectoryReportSpec, ComparisonReportSpec
 from autobench.reports.reporting import MetricAggregation, ReportSpec
 
 if TYPE_CHECKING:
@@ -333,6 +334,8 @@ def _normalize_report_section(raw_report: Any) -> dict[str, Any]:
         report["case_matrix"] = _normalize_matrix_report(raw_report["matrix"])
     if "compare" in raw_report:
         report["comparisons"] = _normalize_compare_report(raw_report["compare"])
+    if "trajectories" in raw_report:
+        report["trajectories"] = _normalize_trajectory_report(raw_report["trajectories"])
     for key in ("distributions", "markdown"):
         if key in raw_report:
             report[key] = raw_report[key]
@@ -389,6 +392,27 @@ def _normalize_compare_report(raw_compare: Any) -> list[dict[str, Any]]:
             comparison["hypothesis"] = raw_config["hypothesis"]
         comparisons.append(comparison)
     return comparisons
+
+
+def _normalize_trajectory_report(raw_trajectories: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_trajectories, list):
+        raise SpecValidationError("benchmark.<id>.report.trajectories must be a list")
+    trajectories: list[dict[str, Any]] = []
+    for raw_trajectory in raw_trajectories:
+        if isinstance(raw_trajectory, str):
+            raw_trajectory = {"asset": raw_trajectory}
+        if not isinstance(raw_trajectory, dict):
+            raise SpecValidationError(
+                "benchmark.<id>.report.trajectories entries must be asset ids or mappings"
+            )
+        trajectory: dict[str, Any] = {
+            "asset": raw_trajectory.get("asset"),
+            "metrics": _normalize_report_metrics(raw_trajectory.get("show", {})),
+        }
+        if "tags" in raw_trajectory:
+            trajectory["case_tags"] = raw_trajectory["tags"]
+        trajectories.append(trajectory)
+    return trajectories
 
 
 def _normalize_report_metrics(raw_metrics: Any) -> list[dict[str, Any]]:
@@ -529,11 +553,13 @@ def _report_to_yaml_view(report: ReportSpec) -> dict[str, Any]:
         view["matrix"] = report.case_matrix.semantic_type
     if report.comparisons:
         view["compare"] = {
-            f"{comparison.baseline} -> {comparison.candidate}": (
-                {"show": _report_metric_map(comparison.metrics)} if comparison.metrics else {}
-            )
+            comparison.label(): _comparison_to_yaml_view(comparison)
             for comparison in report.comparisons
         }
+    if report.trajectories:
+        view["trajectories"] = [
+            _trajectory_to_yaml_view(trajectory) for trajectory in report.trajectories
+        ]
     if report.distributions:
         view["distributions"] = [
             _compact_model_dump(distribution) for distribution in report.distributions
@@ -541,6 +567,28 @@ def _report_to_yaml_view(report: ReportSpec) -> dict[str, Any]:
     markdown = report.markdown.model_dump(mode="json", exclude_defaults=True)
     if markdown:
         view["markdown"] = markdown
+    return view
+
+
+def _comparison_to_yaml_view(comparison: ComparisonReportSpec) -> dict[str, Any]:
+    view: dict[str, Any] = {}
+    if comparison.name is not None:
+        view |= {"baseline": comparison.baseline, "candidate": comparison.candidate}
+    if comparison.metrics:
+        view["show"] = _report_metric_map(comparison.metrics)
+    if comparison.case_tags:
+        view["tags"] = list(comparison.case_tags)
+    if comparison.hypothesis is not None:
+        view["hypothesis"] = comparison.hypothesis.model_dump(mode="json", exclude_defaults=True)
+    return view
+
+
+def _trajectory_to_yaml_view(trajectory: AssetTrajectoryReportSpec) -> dict[str, Any]:
+    view: dict[str, Any] = {"asset": trajectory.asset}
+    if trajectory.metrics:
+        view["show"] = _report_metric_map(trajectory.metrics)
+    if trajectory.case_tags:
+        view["tags"] = list(trajectory.case_tags)
     return view
 
 

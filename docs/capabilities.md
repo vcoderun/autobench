@@ -142,6 +142,7 @@ The tracking registry understands:
 - automatic SDK-boundary discovery without tracking decorators
 - source/effective representation links, capability scopes, provenance, and cross-layer aliases
 - automatic experiment persistence and replayable span-local asset uses
+- version trajectories that pair each version with its parent on shared cases
 
 Decorators preserve the original callable or class type so tracking does not degrade static
 typing. See [Asset Tracking](asset-tracking.md) and

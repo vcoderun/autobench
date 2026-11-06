@@ -2,23 +2,17 @@ from __future__ import annotations as _annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
-from math import isclose, prod
+from math import isclose
 from pathlib import Path
-from statistics import median, pstdev
 from typing import Any
 
 from autobench.instrumentation.pydantic_gepa.projection import (
     EXTENSION_KEY as PYDANTIC_GEPA_EXTENSION,
 )
 from autobench.instrumentation.pydantic_gepa.projection import PydanticGEPAEvidence
-from autobench.metrics.observations import (
-    Direction,
-    Observation,
-    ObservationKind,
-)
+from autobench.metrics.observations import Direction, ObservationKind
 from autobench.metrics.projection import observation_priority
-from autobench.metrics.semantics import DEFAULT_SEMANTIC_REGISTRY, SemanticRegistry
+from autobench.metrics.semantics import SemanticRegistry
 from autobench.records.models import ExperimentRecord
 from autobench.reports.analysis import (
     build_artifact_inventory,
@@ -35,11 +29,8 @@ from autobench.reports.analysis import (
     build_source_identity,
     build_trace_summary,
 )
-from autobench.reports.inference import (
-    build_hypothesis_results,
-    exact_sign_test,
-    paired_success_difference,
-)
+from autobench.reports.comparison import compare_variants
+from autobench.reports.inference import build_hypothesis_results
 from autobench.reports.markdown import render_markdown_report
 from autobench.reports.models import (
     DEFAULT_LEADERBOARD_METRICS,
@@ -47,7 +38,6 @@ from autobench.reports.models import (
     BenchmarkReport,
     CaseMatrix,
     CaseMatrixReportSpec,
-    ComparisonOutcome,
     ComparisonReport,
     ComparisonReportSpec,
     CorrelatedReportGroup,
@@ -65,16 +55,22 @@ from autobench.reports.models import (
     MarkdownReportLimits,
     MarkdownTraceConfig,
     MetricAggregation,
-    MetricComparisonReport,
     MetricDistribution,
     OptimizationRunReport,
-    PairedBinaryTable,
     RegressionReport,
     ReportLayout,
     ReportProfile,
     ReportSpec,
     RunMetricRow,
     VariantConfigRow,
+)
+from autobench.reports.trajectory import build_asset_trajectory
+from autobench.reports.values import (
+    aggregate_values,
+    metric_metadata,
+    metric_observation,
+    metric_value,
+    numeric_value,
 )
 from autobench.runtime.models import ExecutionCorrelation, ExperimentResult, RunResult
 
@@ -121,6 +117,16 @@ def build_report(
         for comparison in active_report_spec.comparisons
     ]
     hypotheses = build_hypothesis_results(active_report_spec.comparisons, comparisons)
+    trajectories = tuple(
+        build_asset_trajectory(
+            result,
+            asset_id=trajectory.asset,
+            metrics=trajectory.resolved_metrics(),
+            registry=active_registry,
+            case_tags=trajectory.case_tags,
+        )
+        for trajectory in active_report_spec.trajectories
+    )
     report = BenchmarkReport(
         benchmark_id=result.benchmark_id,
         experiment_id=result.experiment_id,
@@ -161,6 +167,7 @@ def build_report(
         ),
         comparisons=comparisons,
         hypotheses=hypotheses,
+        trajectories=trajectories,
         regressions=build_regressions(comparisons),
         distributions=[
             build_metric_distribution(
@@ -362,7 +369,7 @@ def build_leaderboard(
             ]
             value = aggregate_values(samples, metric.fn)
             values[metric.name] = value
-            direction, unit, role = _metric_metadata(
+            direction, unit, role = metric_metadata(
                 runs,
                 metric.semantic_type,
                 registry=active_registry,
@@ -410,133 +417,6 @@ def build_case_matrix(
     )
 
 
-def compare_variants(
-    result: ExperimentResult,
-    *,
-    baseline: str,
-    candidate: str,
-    metrics: tuple[MetricAggregation, ...] = DEFAULT_LEADERBOARD_METRICS,
-    registry: SemanticRegistry | None = None,
-    case_tags: tuple[str, ...] = (),
-    name: str | None = None,
-) -> ComparisonReport:
-    """Compare two variants over the cases they share.
-
-    Args:
-        result: Experiment evidence to compare.
-        baseline: Baseline variant id.
-        candidate: Candidate variant id.
-        metrics: Metrics to aggregate and pair by case.
-        registry: Semantic registry used to resolve metric values.
-        case_tags: Restrict both variants to cases carrying every listed tag.
-        name: Optional comparison label, required to tell apart comparisons of the same pair.
-
-    Returns:
-        Aggregate deltas, case-paired outcomes, and exact paired tests for every metric.
-    """
-    active_registry = registry or result.semantic_registry
-    selected_runs = [run for run in result.runs if _has_case_tags(run, case_tags)]
-    baseline_runs = [run for run in selected_runs if run.variant_id == baseline]
-    candidate_runs = [run for run in selected_runs if run.variant_id == candidate]
-    factor_deltas = _factor_deltas(baseline_runs, candidate_runs)
-    metric_deltas: dict[str, dict[str, Any]] = {}
-    metric_results: list[MetricComparisonReport] = []
-    baseline_by_case = {run.case_id: run for run in baseline_runs}
-    candidate_by_case = {run.case_id: run for run in candidate_runs}
-    paired_case_ids = tuple(sorted(set(baseline_by_case) & set(candidate_by_case)))
-    all_case_ids = set(baseline_by_case) | set(candidate_by_case)
-
-    for metric in metrics:
-        baseline_samples = [
-            value
-            for run in baseline_runs
-            if (value := metric_value(run, metric.semantic_type, registry=active_registry))
-            is not None
-        ]
-        candidate_samples = [
-            value
-            for run in candidate_runs
-            if (value := metric_value(run, metric.semantic_type, registry=active_registry))
-            is not None
-        ]
-        baseline_value = aggregate_values(
-            baseline_samples,
-            metric.fn,
-        )
-        candidate_value = aggregate_values(
-            candidate_samples,
-            metric.fn,
-        )
-        delta = _numeric_delta(baseline_value, candidate_value)
-        metric_deltas[metric.name] = {
-            "baseline": baseline_value,
-            "candidate": candidate_value,
-            "delta": delta,
-        }
-        direction, unit, _ = _metric_metadata(
-            [*baseline_runs, *candidate_runs],
-            metric.semantic_type,
-            registry=active_registry,
-        )
-        tally = _paired_outcomes(
-            paired_case_ids,
-            baseline_by_case=baseline_by_case,
-            candidate_by_case=candidate_by_case,
-            semantic_type=metric.semantic_type,
-            direction=direction,
-            registry=active_registry,
-        )
-        metric_results.append(
-            MetricComparisonReport(
-                name=metric.name,
-                semantic_type=active_registry.normalize(metric.semantic_type)
-                or metric.semantic_type,
-                aggregation=metric.fn,
-                baseline=baseline_value,
-                candidate=candidate_value,
-                delta=delta,
-                relative_delta=_relative_delta(baseline_value, delta),
-                direction=direction,
-                unit=unit,
-                outcome=_comparison_outcome(delta, direction),
-                baseline_count=len(baseline_samples),
-                candidate_count=len(candidate_samples),
-                paired_count=tally.paired_count,
-                missing_pair_count=len(paired_case_ids) - tally.paired_count,
-                wins=tally.wins,
-                ties=tally.ties,
-                losses=tally.losses,
-                sign_test=(
-                    exact_sign_test(tally.wins, tally.losses)
-                    if tally.paired_count and _is_directional(direction)
-                    else None
-                ),
-                binary_table=tally.binary_table,
-                success_difference=(
-                    None
-                    if tally.binary_table is None
-                    else paired_success_difference(tally.binary_table)
-                ),
-            )
-        )
-
-    return ComparisonReport(
-        name=name,
-        baseline=baseline,
-        candidate=candidate,
-        case_tags=case_tags,
-        run_count=min(len(baseline_runs), len(candidate_runs)),
-        factor_deltas=factor_deltas,
-        metric_deltas=metric_deltas,
-        confounded=len(factor_deltas) > 1,
-        baseline_factors=_factor_map(baseline_runs),
-        candidate_factors=_factor_map(candidate_runs),
-        paired_count=len(paired_case_ids),
-        missing_pair_count=len(all_case_ids) - len(paired_case_ids),
-        metric_results=tuple(metric_results),
-    )
-
-
 def build_metric_distribution(
     result: ExperimentResult,
     *,
@@ -564,16 +444,6 @@ def build_metric_distribution(
         by_variant=dict(sorted(by_variant.items())),
         summaries=summary_by_variant,
     )
-
-
-def metric_value(
-    run: RunResult,
-    semantic_type: str,
-    *,
-    registry: SemanticRegistry | None = None,
-) -> Any | None:
-    observation = metric_observation(run, semantic_type, registry=registry)
-    return observation.value if observation is not None else None
 
 
 def _run_metric_values(
@@ -626,38 +496,6 @@ def _snapshot_variants(spec_snapshot: dict[str, Any]) -> Any:
     return None
 
 
-def metric_observation(
-    run: RunResult,
-    semantic_type: str,
-    *,
-    registry: SemanticRegistry | None = None,
-) -> Observation | None:
-    active_registry = registry or DEFAULT_SEMANTIC_REGISTRY
-    normalized = active_registry.normalize(semantic_type)
-    candidates = [
-        observation
-        for observation in run.task_result.observations
-        if observation.kind is ObservationKind.METRIC
-        and observation.normalized_semantic_type(active_registry) == normalized
-    ]
-    candidates.extend(
-        score.to_observation(
-            observation_id=f"{run.run_id}_report_score_{index}",
-            case_id=run.case_id,
-            variant_id=run.variant_id,
-        )
-        for index, score in enumerate(run.scores)
-        if active_registry.normalize(score.semantic_type) == normalized
-    )
-    if not candidates:
-        return None
-    ordered = sorted(
-        enumerate(candidates),
-        key=lambda item: (*observation_priority(item[1]), item[0]),
-    )
-    return ordered[0][1]
-
-
 def build_regressions(
     comparisons: Sequence[ComparisonReport],
 ) -> tuple[RegressionReport, ...]:
@@ -698,7 +536,7 @@ def _mark_leaderboard_bests(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
                 metric_directions[metric.name].add(metric.direction)
     for row in rows:
         for metric in row.metric_details:
-            numeric = _numeric_value(metric.value)
+            numeric = numeric_value(metric.value)
             directions = metric_directions[metric.name]
             if (
                 numeric is None
@@ -725,7 +563,7 @@ def _mark_leaderboard_bests(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
                     metric.model_copy(
                         update={
                             "best": (
-                                (numeric := _numeric_value(metric.value)) is not None
+                                (numeric := numeric_value(metric.value)) is not None
                                 and metric.name in best_values
                                 and isclose(numeric, best_values[metric.name], abs_tol=1e-12)
                             )
@@ -737,209 +575,6 @@ def _mark_leaderboard_bests(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
         )
         for row in rows
     ]
-
-
-def _metric_metadata(
-    runs: Sequence[RunResult],
-    semantic_type: str,
-    *,
-    registry: SemanticRegistry,
-) -> tuple[str | None, str | None, str | None]:
-    observations = [
-        observation
-        for run in runs
-        if (observation := metric_observation(run, semantic_type, registry=registry)) is not None
-    ]
-    directions = {item.direction.value for item in observations if item.direction is not None}
-    units = {item.unit for item in observations if item.unit is not None}
-    roles = {item.role.value for item in observations if item.role is not None}
-    semantic_info = registry.types.get(registry.normalize(semantic_type) or semantic_type)
-    if not units and semantic_info is not None and semantic_info.unit is not None:
-        units.add(semantic_info.unit)
-    return (
-        next(iter(directions)) if len(directions) == 1 else None,
-        next(iter(units)) if len(units) == 1 else None,
-        next(iter(roles)) if len(roles) == 1 else None,
-    )
-
-
-def _paired_outcomes(
-    case_ids: Sequence[str],
-    *,
-    baseline_by_case: dict[str, RunResult],
-    candidate_by_case: dict[str, RunResult],
-    semantic_type: str,
-    direction: str | None,
-    registry: SemanticRegistry,
-) -> _PairedTally:
-    wins = 0
-    ties = 0
-    losses = 0
-    pairs: list[tuple[bool | float, bool | float]] = []
-    for case_id in case_ids:
-        baseline = _paired_value(
-            metric_value(baseline_by_case[case_id], semantic_type, registry=registry)
-        )
-        candidate = _paired_value(
-            metric_value(candidate_by_case[case_id], semantic_type, registry=registry)
-        )
-        if baseline is None or candidate is None:
-            continue
-        pairs.append((baseline, candidate))
-        outcome = _comparison_outcome(float(candidate) - float(baseline), direction)
-        if outcome == "improved":
-            wins += 1
-        elif outcome == "regressed":
-            losses += 1
-        elif outcome == "unchanged":
-            ties += 1
-    return _PairedTally(
-        wins=wins,
-        ties=ties,
-        losses=losses,
-        paired_count=len(pairs),
-        binary_table=_binary_table(pairs),
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class _PairedTally:
-    wins: int
-    ties: int
-    losses: int
-    paired_count: int
-    binary_table: PairedBinaryTable | None
-
-
-def _paired_value(value: Any) -> bool | float | None:
-    # Booleans stay out of numeric aggregates, but a pass/fail pair still orders cleanly.
-    if isinstance(value, bool):
-        return value
-    return _numeric_value(value)
-
-
-def _binary_table(pairs: Sequence[tuple[bool | float, bool | float]]) -> PairedBinaryTable | None:
-    if not pairs or not all(
-        isinstance(baseline, bool) and isinstance(candidate, bool) for baseline, candidate in pairs
-    ):
-        return None
-    return PairedBinaryTable(
-        both=sum(1 for baseline, candidate in pairs if baseline and candidate),
-        candidate_only=sum(1 for baseline, candidate in pairs if candidate and not baseline),
-        baseline_only=sum(1 for baseline, candidate in pairs if baseline and not candidate),
-        neither=sum(1 for baseline, candidate in pairs if not baseline and not candidate),
-    )
-
-
-def _has_case_tags(run: RunResult, case_tags: tuple[str, ...]) -> bool:
-    return set(case_tags).issubset(run.case.tags)
-
-
-def _numeric_delta(baseline: Any, candidate: Any) -> float | None:
-    baseline_number = _numeric_value(baseline)
-    candidate_number = _numeric_value(candidate)
-    if baseline_number is None or candidate_number is None:
-        return None
-    return candidate_number - baseline_number
-
-
-def _relative_delta(baseline: Any, delta: float | None) -> float | None:
-    baseline_number = _numeric_value(baseline)
-    if baseline_number is None or delta is None or isclose(baseline_number, 0.0, abs_tol=1e-12):
-        return None
-    return delta / abs(baseline_number)
-
-
-def _is_directional(direction: str | None) -> bool:
-    # Without a direction a pair has no winner, so a sign test would report no evidence.
-    return direction in {Direction.MAXIMIZE.value, Direction.MINIMIZE.value}
-
-
-def _comparison_outcome(delta: float | None, direction: str | None) -> ComparisonOutcome:
-    if delta is None or not _is_directional(direction):
-        return "indeterminate"
-    if isclose(delta, 0.0, abs_tol=1e-12):
-        return "unchanged"
-    if direction == Direction.MAXIMIZE.value:
-        return "improved" if delta > 0 else "regressed"
-    return "improved" if delta < 0 else "regressed"
-
-
-def _numeric_value(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return float(value)
-
-
-def aggregate_values(values: list[Any], fn: AggregationFn) -> Any | None:
-    if not values:
-        return None
-    if fn == "count":
-        return len(values)
-    if fn == "ratio_true":
-        return sum(1 for value in values if bool(value)) / len(values)
-
-    numeric_values = [
-        float(value)
-        for value in values
-        if isinstance(value, int | float) and not isinstance(value, bool)
-    ]
-    if not numeric_values:
-        return None
-    if fn == "mean":
-        return sum(numeric_values) / len(numeric_values)
-    if fn == "sum":
-        return sum(numeric_values)
-    if fn == "min":
-        return min(numeric_values)
-    if fn == "max":
-        return max(numeric_values)
-    if fn == "median":
-        return median(numeric_values)
-    if fn == "p95":
-        return _percentile(numeric_values, 95.0)
-    if fn == "stddev":
-        return pstdev(numeric_values)
-    if fn == "geomean":
-        if any(value <= 0.0 for value in numeric_values):
-            return None
-        return prod(numeric_values) ** (1.0 / len(numeric_values))
-    raise ValueError(f"Unsupported aggregation: {fn}")
-
-
-def _percentile(values: list[float], percentile: float) -> float:
-    if len(values) == 1:
-        return values[0]
-    sorted_values = sorted(values)
-    rank = (len(sorted_values) - 1) * (percentile / 100.0)
-    lower_index = int(rank)
-    upper_index = min(lower_index + 1, len(sorted_values) - 1)
-    weight = rank - lower_index
-    return (
-        sorted_values[lower_index]
-        + (sorted_values[upper_index] - sorted_values[lower_index]) * weight
-    )
-
-
-def _factor_deltas(
-    baseline_runs: list[RunResult],
-    candidate_runs: list[RunResult],
-) -> dict[str, dict[str, Any]]:
-    baseline_factors = _factor_map(baseline_runs)
-    candidate_factors = _factor_map(candidate_runs)
-    deltas: dict[str, dict[str, Any]] = {}
-    for name in sorted(set(baseline_factors) | set(candidate_factors)):
-        baseline_value = baseline_factors.get(name)
-        candidate_value = candidate_factors.get(name)
-        if baseline_value != candidate_value:
-            deltas[name] = {"baseline": baseline_value, "candidate": candidate_value}
-    return deltas
-
-
-def _factor_map(runs: list[RunResult]) -> dict[str, Any]:
-    if not runs:
-        return {}
-    return {factor.name: factor.value for factor in runs[0].factors}
 
 
 __all__ = (

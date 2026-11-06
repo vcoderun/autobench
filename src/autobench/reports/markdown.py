@@ -133,6 +133,7 @@ def _render_markdown_document(
     _render_leaderboard(lines, report)
     _render_comparisons(lines, report)
     _render_hypotheses(lines, report)
+    _render_trajectories(lines, report)
     _render_regressions(lines, report)
     _render_policies(lines, report)
     _render_execution_issues(lines, report)
@@ -1388,6 +1389,67 @@ def _render_hypotheses(lines: list[str], report: BenchmarkReport) -> None:
         numeric_columns={4, 5, 6},
     )
     lines.append("")
+
+
+def _render_trajectories(lines: list[str], report: BenchmarkReport) -> None:
+    if not report.trajectories:
+        return
+    lines.extend(
+        [
+            "## Asset Trajectories",
+            "",
+            "Each version is paired by case with its parent; p-values are exact two-sided sign tests.",
+            "",
+        ]
+    )
+    for trajectory in report.trajectories:
+        lines.extend([f"### {_code(trajectory.asset_id)}", ""])
+        if trajectory.case_tags:
+            lines.extend([f"case tags: {_code(', '.join(trajectory.case_tags))}", ""])
+        if trajectory.ambiguous_run_count:
+            lines.extend(
+                [
+                    f"runs using several versions at once: "
+                    f"{_code(str(trajectory.ambiguous_run_count))}",
+                    "",
+                ]
+            )
+        if not trajectory.steps:
+            lines.extend(["No run recorded a version of this asset.", ""])
+            continue
+        rows: list[tuple[str, ...]] = []
+        for step in trajectory.steps:
+            lineage = (
+                _code(step.version),
+                _optional_code(step.parent_version),
+                str(step.run_count),
+            )
+            if step.comparison is None or not step.comparison.metric_results:
+                rows.append((*lineage, "-", "-", "-", "-", "-", "-"))
+                continue
+            rows.extend(
+                (
+                    *lineage,
+                    metric.name,
+                    _format_value(metric.baseline, unit=metric.unit),
+                    _format_value(metric.candidate, unit=metric.unit),
+                    _format_value(metric.delta, unit=metric.unit),
+                    f"{metric.wins}/{metric.ties}/{metric.losses}",
+                    "-" if metric.sign_test is None else _p_value(metric.sign_test.two_sided_p),
+                )
+                for metric in step.comparison.metric_results
+            )
+        _append_table(
+            lines,
+            ("version", "parent", "runs", "metric", "parent value", "value", "delta", "W/T/L", "p"),
+            rows,
+            numeric_columns={2, 4, 5, 6, 8},
+        )
+        lines.append("")
+
+
+def _optional_code(value: str | None) -> str:
+    return "-" if value is None else _code(value)
 
 
 def _render_regressions(lines: list[str], report: BenchmarkReport) -> None:

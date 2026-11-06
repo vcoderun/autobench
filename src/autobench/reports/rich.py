@@ -18,6 +18,7 @@ from autobench.protocol.traces import Trace
 from autobench.records.staging import StagingInspection
 from autobench.reports.exporting import CSV_METRICS
 from autobench.reports.models import (
+    AssetTrajectoryReport,
     HypothesisResult,
     MarkdownReportPublication,
     MetricComparisonReport,
@@ -338,6 +339,34 @@ def _hypothesis_table(hypotheses: Sequence[HypothesisResult]) -> Table:
     return table
 
 
+def _trajectory_table(trajectory: AssetTrajectoryReport) -> Table:
+    title = f"Asset Trajectory: {trajectory.asset_id}"
+    if trajectory.case_tags:
+        title += f" (tags: {', '.join(trajectory.case_tags)})"
+    table = _data_table(title)
+    table.add_column("Version", style="bold", no_wrap=True)
+    table.add_column("Parent", no_wrap=True)
+    table.add_column("Runs", justify="right")
+    table.add_column("Metric")
+    table.add_column("Delta", justify="right")
+    table.add_column("W/T/L", justify="right")
+    table.add_column("p (two-sided)", justify="right")
+    for step in trajectory.steps:
+        lineage = (step.version, step.parent_version or "-", str(step.run_count))
+        metrics = () if step.comparison is None else step.comparison.metric_results
+        if not metrics:
+            table.add_row(*lineage, "-", "-", "-", "-")
+        for metric in metrics:
+            table.add_row(
+                *lineage,
+                _display_column_name(metric.name),
+                _format_value(metric.delta),
+                f"{metric.wins}/{metric.ties}/{metric.losses}",
+                "-" if metric.sign_test is None else f"{metric.sign_test.two_sided_p:.4f}",
+            )
+    return table
+
+
 def render_export_preview(
     console: Console,
     result: ExperimentResult,
@@ -546,6 +575,9 @@ def _render_report_tables(
         render_comparison(console, comparison)
     if report.hypotheses:
         console.print(_hypothesis_table(report.hypotheses))
+    for trajectory in report.trajectories:
+        if trajectory.steps:
+            console.print(_trajectory_table(trajectory))
     for distribution in report.distributions:
         table = _data_table(f"Distribution: {distribution.name} ({distribution.semantic_type})")
         table.add_column("Variant", style="bold", no_wrap=True)

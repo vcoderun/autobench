@@ -460,6 +460,26 @@ comparison never weakens the correction of the others. These are tests of associ
 variants on the same cases; `confounded=true` still marks comparisons whose variants differ in more
 than one factor.
 
+### Asset Trajectories
+
+An asset trajectory compares each recorded version of one asset with its parent version, using the
+same case pairing and sign tests as a variant comparison:
+
+```python
+from autobench import build_asset_trajectory
+
+trajectory = build_asset_trajectory(result, asset_id="prompt.support-system")
+for step in trajectory.steps:
+    print(step.version, step.parent_version, step.comparison)
+```
+
+A run belongs to a version when it used exactly one version of the asset; runs that used several
+versions of it at once are counted in `ambiguous_run_count` and left out. Steps are ordered so a
+parent precedes its children. A root version, or one whose parent has no runs in the experiment,
+has no comparison. Declare trajectories in `report.trajectories` ([YAML Spec](yaml-spec.md)) to add
+them to Rich and Markdown reports. Variant comparisons and trajectories share `compare_runs`, which
+compares any two caller-selected run groups.
+
 Use paired-baseline post-derivation when a per-run derived metric such as speedup must be written
 back into candidate evidence.
 

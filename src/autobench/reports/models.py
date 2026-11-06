@@ -111,6 +111,19 @@ class ComparisonReportSpec(BaseModel):
         return self.name or f"{self.baseline} -> {self.candidate}"
 
 
+class AssetTrajectoryReportSpec(BaseModel):
+    """Compare each recorded version of one asset with its parent version."""
+
+    asset: str = Field(min_length=1)
+    metrics: tuple[MetricAggregation, ...] = ()
+    case_tags: tuple[str, ...] = ()
+
+    def resolved_metrics(self) -> tuple[MetricAggregation, ...]:
+        if self.metrics:
+            return self.metrics
+        return DEFAULT_LEADERBOARD_METRICS
+
+
 class DistributionReportSpec(BaseModel):
     name: str
     semantic_type: str
@@ -173,6 +186,7 @@ class ReportSpec(BaseModel):
     leaderboard: LeaderboardReportSpec = Field(default_factory=LeaderboardReportSpec)
     case_matrix: CaseMatrixReportSpec = Field(default_factory=CaseMatrixReportSpec)
     comparisons: tuple[ComparisonReportSpec, ...] = ()
+    trajectories: tuple[AssetTrajectoryReportSpec, ...] = ()
     distributions: tuple[DistributionReportSpec, ...] = ()
     markdown: MarkdownReportConfig = Field(default_factory=MarkdownReportConfig)
 
@@ -193,6 +207,12 @@ class ReportSpec(BaseModel):
                     f"hypothesis family {hypothesis.family!r} mixes alpha levels "
                     f"{declared} and {hypothesis.alpha}"
                 )
+        trajectories = [(item.asset, item.case_tags) for item in self.trajectories]
+        repeated = sorted(
+            {asset for asset, tags in trajectories if trajectories.count((asset, tags)) > 1}
+        )
+        if repeated:
+            raise ValueError(f"asset trajectories are declared twice: {', '.join(repeated)}")
         return self
 
     def leaderboard_metrics(self) -> tuple[MetricAggregation, ...]:
@@ -581,6 +601,24 @@ class AssetLineageReport(BaseModel):
     versions: tuple[AssetVersionReport, ...] = ()
 
 
+class AssetTrajectoryStep(BaseModel):
+    """One version of a trajectory, compared with its parent when the parent has runs."""
+
+    version: str
+    parent_version: str | None = None
+    run_count: int
+    comparison: ComparisonReport | None = None
+
+
+class AssetTrajectoryReport(BaseModel):
+    """Versions of one asset in lineage order, each paired against its parent by case."""
+
+    asset_id: str
+    case_tags: tuple[str, ...] = ()
+    ambiguous_run_count: int = 0
+    steps: tuple[AssetTrajectoryStep, ...] = ()
+
+
 class ArtifactReport(BaseModel):
     artifact_id: str
     name: str
@@ -664,6 +702,7 @@ class BenchmarkReport(BaseModel):
     case_matrix: CaseMatrix
     comparisons: list[ComparisonReport] = Field(default_factory=list)
     hypotheses: tuple[HypothesisResult, ...] = ()
+    trajectories: tuple[AssetTrajectoryReport, ...] = ()
     regressions: tuple[RegressionReport, ...] = ()
     distributions: list[MetricDistribution] = Field(default_factory=list)
     optimizations: list[OptimizationRunReport] = Field(default_factory=list)
@@ -708,6 +747,9 @@ __all__ = (
     "ArtifactInventoryReport",
     "ArtifactReport",
     "AssetLineageReport",
+    "AssetTrajectoryReport",
+    "AssetTrajectoryReportSpec",
+    "AssetTrajectoryStep",
     "AssetVersionReport",
     "BenchmarkReport",
     "CaseMatrix",

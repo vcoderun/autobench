@@ -184,4 +184,5 @@ def run_case(ctx, case):
 
 The exact `AssetVersion` values are copied into the RunRecord. Reports and optimization feedback
 can then relate metric changes to prompt, tool, or output-schema versions without guessing from
-source control state.
+source control state. An [asset trajectory](recording-and-reporting.md#asset-trajectories)
+compares each version with its parent on the cases both ran.

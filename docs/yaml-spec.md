@@ -138,6 +138,22 @@ both variants to cases that carry every listed tag. `hypothesis` declares a conf
 `alternative` is `candidate_better` (one-sided) or `two_sided`. Hypotheses in one `family` are
 Holm-adjusted together and must share one `alpha`; comparison labels must be unique.
 
+`report.trajectories` follows one tracked asset through its versions. Each version is compared with
+its parent version on the cases both ran, whichever variants pinned them:
+
+```yaml
+      trajectories:
+        - prompt.support-system
+        - asset: kedi:form:planner
+          tags: [held-out]
+          show:
+            strict_pass:
+              metric: result.success
+              aggregate: ratio_true
+```
+
+An entry is an asset id or a mapping with `asset`, optional `tags`, and optional `show` metrics.
+
 `report.markdown` also accepts bounded `limits`, `traces.top_slowest`, `assets.diffs`, and
 `content.include_captured`. A configured output is staged before a CLI-recorded experiment is
 sealed. See [Markdown Reports](markdown-reports.md) for the complete document, audit, and

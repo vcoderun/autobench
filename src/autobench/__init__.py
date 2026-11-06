@@ -325,6 +325,7 @@ from autobench.records.staging import (
     recover_staging,
 )
 from autobench.records.storage import EnvironmentMetadata, capture_environment
+from autobench.reports.comparison import compare_runs
 from autobench.reports.exporting import (
     CSV_METRICS,
     export_markdown_report,
@@ -338,7 +339,15 @@ from autobench.reports.markdown import (
     render_markdown_bundle,
     write_markdown_report,
 )
-from autobench.reports.models import MarkdownReportPublication, PublishedReportFile
+from autobench.reports.models import (
+    AssetTrajectoryReport,
+    AssetTrajectoryReportSpec,
+    AssetTrajectoryStep,
+    ComparisonHypothesis,
+    HypothesisResult,
+    MarkdownReportPublication,
+    PublishedReportFile,
+)
 from autobench.reports.reporting import (
     DEFAULT_LEADERBOARD_METRICS,
     AggregationFn,
@@ -382,6 +391,7 @@ from autobench.reports.reporting import (
     metric_value,
     render_markdown_report,
 )
+from autobench.reports.trajectory import build_asset_trajectory
 from autobench.runtime.context import (
     CheckResult,
     ContextEvidence,
@@ -469,6 +479,9 @@ from .tracking import (
 )
 
 __all__ = (
+    "AssetTrajectoryReport",
+    "AssetTrajectoryReportSpec",
+    "AssetTrajectoryStep",
     "AutoInstrumentation",
     "ABSTRACTION_LAYER_TAG",
     "AggregationFn",
@@ -509,6 +522,7 @@ __all__ = (
     "CaptureLevel",
     "CapturePolicy",
     "CheckResult",
+    "ComparisonHypothesis",
     "ContextEvidence",
     "Component",
     "Compatibility",
@@ -572,6 +586,7 @@ __all__ = (
     "GenAIPricesSource",
     "HTTPXCaptureSettings",
     "HTTPXInstrumentation",
+    "HypothesisResult",
     "INSTRUMENTOR_TAG",
     "InstrumentCall",
     "InstrumentAssetSpec",
@@ -674,7 +689,9 @@ __all__ = (
     "SplitOutput",
     "SplitRule",
     "UnitConversionRule",
+    "build_asset_trajectory",
     "canonicalize",
+    "compare_runs",
     "recanonicalize",
     "resolve_nested_value",
     "resolve_source_value",

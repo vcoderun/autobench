@@ -3063,6 +3063,26 @@ comparison never weakens the correction of the others. These are tests of associ
 variants on the same cases; `confounded=true` still marks comparisons whose variants differ in more
 than one factor.
 
+### Asset Trajectories
+
+An asset trajectory compares each recorded version of one asset with its parent version, using the
+same case pairing and sign tests as a variant comparison:
+
+```python
+from autobench import build_asset_trajectory
+
+trajectory = build_asset_trajectory(result, asset_id="prompt.support-system")
+for step in trajectory.steps:
+    print(step.version, step.parent_version, step.comparison)
+```
+
+A run belongs to a version when it used exactly one version of the asset; runs that used several
+versions of it at once are counted in `ambiguous_run_count` and left out. Steps are ordered so a
+parent precedes its children. A root version, or one whose parent has no runs in the experiment,
+has no comparison. Declare trajectories in `report.trajectories` ([YAML Spec](yaml-spec.md)) to add
+them to Rich and Markdown reports. Variant comparisons and trajectories share `compare_runs`, which
+compares any two caller-selected run groups.
+
 Use paired-baseline post-derivation when a per-run derived metric such as speedup must be written
 back into candidate evidence.
 
@@ -3657,7 +3677,8 @@ def run_case(ctx, case):
 
 The exact `AssetVersion` values are copied into the RunRecord. Reports and optimization feedback
 can then relate metric changes to prompt, tool, or output-schema versions without guessing from
-source control state.
+source control state. An [asset trajectory](recording-and-reporting.md#asset-trajectories)
+compares each version with its parent on the cases both ran.
 
 ---
 
@@ -5818,6 +5839,22 @@ both variants to cases that carry every listed tag. `hypothesis` declares a conf
 `alternative` is `candidate_better` (one-sided) or `two_sided`. Hypotheses in one `family` are
 Holm-adjusted together and must share one `alpha`; comparison labels must be unique.
 
+`report.trajectories` follows one tracked asset through its versions. Each version is compared with
+its parent version on the cases both ran, whichever variants pinned them:
+
+```yaml
+      trajectories:
+        - prompt.support-system
+        - asset: kedi:form:planner
+          tags: [held-out]
+          show:
+            strict_pass:
+              metric: result.success
+              aggregate: ratio_true
+```
+
+An entry is an asset id or a mapping with `asset`, optional `tags`, and optional `show` metrics.
+
 `report.markdown` also accepts bounded `limits`, `traces.top_slowest`, `assets.diffs`, and
 `content.include_captured`. A configured output is staged before a CLI-recorded experiment is
 sealed. See [Markdown Reports](markdown-reports.md) for the complete document, audit, and
@@ -7469,6 +7506,7 @@ The tracking registry understands:
 - automatic SDK-boundary discovery without tracking decorators
 - source/effective representation links, capability scopes, provenance, and cross-layer aliases
 - automatic experiment persistence and replayable span-local asset uses
+- version trajectories that pair each version with its parent on shared cases
 
 Decorators preserve the original callable or class type so tracking does not degrade static
 typing. See [Asset Tracking](asset-tracking.md) and
