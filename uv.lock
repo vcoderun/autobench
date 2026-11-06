@@ -179,7 +179,7 @@ matrix = [
 requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'" },
     { name = "click", specifier = ">=8.1.8" },
-    { name = "filelock", specifier = ">=3.16" },
+    { name = "filelock", specifier = ">=4.2.1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = "==0.28.1" },
     { name = "httpx", marker = "extra == 'httpx'", specifier = ">=0.28,<0.29" },
     { name = "httpx", marker = "extra == 'instrumentation'", specifier = ">=0.28,<0.29" },

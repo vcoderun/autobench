@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Require filelock 4.2.1 or later. Autobench serializes writes to its asset store with
+  `FileLock`, and earlier filelock releases let another local user plant a file on the lock path
+  that the lock then truncates and chmods, among other advisories fixed in 4.2.1.
+
 ## 0.5.0 - 2026-11-06
 
 - Published the 0.5.0 JSON schemas, whose benchmark schema describes `report.trajectories` and
