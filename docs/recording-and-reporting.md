@@ -440,11 +440,20 @@ Comparison pairs runs by case, displays changed factors, aggregates requested se
 sets `confounded=true` when multiple relevant factors changed. It reports association and deltas;
 it does not claim which factor caused the result.
 
+A case pairs only when each side ran it exactly once. When one side holds several runs of a case,
+for example because two variants used the same asset version, no single run stands for the case:
+it is counted as a case with several runs and left out of the paired statistics, whatever order the
+runs were recorded in. A factor whose value differs between runs of one side is reported as mixed
+and also sets `confounded=true`.
+
 Every paired metric also carries an exact sign test over its wins and losses; ties carry no
 information and are excluded. For a boolean metric such as `result.success` this is the exact
 McNemar test, and the comparison adds the paired 2x2 table with Newcombe's 95% interval for the
-candidate minus baseline success rate (Newcombe 1998, method 10). Both are computed from the
-immutable record, so replaying an experiment reproduces them exactly.
+candidate minus baseline success rate (Newcombe 1998, method 10). A numeric metric such as cost,
+tokens, or latency gets a 95% bias-corrected and accelerated (BCa) bootstrap interval for the mean
+candidate minus baseline difference over paired cases, whatever aggregate the metric reports. The
+bootstrap draws 2,000 resamples from a fixed seed, so all of these are computed from the immutable
+record and replaying an experiment reproduces them exactly.
 
 ```bash
 autobench compare runs/support-routing --baseline baseline --candidate candidate \
@@ -463,22 +472,57 @@ than one factor.
 ### Asset Trajectories
 
 An asset trajectory compares each recorded version of one asset with its parent version, using the
-same case pairing and sign tests as a variant comparison:
+same case pairing, sign tests, and intervals as a variant comparison:
 
 ```python
 from autobench import build_asset_trajectory
 
 trajectory = build_asset_trajectory(result, asset_id="prompt.support-system")
 for step in trajectory.steps:
-    print(step.version, step.parent_version, step.comparison)
+    print(step.version, step.parent_version, step.comparison, step.adjusted_p_values)
 ```
 
 A run belongs to a version when it used exactly one version of the asset; runs that used several
 versions of it at once are counted in `ambiguous_run_count` and left out. Steps are ordered so a
-parent precedes its children. A root version, or one whose parent has no runs in the experiment,
-has no comparison. Declare trajectories in `report.trajectories` ([YAML Spec](yaml-spec.md)) to add
-them to Rich and Markdown reports. Variant comparisons and trajectories share `compare_runs`, which
-compares any two caller-selected run groups.
+parent precedes its children. A root version, or one whose parent has no selected runs, has no
+comparison. `case_tags` and `variants` restrict the runs. When several variants share a version,
+for example two models that start from the same prompt, their runs of one case cannot be paired;
+select one stratum with `variants` to compare within it.
+
+Each step's two-sided p-values are also Holm-adjusted across the tested steps of the trajectory,
+metric by metric (`adjusted_p_values`, shown as `Holm p`). A trajectory is exploratory: it tests
+every step that happened to be recorded. State a confirmatory claim before the run as an asset
+comparison with a hypothesis instead.
+
+Records of one benchmark can be pooled, for example one record per generation of a self-modifying
+agent. Pass several results; every record must belong to the same benchmark and give a case the same
+content, and the first record's semantic registry resolves metrics unless one is passed:
+
+```python
+trajectory = build_asset_trajectory(
+    [generation_1, generation_2, generation_3],
+    asset_id="kedi:form:planner",
+)
+```
+
+`compare_asset_versions` compares two versions of an asset directly. `baseline` and `candidate` name
+recorded versions, or `root` for the one version without an evaluated parent and `leaf` for the
+one version without an evaluated child. A selector that matches no version or several, or two
+sides that resolve to the same version, leave the comparison without runs; its `diagnostics` say
+why, and a hypothesis on it is untestable. In a spec, a `report.compare` entry with `asset`
+declares the same comparison and can carry a Holm-adjusted `hypothesis`
+([YAML Spec](yaml-spec.md)).
+
+```bash
+autobench trajectory runs/gen-1 runs/gen-2
+autobench trajectory runs/gen-1 runs/gen-2 --asset kedi:form:planner --variant agent
+autobench compare runs/forms --asset kedi:form:planner --baseline root --candidate leaf
+```
+
+Without `--asset`, `autobench trajectory` lists the assets the runs recorded with their version and
+run counts. Declare trajectories in `report.trajectories` ([YAML Spec](yaml-spec.md)) to add them to
+Rich and Markdown reports. Variant comparisons, asset comparisons, and trajectories share
+`compare_runs`, which compares any two caller-selected run groups.
 
 Use paired-baseline post-derivation when a per-run derived metric such as speedup must be written
 back into candidate evidence.

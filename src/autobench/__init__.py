@@ -346,7 +346,9 @@ from autobench.reports.models import (
     ComparisonHypothesis,
     HypothesisResult,
     MarkdownReportPublication,
+    PairedMeanDifference,
     PublishedReportFile,
+    TrackedAssetSummary,
 )
 from autobench.reports.reporting import (
     DEFAULT_LEADERBOARD_METRICS,
@@ -391,7 +393,11 @@ from autobench.reports.reporting import (
     metric_value,
     render_markdown_report,
 )
-from autobench.reports.trajectory import build_asset_trajectory
+from autobench.reports.trajectory import (
+    build_asset_trajectory,
+    compare_asset_versions,
+    summarize_tracked_assets,
+)
 from autobench.runtime.context import (
     CheckResult,
     ContextEvidence,
@@ -689,9 +695,13 @@ __all__ = (
     "SplitOutput",
     "SplitRule",
     "UnitConversionRule",
+    "PairedMeanDifference",
+    "TrackedAssetSummary",
     "build_asset_trajectory",
     "canonicalize",
+    "compare_asset_versions",
     "compare_runs",
+    "summarize_tracked_assets",
     "recanonicalize",
     "resolve_nested_value",
     "resolve_source_value",

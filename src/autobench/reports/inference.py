@@ -1,7 +1,8 @@
 from __future__ import annotations as _annotations
 
 from collections.abc import Sequence
-from math import comb, sqrt
+from math import comb, floor, fsum, isfinite, sqrt
+from random import Random
 from statistics import NormalDist
 
 from autobench.reports.models import (
@@ -12,8 +13,12 @@ from autobench.reports.models import (
     HypothesisStatus,
     PairedBinaryTable,
     PairedDifferenceInterval,
+    PairedMeanDifference,
     PairedSignTest,
 )
+
+BOOTSTRAP_RESAMPLES = 2_000
+BOOTSTRAP_SEED = 0
 
 
 def build_hypothesis_results(
@@ -166,6 +171,69 @@ def paired_success_difference(
     )
 
 
+def paired_mean_difference(
+    differences: Sequence[float],
+    *,
+    confidence: float = 0.95,
+    resamples: int = BOOTSTRAP_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+) -> PairedMeanDifference | None:
+    """Return a BCa bootstrap interval for the mean of case-paired differences.
+
+    Paired cases are resampled with replacement, and the percentile interval of the resampled
+    means is bias-corrected and accelerated (Efron, 1987), with the acceleration taken from the
+    jackknife. The generator is seeded, so the same evidence always yields the same interval.
+
+    Args:
+        differences: Candidate minus baseline value of each paired case.
+        confidence: Two-sided confidence level.
+        resamples: Number of bootstrap resamples.
+        seed: Seed of the resampling generator.
+
+    Returns:
+        The mean difference with its interval, or ``None`` with fewer than two pairs or a
+        non-finite difference.
+    """
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be between zero and one")
+    if resamples < 1:
+        raise ValueError("resamples must be positive")
+    count = len(differences)
+    if count < 2 or not all(isfinite(value) for value in differences):
+        return None
+    total = fsum(differences)
+    estimate = total / count
+    low = high = estimate
+    if min(differences) != max(differences):
+        generator = Random(seed)
+        means = sorted(
+            fsum(generator.choices(differences, k=count)) / count for _ in range(resamples)
+        )
+        normal = NormalDist()
+        below = sum(1 for value in means if value < estimate)
+        tied = sum(1 for value in means if value == estimate)
+        # Ties split evenly, and the proportion stays off zero and one to keep the bias finite.
+        proportion = min(max((below + tied / 2) / resamples, 0.5 / resamples), 1 - 0.5 / resamples)
+        bias = normal.inv_cdf(proportion)
+        leave_one_out = [(total - value) / (count - 1) for value in differences]
+        centre = fsum(leave_one_out) / count
+        deviations = [centre - value for value in leave_one_out]
+        acceleration = fsum(value**3 for value in deviations) / (
+            6 * fsum(value**2 for value in deviations) ** 1.5
+        )
+        tail = (1 - confidence) / 2
+        low = _sorted_quantile(means, _bca_level(tail, bias, acceleration, normal))
+        high = _sorted_quantile(means, _bca_level(1 - tail, bias, acceleration, normal))
+    return PairedMeanDifference(
+        confidence=confidence,
+        estimate=estimate,
+        low=low,
+        high=high,
+        resamples=resamples,
+        seed=seed,
+    )
+
+
 def holm_adjusted(p_values: Sequence[float]) -> tuple[float, ...]:
     """Return Holm step-down adjusted p-values in the order they were given.
 
@@ -212,9 +280,26 @@ def _wilson_interval(successes: int, total: int, z: float) -> tuple[float, float
     return (centre - half_width) / denominator, (centre + half_width) / denominator
 
 
+def _bca_level(level: float, bias: float, acceleration: float, normal: NormalDist) -> float:
+    shifted = bias + normal.inv_cdf(level)
+    # A strongly skewed sample can push the denominator to zero; the level then saturates at
+    # the edge of the bootstrap distribution instead of wrapping around.
+    return normal.cdf(bias + shifted / max(1 - acceleration * shifted, 1e-12))
+
+
+def _sorted_quantile(values: Sequence[float], level: float) -> float:
+    position = level * (len(values) - 1)
+    lower = floor(position)
+    upper = min(lower + 1, len(values) - 1)
+    return values[lower] + (values[upper] - values[lower]) * (position - lower)
+
+
 __all__ = (
+    "BOOTSTRAP_RESAMPLES",
+    "BOOTSTRAP_SEED",
     "build_hypothesis_results",
     "exact_sign_test",
     "holm_adjusted",
+    "paired_mean_difference",
     "paired_success_difference",
 )

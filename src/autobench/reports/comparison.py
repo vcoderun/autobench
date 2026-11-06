@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import isclose
@@ -7,7 +8,11 @@ from typing import Any
 
 from autobench.metrics.observations import Direction
 from autobench.metrics.semantics import SemanticRegistry
-from autobench.reports.inference import exact_sign_test, paired_success_difference
+from autobench.reports.inference import (
+    exact_sign_test,
+    paired_mean_difference,
+    paired_success_difference,
+)
 from autobench.reports.models import (
     DEFAULT_LEADERBOARD_METRICS,
     ComparisonOutcome,
@@ -71,7 +76,9 @@ def compare_runs(
     """Compare two labelled groups of runs over the cases they share.
 
     The groups are taken as given: callers select the runs, for example by variant or by the
-    asset version they used, and pass the labels that identify each side in the report.
+    asset version they used, and pass the labels that identify each side in the report. A case
+    pairs only when each side ran it exactly once; a case with several runs on one side has no
+    single run to pair and is counted in ``duplicate_case_count`` instead.
 
     Args:
         baseline: Label of the baseline group.
@@ -84,15 +91,22 @@ def compare_runs(
         name: Optional comparison label.
 
     Returns:
-        Aggregate deltas, case-paired outcomes, and exact paired tests for every metric.
+        Aggregate deltas, case-paired outcomes, exact paired tests, and paired difference
+        intervals for every metric.
     """
-    factor_deltas = _factor_deltas(baseline_runs, candidate_runs)
+    baseline_factors, baseline_mixed = _factor_profile(baseline_runs)
+    candidate_factors, candidate_mixed = _factor_profile(candidate_runs)
+    mixed_factors = tuple(sorted({*baseline_mixed, *candidate_mixed}))
+    factor_deltas = _factor_deltas(baseline_factors, candidate_factors, mixed_factors=mixed_factors)
     metric_deltas: dict[str, dict[str, Any]] = {}
     metric_results: list[MetricComparisonReport] = []
-    baseline_by_case = {run.case_id: run for run in baseline_runs}
-    candidate_by_case = {run.case_id: run for run in candidate_runs}
-    paired_case_ids = tuple(sorted(set(baseline_by_case) & set(candidate_by_case)))
-    all_case_ids = set(baseline_by_case) | set(candidate_by_case)
+    baseline_by_case, baseline_repeated = _single_runs_by_case(baseline_runs)
+    candidate_by_case, candidate_repeated = _single_runs_by_case(candidate_runs)
+    repeated_case_ids = baseline_repeated | candidate_repeated
+    paired_case_ids = tuple(
+        sorted((baseline_by_case.keys() & candidate_by_case.keys()) - repeated_case_ids)
+    )
+    all_case_ids = {run.case_id for run in (*baseline_runs, *candidate_runs)}
 
     for metric in metrics:
         baseline_samples = [
@@ -162,6 +176,11 @@ def compare_runs(
                     if tally.binary_table is None
                     else paired_success_difference(tally.binary_table)
                 ),
+                mean_difference=(
+                    paired_mean_difference(tally.differences)
+                    if tally.binary_table is None
+                    else None
+                ),
             )
         )
 
@@ -173,11 +192,13 @@ def compare_runs(
         run_count=min(len(baseline_runs), len(candidate_runs)),
         factor_deltas=factor_deltas,
         metric_deltas=metric_deltas,
-        confounded=len(factor_deltas) > 1,
-        baseline_factors=_factor_map(baseline_runs),
-        candidate_factors=_factor_map(candidate_runs),
+        confounded=len(factor_deltas) > 1 or bool(mixed_factors),
+        baseline_factors=baseline_factors,
+        candidate_factors=candidate_factors,
+        mixed_factors=mixed_factors,
         paired_count=len(paired_case_ids),
-        missing_pair_count=len(all_case_ids) - len(paired_case_ids),
+        missing_pair_count=len(all_case_ids) - len(paired_case_ids) - len(repeated_case_ids),
+        duplicate_case_count=len(repeated_case_ids),
         metric_results=tuple(metric_results),
     )
 
@@ -218,6 +239,7 @@ def _paired_outcomes(
         losses=losses,
         paired_count=len(pairs),
         binary_table=_binary_table(pairs),
+        differences=tuple(float(candidate) - float(baseline) for baseline, candidate in pairs),
     )
 
 
@@ -228,6 +250,13 @@ class _PairedTally:
     losses: int
     paired_count: int
     binary_table: PairedBinaryTable | None
+    differences: tuple[float, ...]
+
+
+def _single_runs_by_case(runs: Sequence[RunResult]) -> tuple[dict[str, RunResult], set[str]]:
+    counts = Counter(run.case_id for run in runs)
+    single = {run.case_id: run for run in runs if counts[run.case_id] == 1}
+    return single, {case_id for case_id, count in counts.items() if count > 1}
 
 
 def _paired_value(value: Any) -> bool | float | None:
@@ -294,13 +323,14 @@ def _comparison_outcome(delta: float | None, direction: str | None) -> Compariso
 
 
 def _factor_deltas(
-    baseline_runs: Sequence[RunResult],
-    candidate_runs: Sequence[RunResult],
+    baseline_factors: dict[str, Any],
+    candidate_factors: dict[str, Any],
+    *,
+    mixed_factors: tuple[str, ...],
 ) -> dict[str, dict[str, Any]]:
-    baseline_factors = _factor_map(baseline_runs)
-    candidate_factors = _factor_map(candidate_runs)
+    # A mixed factor has no single value on one side, so it is reported as mixed, not changed.
     deltas: dict[str, dict[str, Any]] = {}
-    for name in sorted(set(baseline_factors) | set(candidate_factors)):
+    for name in sorted((set(baseline_factors) | set(candidate_factors)) - set(mixed_factors)):
         baseline_value = baseline_factors.get(name)
         candidate_value = candidate_factors.get(name)
         if baseline_value != candidate_value:
@@ -308,10 +338,18 @@ def _factor_deltas(
     return deltas
 
 
-def _factor_map(runs: Sequence[RunResult]) -> dict[str, Any]:
-    if not runs:
-        return {}
-    return {factor.name: factor.value for factor in runs[0].factors}
+def _factor_profile(runs: Sequence[RunResult]) -> tuple[dict[str, Any], tuple[str, ...]]:
+    # Factors every run agrees on describe the group; any other factor, including one that only
+    # some runs declare, varies inside the group and is reported as mixed.
+    shared: dict[str, Any] = {}
+    mixed: list[str] = []
+    for name in sorted({factor.name for run in runs for factor in run.factors}):
+        values = [[factor.value for factor in run.factors if factor.name == name] for run in runs]
+        if all(value == values[0] and len(value) == 1 for value in values):
+            shared[name] = values[0][0]
+        else:
+            mixed.append(name)
+    return shared, tuple(mixed)
 
 
 __all__ = (

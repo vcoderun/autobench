@@ -161,9 +161,38 @@ autobench compare runs/routing-42 \
   --candidate candidate
 ```
 
-Both IDs must exist. The view shows changed factors, aggregate metric values and deltas, paired run
-count, and whether several factors changed. `confounded=true` is a warning against causal
-attribution, not a failed comparison.
+The view shows changed factors, aggregate metric values and deltas, paired case counts, cases with
+several runs, and whether several factors changed. `confounded=true` is a warning against causal
+attribution, not a failed comparison. `--tag` restricts both sides to cases carrying every given
+tag, and `--metric SEMANTIC:AGGREGATE` replaces the default metrics.
+
+```bash
+autobench compare runs/forms \
+  --asset kedi:form:planner \
+  --baseline root \
+  --candidate leaf \
+  --variant agent
+```
+
+With `--asset`, `--baseline` and `--candidate` name versions of that asset, or `root` and `leaf`,
+and `--variant` restricts the runs that are used. A selector that matches no version or several is
+explained in the view instead of failing.
+
+## Trajectory
+
+```bash
+autobench trajectory runs/gen-1 runs/gen-2
+autobench trajectory runs/gen-1 runs/gen-2 \
+  --asset kedi:form:planner \
+  --variant agent \
+  --tag held-out
+```
+
+Without `--asset`, the command lists every recorded asset with its version and run counts. With one
+or more `--asset` options it pairs each version with its parent on shared cases and shows sign
+tests, Holm-adjusted step p-values, and paired difference intervals. Several record directories are
+pooled when they belong to one benchmark and give each case the same content; otherwise the command
+fails with a usage error. `--tag`, `--variant`, and `--metric` work as they do for `compare`.
 
 ## Export
 

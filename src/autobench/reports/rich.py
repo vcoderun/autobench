@@ -22,7 +22,7 @@ from autobench.reports.models import (
     HypothesisResult,
     MarkdownReportPublication,
     MetricComparisonReport,
-    PairedSignTest,
+    TrackedAssetSummary,
 )
 from autobench.reports.reporting import (
     BenchmarkReport,
@@ -236,17 +236,26 @@ def render_comparison(console: Console, comparison: ComparisonReport) -> None:
     console.print(
         Panel.fit(
             Text(_comparison_title(comparison), style="bold magenta"),
-            title="Variant Comparison",
+            title="Variant Comparison" if comparison.asset_id is None else "Asset Comparison",
             border_style="magenta",
         )
     )
     summary = _kv_table("Comparison Summary")
+    if comparison.asset_id is not None:
+        summary.add_row("Asset", comparison.asset_id)
     summary.add_row("Baseline", comparison.baseline)
     summary.add_row("Candidate", comparison.candidate)
-    summary.add_row("Paired runs", str(comparison.run_count))
+    summary.add_row("Paired cases", str(comparison.paired_count))
+    summary.add_row("Missing pairs", str(comparison.missing_pair_count))
+    if comparison.duplicate_case_count:
+        summary.add_row("Cases with several runs", str(comparison.duplicate_case_count))
     summary.add_row("Confounded", _format_value(comparison.confounded))
+    if comparison.mixed_factors:
+        summary.add_row("Mixed factors", ", ".join(comparison.mixed_factors))
     if comparison.case_tags:
         summary.add_row("Case tags", ", ".join(comparison.case_tags))
+    for diagnostic in comparison.diagnostics:
+        summary.add_row("Note", Text(diagnostic))
     console.print(summary)
 
     factor_table = _data_table("Factor Deltas")
@@ -278,9 +287,9 @@ def render_comparison(console: Console, comparison: ComparisonReport) -> None:
         )
     console.print(metric_table)
     tested = [
-        (metric, metric.sign_test)
+        metric
         for metric in comparison.metric_results
-        if metric.sign_test is not None
+        if metric.sign_test is not None or metric.mean_difference is not None
     ]
     if tested:
         console.print(_paired_test_table(tested))
@@ -291,30 +300,38 @@ def _comparison_title(comparison: ComparisonReport) -> str:
     return pair if comparison.name is None else f"{comparison.name}: {pair}"
 
 
-def _paired_test_table(metrics: Sequence[tuple[MetricComparisonReport, PairedSignTest]]) -> Table:
+def _paired_test_table(metrics: Sequence[MetricComparisonReport]) -> Table:
     table = _data_table("Paired Tests")
     table.add_column("Metric", style="bold")
     table.add_column("Pairs", justify="right")
     table.add_column("W/T/L", justify="right")
     table.add_column("p (candidate better)", justify="right")
     table.add_column("p (two-sided)", justify="right")
-    table.add_column("Success difference (95% CI)", justify="right")
-    for metric, sign_test in metrics:
-        interval = metric.success_difference
+    table.add_column("Difference (95% CI)", justify="right")
+    for metric in metrics:
+        sign_test = metric.sign_test
         table.add_row(
             _display_column_name(metric.name),
             str(metric.paired_count),
             f"{metric.wins}/{metric.ties}/{metric.losses}",
-            f"{sign_test.candidate_better_p:.4f}",
-            f"{sign_test.two_sided_p:.4f}",
-            (
-                "-"
-                if interval is None
-                else f"{interval.estimate * 100:+.0f} pts "
-                f"({interval.low * 100:.0f} to {interval.high * 100:.0f})"
-            ),
+            "-" if sign_test is None else f"{sign_test.candidate_better_p:.4f}",
+            "-" if sign_test is None else f"{sign_test.two_sided_p:.4f}",
+            _paired_difference(metric),
         )
     return table
+
+
+def _paired_difference(metric: MetricComparisonReport) -> str:
+    if metric.success_difference is not None:
+        interval = metric.success_difference
+        return (
+            f"{interval.estimate * 100:+.0f} pts "
+            f"({interval.low * 100:.0f} to {interval.high * 100:.0f})"
+        )
+    if metric.mean_difference is not None:
+        mean = metric.mean_difference
+        return f"{mean.estimate:+.6g} ({_format_value(mean.low)} to {_format_value(mean.high)})"
+    return "-"
 
 
 def _hypothesis_table(hypotheses: Sequence[HypothesisResult]) -> Table:
@@ -339,10 +356,55 @@ def _hypothesis_table(hypotheses: Sequence[HypothesisResult]) -> Table:
     return table
 
 
+def render_trajectory(console: Console, trajectory: AssetTrajectoryReport) -> None:
+    """Render one asset trajectory with the notes that qualify its steps.
+
+    Args:
+        console: Console to render to.
+        trajectory: Trajectory to render.
+    """
+    if not trajectory.steps:
+        console.print(f"No selected run recorded a version of {trajectory.asset_id}.", markup=False)
+        return
+    console.print(_trajectory_table(trajectory))
+    notes: list[str] = []
+    if len(trajectory.experiment_ids) > 1:
+        notes.append(f"Pooled records: {', '.join(trajectory.experiment_ids)}")
+    if trajectory.ambiguous_run_count:
+        notes.append(f"Runs using several versions at once: {trajectory.ambiguous_run_count}")
+    notes.extend(_step_notes(trajectory))
+    for note in notes:
+        console.print(note, markup=False)
+
+
+def render_tracked_assets(console: Console, assets: Sequence[TrackedAssetSummary]) -> None:
+    """Render the assets the runs recorded, to choose one for a trajectory.
+
+    Args:
+        console: Console to render to.
+        assets: Asset summaries to list.
+    """
+    if not assets:
+        console.print("No run recorded a tracked asset.")
+        return
+    table = _data_table("Recorded Assets")
+    table.add_column("Asset", style="bold")
+    table.add_column("Versions", justify="right")
+    table.add_column("Runs", justify="right")
+    for asset in assets:
+        table.add_row(asset.asset_id, str(asset.version_count), str(asset.run_count))
+    console.print(table)
+
+
 def _trajectory_table(trajectory: AssetTrajectoryReport) -> Table:
     title = f"Asset Trajectory: {trajectory.asset_id}"
-    if trajectory.case_tags:
-        title += f" (tags: {', '.join(trajectory.case_tags)})"
+    qualifiers = [
+        f"{label}: {', '.join(values)}"
+        for label, values in (("tags", trajectory.case_tags), ("variants", trajectory.variants))
+        if values
+    ]
+    if qualifiers:
+        title += f" ({'; '.join(qualifiers)})"
     table = _data_table(title)
     table.add_column("Version", style="bold", no_wrap=True)
     table.add_column("Parent", no_wrap=True)
@@ -351,20 +413,43 @@ def _trajectory_table(trajectory: AssetTrajectoryReport) -> Table:
     table.add_column("Delta", justify="right")
     table.add_column("W/T/L", justify="right")
     table.add_column("p (two-sided)", justify="right")
+    table.add_column("Holm p", justify="right")
+    table.add_column("Difference (95% CI)", justify="right")
     for step in trajectory.steps:
         lineage = (step.version, step.parent_version or "-", str(step.run_count))
         metrics = () if step.comparison is None else step.comparison.metric_results
         if not metrics:
-            table.add_row(*lineage, "-", "-", "-", "-")
+            table.add_row(*lineage, "-", "-", "-", "-", "-", "-")
         for metric in metrics:
+            adjusted = step.adjusted_p_values.get(metric.name)
             table.add_row(
                 *lineage,
                 _display_column_name(metric.name),
                 _format_value(metric.delta),
                 f"{metric.wins}/{metric.ties}/{metric.losses}",
                 "-" if metric.sign_test is None else f"{metric.sign_test.two_sided_p:.4f}",
+                "-" if adjusted is None else f"{adjusted:.4f}",
+                _paired_difference(metric),
             )
     return table
+
+
+def _step_notes(trajectory: AssetTrajectoryReport) -> list[str]:
+    notes: list[str] = []
+    for step in trajectory.steps:
+        comparison = step.comparison
+        if comparison is None:
+            continue
+        if comparison.duplicate_case_count:
+            notes.append(
+                f"{step.version}: {comparison.duplicate_case_count} cases have several runs of "
+                "one version and were not paired"
+            )
+        if comparison.mixed_factors:
+            notes.append(
+                f"{step.version}: confounded by mixed factors {', '.join(comparison.mixed_factors)}"
+            )
+    return notes
 
 
 def render_export_preview(
@@ -577,7 +662,7 @@ def _render_report_tables(
         console.print(_hypothesis_table(report.hypotheses))
     for trajectory in report.trajectories:
         if trajectory.steps:
-            console.print(_trajectory_table(trajectory))
+            render_trajectory(console, trajectory)
     for distribution in report.distributions:
         table = _data_table(f"Distribution: {distribution.name} ({distribution.semantic_type})")
         table.add_column("Variant", style="bold", no_wrap=True)
@@ -1231,5 +1316,7 @@ __all__ = (
     "render_otlp_export",
     "render_recorded_runs",
     "render_report",
+    "render_tracked_assets",
+    "render_trajectory",
     "render_validation_summary",
 )

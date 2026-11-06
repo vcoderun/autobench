@@ -83,15 +83,25 @@ class ComparisonHypothesis(BaseModel):
 
 
 class ComparisonReportSpec(BaseModel):
+    """A variant comparison, or with ``asset`` a comparison of two versions of that asset.
+
+    For an asset comparison, ``baseline`` and ``candidate`` name recorded versions, or the
+    selectors ``root`` and ``leaf``, and ``variants`` can restrict the runs that are used.
+    """
+
     name: str | None = Field(default=None, min_length=1)
     baseline: str
     candidate: str
+    asset: str | None = Field(default=None, min_length=1)
+    variants: tuple[str, ...] = ()
     metrics: tuple[MetricAggregation, ...] = ()
     case_tags: tuple[str, ...] = ()
     hypothesis: ComparisonHypothesis | None = None
 
     @model_validator(mode="after")
     def _validate_hypothesis_metric(self) -> ComparisonReportSpec:
+        if self.variants and self.asset is None:
+            raise ValueError("comparison variants apply only to asset version comparisons")
         if self.hypothesis is None:
             return self
         names = {metric.name for metric in self.resolved_metrics()}
@@ -117,6 +127,7 @@ class AssetTrajectoryReportSpec(BaseModel):
     asset: str = Field(min_length=1)
     metrics: tuple[MetricAggregation, ...] = ()
     case_tags: tuple[str, ...] = ()
+    variants: tuple[str, ...] = ()
 
     def resolved_metrics(self) -> tuple[MetricAggregation, ...]:
         if self.metrics:
@@ -207,10 +218,8 @@ class ReportSpec(BaseModel):
                     f"hypothesis family {hypothesis.family!r} mixes alpha levels "
                     f"{declared} and {hypothesis.alpha}"
                 )
-        trajectories = [(item.asset, item.case_tags) for item in self.trajectories]
-        repeated = sorted(
-            {asset for asset, tags in trajectories if trajectories.count((asset, tags)) > 1}
-        )
+        trajectories = [(item.asset, item.case_tags, item.variants) for item in self.trajectories]
+        repeated = sorted({key[0] for key in trajectories if trajectories.count(key) > 1})
         if repeated:
             raise ValueError(f"asset trajectories are declared twice: {', '.join(repeated)}")
         return self
@@ -442,6 +451,23 @@ class PairedDifferenceInterval(BaseModel):
     high: float
 
 
+class PairedMeanDifference(BaseModel):
+    """Bootstrap interval for the mean candidate minus baseline difference over paired cases.
+
+    The interval is bias-corrected and accelerated (BCa); ``seed`` and ``resamples`` reproduce it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    method: Literal["paired_bca_bootstrap"] = "paired_bca_bootstrap"
+    confidence: float = Field(gt=0.0, lt=1.0)
+    estimate: float
+    low: float
+    high: float
+    resamples: int = Field(ge=1)
+    seed: int
+
+
 class HypothesisResult(BaseModel):
     comparison: str
     metric: str
@@ -455,9 +481,17 @@ class HypothesisResult(BaseModel):
 
 
 class ComparisonReport(BaseModel):
+    """Two run groups compared over the cases they share.
+
+    A case with more than one run on either side is never paired, because no single run stands
+    for it; ``duplicate_case_count`` counts those cases. ``mixed_factors`` names factors whose
+    value differs between runs of one side, which confounds the comparison.
+    """
+
     name: str | None = None
     baseline: str
     candidate: str
+    asset_id: str | None = None
     case_tags: tuple[str, ...] = ()
     run_count: int
     factor_deltas: dict[str, dict[str, JsonValue]] = Field(default_factory=dict)
@@ -465,8 +499,11 @@ class ComparisonReport(BaseModel):
     confounded: bool = False
     baseline_factors: dict[str, JsonValue] = Field(default_factory=dict)
     candidate_factors: dict[str, JsonValue] = Field(default_factory=dict)
+    mixed_factors: tuple[str, ...] = ()
     paired_count: int = 0
     missing_pair_count: int = 0
+    duplicate_case_count: int = 0
+    diagnostics: tuple[str, ...] = ()
     metric_results: tuple[MetricComparisonReport, ...] = ()
 
 
@@ -491,6 +528,7 @@ class MetricComparisonReport(BaseModel):
     sign_test: PairedSignTest | None = None
     binary_table: PairedBinaryTable | None = None
     success_difference: PairedDifferenceInterval | None = None
+    mean_difference: PairedMeanDifference | None = None
 
 
 class RegressionReport(BaseModel):
@@ -602,21 +640,36 @@ class AssetLineageReport(BaseModel):
 
 
 class AssetTrajectoryStep(BaseModel):
-    """One version of a trajectory, compared with its parent when the parent has runs."""
+    """One version of a trajectory, compared with its parent when the parent has runs.
+
+    ``adjusted_p_values`` holds, by metric name, the two-sided sign-test p-value after a Holm
+    adjustment across every tested step of the trajectory.
+    """
 
     version: str
     parent_version: str | None = None
     run_count: int
     comparison: ComparisonReport | None = None
+    adjusted_p_values: dict[str, float] = Field(default_factory=dict)
 
 
 class AssetTrajectoryReport(BaseModel):
     """Versions of one asset in lineage order, each paired against its parent by case."""
 
     asset_id: str
+    experiment_ids: tuple[str, ...] = ()
     case_tags: tuple[str, ...] = ()
+    variants: tuple[str, ...] = ()
     ambiguous_run_count: int = 0
     steps: tuple[AssetTrajectoryStep, ...] = ()
+
+
+class TrackedAssetSummary(BaseModel):
+    """How many versions of one asset the runs recorded, and how many runs used it."""
+
+    asset_id: str
+    version_count: int = Field(ge=0)
+    run_count: int = Field(ge=0)
 
 
 class ArtifactReport(BaseModel):
@@ -812,5 +865,7 @@ __all__ = (
     "HypothesisStatus",
     "PairedBinaryTable",
     "PairedDifferenceInterval",
+    "PairedMeanDifference",
     "PairedSignTest",
+    "TrackedAssetSummary",
 )

@@ -64,7 +64,7 @@ from autobench.reports.models import (
     RunMetricRow,
     VariantConfigRow,
 )
-from autobench.reports.trajectory import build_asset_trajectory
+from autobench.reports.trajectory import build_asset_trajectory, compare_asset_versions
 from autobench.reports.values import (
     aggregate_values,
     metric_metadata,
@@ -105,15 +105,7 @@ def build_report(
         and active_report_spec.markdown.content.include_captured
     )
     comparisons = [
-        compare_variants(
-            result,
-            baseline=comparison.baseline,
-            candidate=comparison.candidate,
-            metrics=comparison.resolved_metrics(),
-            registry=active_registry,
-            case_tags=comparison.case_tags,
-            name=comparison.name,
-        )
+        _build_comparison(result, comparison, registry=active_registry)
         for comparison in active_report_spec.comparisons
     ]
     hypotheses = build_hypothesis_results(active_report_spec.comparisons, comparisons)
@@ -124,6 +116,7 @@ def build_report(
             metrics=trajectory.resolved_metrics(),
             registry=active_registry,
             case_tags=trajectory.case_tags,
+            variants=trajectory.variants,
         )
         for trajectory in active_report_spec.trajectories
     )
@@ -494,6 +487,37 @@ def _snapshot_variants(spec_snapshot: dict[str, Any]) -> Any:
     if isinstance(nested_spec, dict):
         return nested_spec.get("variants")
     return None
+
+
+def _build_comparison(
+    result: ExperimentResult,
+    spec: ComparisonReportSpec,
+    *,
+    registry: SemanticRegistry,
+) -> ComparisonReport:
+    if spec.asset is None:
+        return compare_variants(
+            result,
+            baseline=spec.baseline,
+            candidate=spec.candidate,
+            metrics=spec.resolved_metrics(),
+            registry=registry,
+            case_tags=spec.case_tags,
+            name=spec.name,
+        )
+    # Version selectors such as root and leaf say nothing about which asset they belong to, so
+    # an asset comparison is always reported under its label.
+    return compare_asset_versions(
+        result,
+        asset_id=spec.asset,
+        baseline=spec.baseline,
+        candidate=spec.candidate,
+        metrics=spec.resolved_metrics(),
+        registry=registry,
+        case_tags=spec.case_tags,
+        variants=spec.variants,
+        name=spec.label(),
+    )
 
 
 def build_regressions(

@@ -138,6 +138,30 @@ both variants to cases that carry every listed tag. `hypothesis` declares a conf
 `alternative` is `candidate_better` (one-sided) or `two_sided`. Hypotheses in one `family` are
 Holm-adjusted together and must share one `alpha`; comparison labels must be unique.
 
+With `asset`, a comparison entry compares two versions of that asset instead of two variants.
+`baseline` and `candidate` then name recorded versions, or `root` and `leaf` for the ends of the
+version lineage, and `variants` can restrict the runs that are used:
+
+```yaml
+      compare:
+        evolved-planner:
+          asset: kedi:form:planner
+          baseline: root
+          candidate: leaf
+          variants: [agent]
+          tags: [held-out]
+          show:
+            strict_pass:
+              metric: result.success
+              aggregate: ratio_true
+          hypothesis:
+            metric: strict_pass
+            family: primary
+```
+
+`variants` is only accepted together with `asset`. A selector that matches no version, or several,
+leaves the comparison without paired evidence, so its hypothesis is reported as untestable.
+
 `report.trajectories` follows one tracked asset through its versions. Each version is compared with
 its parent version on the cases both ran, whichever variants pinned them:
 
@@ -146,13 +170,16 @@ its parent version on the cases both ran, whichever variants pinned them:
         - prompt.support-system
         - asset: kedi:form:planner
           tags: [held-out]
+          variants: [agent]
           show:
             strict_pass:
               metric: result.success
               aggregate: ratio_true
 ```
 
-An entry is an asset id or a mapping with `asset`, optional `tags`, and optional `show` metrics.
+An entry is an asset id or a mapping with `asset`, optional `tags`, optional `variants`, and
+optional `show` metrics. Trajectory p-values are Holm-adjusted across the steps of each metric and
+are exploratory; declare a confirmatory claim as an asset comparison with a hypothesis.
 
 `report.markdown` also accepts bounded `limits`, `traces.top_slowest`, `assets.diffs`, and
 `content.include_captured`. A configured output is staged before a CLI-recorded experiment is

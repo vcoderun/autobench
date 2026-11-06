@@ -71,7 +71,14 @@ from autobench.reports.rich import (
     render_report,
     render_staging_inspection,
     render_trace_summary,
+    render_tracked_assets,
+    render_trajectory,
     render_validation_summary,
+)
+from autobench.reports.trajectory import (
+    build_asset_trajectory,
+    compare_asset_versions,
+    summarize_tracked_assets,
 )
 from autobench.runtime.awaitables import ProcessSignalInterrupt, run_sync_cooperatively
 from autobench.runtime.models import ExecutionCorrelation
@@ -516,8 +523,23 @@ def export(run_dir: Path, export_format: str, output_path: Path) -> None:
 
 @cli.command("compare")
 @click.argument("run_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option("--baseline", required=True, help="Baseline variant id.")
-@click.option("--candidate", required=True, help="Candidate variant id.")
+@click.option(
+    "--baseline",
+    required=True,
+    help="Baseline variant id, or with --asset a version id, root, or leaf.",
+)
+@click.option(
+    "--candidate",
+    required=True,
+    help="Candidate variant id, or with --asset a version id, root, or leaf.",
+)
+@click.option("--asset", "asset_id", default=None, help="Compare versions of this asset.")
+@click.option(
+    "--variant",
+    "variants",
+    multiple=True,
+    help="Repeatable variant id; with --asset, only runs of the given variants are used.",
+)
 @click.option(
     "--tag",
     "case_tags",
@@ -535,20 +557,101 @@ def compare(
     run_dir: Path,
     baseline: str,
     candidate: str,
+    asset_id: str | None,
+    variants: tuple[str, ...],
     case_tags: tuple[str, ...],
     metric_specs: tuple[str, ...],
 ) -> None:
-    """Compare two recorded variants without claiming causality."""
-    metrics = tuple(_parse_metric_option(spec) for spec in metric_specs)
-    result = replay_experiment(run_dir)
-    comparison = compare_variants(
-        result,
-        baseline=baseline,
-        candidate=candidate,
-        metrics=metrics or DEFAULT_LEADERBOARD_METRICS,
-        case_tags=case_tags,
+    """Compare two recorded variants, or two versions of an asset, without claiming causality."""
+    if variants and asset_id is None:
+        raise click.UsageError("--variant requires --asset.")
+    metrics = tuple(_parse_metric_option(spec) for spec in metric_specs) or (
+        DEFAULT_LEADERBOARD_METRICS
     )
+    result = replay_experiment(run_dir)
+    if asset_id is None:
+        comparison = compare_variants(
+            result,
+            baseline=baseline,
+            candidate=candidate,
+            metrics=metrics,
+            case_tags=case_tags,
+        )
+    else:
+        comparison = compare_asset_versions(
+            result,
+            asset_id=asset_id,
+            baseline=baseline,
+            candidate=candidate,
+            metrics=metrics,
+            case_tags=case_tags,
+            variants=variants,
+        )
     render_comparison(_console, comparison)
+
+
+@cli.command("trajectory")
+@click.argument(
+    "run_dirs",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--asset",
+    "asset_ids",
+    multiple=True,
+    help="Repeatable asset id; without it, the assets the runs recorded are listed.",
+)
+@click.option(
+    "--variant",
+    "variants",
+    multiple=True,
+    help="Repeatable variant id; only runs of the given variants are used.",
+)
+@click.option(
+    "--tag",
+    "case_tags",
+    multiple=True,
+    help="Repeatable case tag; only cases carrying every given tag are compared.",
+)
+@click.option(
+    "--metric",
+    "metric_specs",
+    multiple=True,
+    metavar="SEMANTIC:AGGREGATE",
+    help="Repeatable metric to compare, for example result.success:ratio_true.",
+)
+def trajectory(
+    run_dirs: tuple[Path, ...],
+    asset_ids: tuple[str, ...],
+    variants: tuple[str, ...],
+    case_tags: tuple[str, ...],
+    metric_specs: tuple[str, ...],
+) -> None:
+    """Compare each recorded version of an asset with its parent, across one or more records."""
+    metrics = tuple(_parse_metric_option(spec) for spec in metric_specs) or (
+        DEFAULT_LEADERBOARD_METRICS
+    )
+    results = [replay_experiment(run_dir) for run_dir in run_dirs]
+    try:
+        if not asset_ids:
+            render_tracked_assets(_console, summarize_tracked_assets(results))
+            return
+        trajectories = [
+            build_asset_trajectory(
+                results,
+                asset_id=asset_id,
+                metrics=metrics,
+                case_tags=case_tags,
+                variants=variants,
+            )
+            for asset_id in asset_ids
+        ]
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+    for report in trajectories:
+        render_trajectory(_console, report)
 
 
 def _parse_metric_option(spec: str) -> MetricAggregation:

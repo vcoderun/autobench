@@ -386,10 +386,11 @@ def _normalize_compare_report(raw_compare: Any) -> list[dict[str, Any]]:
                 "benchmark.<id>.report.compare keys must use '<baseline> -> <candidate>' "
                 "or name an entry that declares baseline and candidate"
             )
+        for key in ("asset", "variants", "hypothesis"):
+            if key in raw_config:
+                comparison[key] = raw_config[key]
         if "tags" in raw_config:
             comparison["case_tags"] = raw_config["tags"]
-        if "hypothesis" in raw_config:
-            comparison["hypothesis"] = raw_config["hypothesis"]
         comparisons.append(comparison)
     return comparisons
 
@@ -411,6 +412,8 @@ def _normalize_trajectory_report(raw_trajectories: Any) -> list[dict[str, Any]]:
         }
         if "tags" in raw_trajectory:
             trajectory["case_tags"] = raw_trajectory["tags"]
+        if "variants" in raw_trajectory:
+            trajectory["variants"] = raw_trajectory["variants"]
         trajectories.append(trajectory)
     return trajectories
 
@@ -574,6 +577,10 @@ def _comparison_to_yaml_view(comparison: ComparisonReportSpec) -> dict[str, Any]
     view: dict[str, Any] = {}
     if comparison.name is not None:
         view |= {"baseline": comparison.baseline, "candidate": comparison.candidate}
+    if comparison.asset is not None:
+        view["asset"] = comparison.asset
+    if comparison.variants:
+        view["variants"] = list(comparison.variants)
     if comparison.metrics:
         view["show"] = _report_metric_map(comparison.metrics)
     if comparison.case_tags:
@@ -589,6 +596,8 @@ def _trajectory_to_yaml_view(trajectory: AssetTrajectoryReportSpec) -> dict[str,
         view["show"] = _report_metric_map(trajectory.metrics)
     if trajectory.case_tags:
         view["tags"] = list(trajectory.case_tags)
+    if trajectory.variants:
+        view["variants"] = list(trajectory.variants)
     return view
 
 

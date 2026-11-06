@@ -1,6 +1,8 @@
 from __future__ import annotations as _annotations
 
+from math import sqrt
 from pathlib import Path
+from statistics import stdev
 from textwrap import dedent
 
 import pytest
@@ -26,9 +28,12 @@ from autobench.cli import cli
 from autobench.data.variants import FactorValue
 from autobench.records.storage import EnvironmentMetadata
 from autobench.reports.inference import (
+    BOOTSTRAP_RESAMPLES,
+    BOOTSTRAP_SEED,
     build_hypothesis_results,
     exact_sign_test,
     holm_adjusted,
+    paired_mean_difference,
     paired_success_difference,
 )
 from autobench.reports.markdown import render_markdown_report
@@ -141,6 +146,114 @@ def test_paired_success_difference_handles_empty_tables_and_degenerate_margins()
             PairedBinaryTable(both=1, candidate_only=0, baseline_only=0, neither=0),
             confidence=1.0,
         )
+
+
+def test_paired_mean_difference_is_a_reproducible_bca_interval() -> None:
+    differences = [0.5 * step for step in range(1, 13)]
+
+    interval = paired_mean_difference(differences)
+
+    assert interval is not None
+    assert interval.method == "paired_bca_bootstrap"
+    assert (interval.resamples, interval.seed) == (BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED)
+    assert interval.estimate == pytest.approx(3.25)
+    assert interval.low < interval.estimate < interval.high
+    assert paired_mean_difference(differences) == interval
+    # A symmetric sample gives close to the normal interval of its mean.
+    half_width = 1.96 * stdev(differences) / sqrt(len(differences))
+    assert interval.low == pytest.approx(3.25 - half_width, abs=0.25)
+    assert interval.high == pytest.approx(3.25 + half_width, abs=0.25)
+
+
+def test_paired_mean_difference_follows_skew_and_handles_degenerate_samples() -> None:
+    skewed = paired_mean_difference([0.0] * 9 + [10.0])
+
+    assert skewed is not None
+    assert skewed.estimate == pytest.approx(1.0)
+    assert skewed.high - skewed.estimate > skewed.estimate - skewed.low
+    constant = paired_mean_difference([2.0, 2.0, 2.0], confidence=0.9, resamples=10, seed=3)
+    assert constant is not None
+    assert (constant.estimate, constant.low, constant.high) == (2.0, 2.0, 2.0)
+    assert (constant.confidence, constant.resamples, constant.seed) == (0.9, 10, 3)
+    assert paired_mean_difference([1.0]) is None
+    assert paired_mean_difference([1.0, float("nan")]) is None
+    single_draw = paired_mean_difference([1.0, 3.0], resamples=1)
+    assert single_draw is not None
+    assert single_draw.low <= single_draw.high
+    with pytest.raises(ValueError, match="confidence"):
+        paired_mean_difference([1.0, 2.0], confidence=1.0)
+    with pytest.raises(ValueError, match="resamples"):
+        paired_mean_difference([1.0, 2.0], resamples=0)
+
+
+def test_numeric_metrics_carry_a_paired_mean_difference() -> None:
+    result = _result(
+        {
+            f"case-{index}": ((), (False, True), (0.1 * index, 0.1 * index + gain))
+            for index, gain in enumerate((0.1, 0.2, 0.3, 0.2, 0.2))
+        }
+    )
+
+    comparison = compare_variants(
+        result, baseline="baseline", candidate="candidate", metrics=(SUCCESS, QUALITY)
+    )
+
+    success, quality = comparison.metric_results
+    assert success.success_difference is not None
+    assert success.mean_difference is None
+    assert quality.success_difference is None
+    assert quality.mean_difference is not None
+    assert quality.mean_difference.estimate == pytest.approx(0.2)
+    assert quality.mean_difference.low <= 0.2 <= quality.mean_difference.high
+
+    markdown = render_markdown_report(
+        build_report(
+            result,
+            report_spec=ReportSpec.model_validate(
+                {
+                    "comparisons": [
+                        {
+                            "baseline": "baseline",
+                            "candidate": "candidate",
+                            "metrics": [QUALITY.model_dump()],
+                        }
+                    ]
+                }
+            ),
+        )
+    )
+    assert "| difference (95% CI) |" in markdown
+    assert "| quality |" in markdown
+
+
+def test_paired_tests_list_numeric_metrics_without_a_direction() -> None:
+    result = _result({f"case-{index}": ((), (False, True), (0.1, 0.2)) for index in range(3)})
+    for run in result.runs:
+        run.scores.append(
+            ScoreRecord(
+                name="tokens",
+                semantic_type="custom.tokens",
+                value=100 if run.variant_id == "baseline" else 100 + int(run.case_id[-1]),
+            )
+        )
+
+    comparison = compare_variants(
+        result,
+        baseline="baseline",
+        candidate="candidate",
+        metrics=(MetricAggregation(name="tokens", semantic_type="custom.tokens", fn="mean"),),
+    )
+
+    tokens = comparison.metric_results[0]
+    assert tokens.sign_test is None
+    assert tokens.mean_difference is not None
+    assert tokens.mean_difference.estimate == pytest.approx(1.0)
+    console = Console(record=True, width=200)
+    render_comparison(console, comparison)
+    text = console.export_text()
+    assert "Paired Tests" in text
+    assert "Difference (95% CI)" in text
+    assert "+1 (" in text
 
 
 def test_holm_adjustment_is_monotone_and_keeps_input_order() -> None:

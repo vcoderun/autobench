@@ -30,6 +30,8 @@ from autobench.reports.charts import (
     render_quality_gate_chart,
 )
 from autobench.reports.models import (
+    AssetTrajectoryReport,
+    AssetTrajectoryStep,
     AssetVersionReport,
     BenchmarkReport,
     ComparisonReport,
@@ -1253,14 +1255,30 @@ def _render_comparisons(lines: list[str], report: BenchmarkReport) -> None:
             [
                 f"### {_comparison_heading(comparison)}",
                 "",
+                *(
+                    [f"asset: {_code(comparison.asset_id)}"]
+                    if comparison.asset_id is not None
+                    else []
+                ),
                 f"paired cases: {_code(str(comparison.paired_count))}",
                 f"missing pairs: {_code(str(comparison.missing_pair_count))}",
+                *(
+                    [f"cases with several runs: {_code(str(comparison.duplicate_case_count))}"]
+                    if comparison.duplicate_case_count
+                    else []
+                ),
                 f"confounded: {_code(str(comparison.confounded))}",
+                *(
+                    [f"mixed factors: {_code(', '.join(comparison.mixed_factors))}"]
+                    if comparison.mixed_factors
+                    else []
+                ),
                 *(
                     [f"case tags: {_code(', '.join(comparison.case_tags))}"]
                     if comparison.case_tags
                     else []
                 ),
+                *(f"note: {_text(diagnostic)}" for diagnostic in comparison.diagnostics),
                 "",
             ]
         )
@@ -1292,7 +1310,7 @@ def _render_comparisons(lines: list[str], report: BenchmarkReport) -> None:
                     "W/T/L",
                     "p (candidate better)",
                     "p (two-sided)",
-                    "success difference (95% CI)",
+                    "difference (95% CI)",
                 ),
                 [_comparison_row(metric) for metric in comparison.metric_results],
                 numeric_columns={1, 2, 3, 4, 6, 8, 9},
@@ -1332,7 +1350,7 @@ def _comparison_row(metric: MetricComparisonReport) -> tuple[str, ...]:
         f"{metric.wins}/{metric.ties}/{metric.losses}",
         "-" if metric.sign_test is None else _p_value(metric.sign_test.candidate_better_p),
         "-" if metric.sign_test is None else _p_value(metric.sign_test.two_sided_p),
-        _success_difference(metric),
+        _paired_difference(metric),
     )
 
 
@@ -1345,14 +1363,21 @@ def _p_value(value: float) -> str:
     return f"{value:.4f}"
 
 
-def _success_difference(metric: MetricComparisonReport) -> str:
-    interval = metric.success_difference
-    if interval is None:
-        return "-"
-    return (
-        f"{interval.estimate * 100:+.0f} pts "
-        f"({interval.low * 100:.0f} to {interval.high * 100:.0f})"
-    )
+def _paired_difference(metric: MetricComparisonReport) -> str:
+    if metric.success_difference is not None:
+        interval = metric.success_difference
+        return (
+            f"{interval.estimate * 100:+.0f} pts "
+            f"({interval.low * 100:.0f} to {interval.high * 100:.0f})"
+        )
+    if metric.mean_difference is not None:
+        mean = metric.mean_difference
+        return (
+            f"{_format_value(mean.estimate, unit=metric.unit)} "
+            f"({_format_value(mean.low, unit=metric.unit)} to "
+            f"{_format_value(mean.high, unit=metric.unit)})"
+        )
+    return "-"
 
 
 def _render_hypotheses(lines: list[str], report: BenchmarkReport) -> None:
@@ -1398,54 +1423,104 @@ def _render_trajectories(lines: list[str], report: BenchmarkReport) -> None:
         [
             "## Asset Trajectories",
             "",
-            "Each version is paired by case with its parent; p-values are exact two-sided sign tests.",
+            "Each version is paired by case with its parent. p-values are exact two-sided sign "
+            "tests; Holm p adjusts them across the steps of a trajectory, metric by metric. "
+            "Trajectories are exploratory: declare an asset comparison hypothesis for a "
+            "confirmatory claim.",
             "",
         ]
     )
     for trajectory in report.trajectories:
         lines.extend([f"### {_code(trajectory.asset_id)}", ""])
-        if trajectory.case_tags:
-            lines.extend([f"case tags: {_code(', '.join(trajectory.case_tags))}", ""])
-        if trajectory.ambiguous_run_count:
-            lines.extend(
-                [
-                    f"runs using several versions at once: "
-                    f"{_code(str(trajectory.ambiguous_run_count))}",
-                    "",
-                ]
-            )
-        if not trajectory.steps:
-            lines.extend(["No run recorded a version of this asset.", ""])
-            continue
-        rows: list[tuple[str, ...]] = []
-        for step in trajectory.steps:
-            lineage = (
-                _code(step.version),
-                _optional_code(step.parent_version),
-                str(step.run_count),
-            )
-            if step.comparison is None or not step.comparison.metric_results:
-                rows.append((*lineage, "-", "-", "-", "-", "-", "-"))
-                continue
-            rows.extend(
+        details = [
+            f"{label}: {_code(', '.join(values))}"
+            for label, values in (
                 (
-                    *lineage,
-                    metric.name,
-                    _format_value(metric.baseline, unit=metric.unit),
-                    _format_value(metric.candidate, unit=metric.unit),
-                    _format_value(metric.delta, unit=metric.unit),
-                    f"{metric.wins}/{metric.ties}/{metric.losses}",
-                    "-" if metric.sign_test is None else _p_value(metric.sign_test.two_sided_p),
-                )
-                for metric in step.comparison.metric_results
+                    "pooled records",
+                    trajectory.experiment_ids if len(trajectory.experiment_ids) > 1 else (),
+                ),
+                ("case tags", trajectory.case_tags),
+                ("variants", trajectory.variants),
             )
+            if values
+        ]
+        if trajectory.ambiguous_run_count:
+            details.append(
+                f"runs using several versions at once: {_code(str(trajectory.ambiguous_run_count))}"
+            )
+        if details:
+            lines.extend([*details, ""])
+        if not trajectory.steps:
+            lines.extend(["No selected run recorded a version of this asset.", ""])
+            continue
         _append_table(
             lines,
-            ("version", "parent", "runs", "metric", "parent value", "value", "delta", "W/T/L", "p"),
-            rows,
-            numeric_columns={2, 4, 5, 6, 8},
+            (
+                "version",
+                "parent",
+                "runs",
+                "metric",
+                "parent value",
+                "value",
+                "delta",
+                "W/T/L",
+                "p",
+                "Holm p",
+                "difference (95% CI)",
+            ),
+            [row for step in trajectory.steps for row in _trajectory_rows(step)],
+            numeric_columns={2, 4, 5, 6, 8, 9},
         )
         lines.append("")
+        notes = _trajectory_notes(trajectory)
+        if notes:
+            lines.extend([*notes, ""])
+
+
+def _trajectory_rows(step: AssetTrajectoryStep) -> list[tuple[str, ...]]:
+    lineage = (
+        _code(step.version),
+        _optional_code(step.parent_version),
+        str(step.run_count),
+    )
+    if step.comparison is None or not step.comparison.metric_results:
+        return [(*lineage, *("-",) * 8)]
+    rows: list[tuple[str, ...]] = []
+    for metric in step.comparison.metric_results:
+        adjusted = step.adjusted_p_values.get(metric.name)
+        rows.append(
+            (
+                *lineage,
+                metric.name,
+                _format_value(metric.baseline, unit=metric.unit),
+                _format_value(metric.candidate, unit=metric.unit),
+                _format_value(metric.delta, unit=metric.unit),
+                f"{metric.wins}/{metric.ties}/{metric.losses}",
+                "-" if metric.sign_test is None else _p_value(metric.sign_test.two_sided_p),
+                "-" if adjusted is None else _p_value(adjusted),
+                _paired_difference(metric),
+            )
+        )
+    return rows
+
+
+def _trajectory_notes(trajectory: AssetTrajectoryReport) -> list[str]:
+    notes: list[str] = []
+    for step in trajectory.steps:
+        comparison = step.comparison
+        if comparison is None:
+            continue
+        if comparison.duplicate_case_count:
+            notes.append(
+                f"- {_code(step.version)}: {comparison.duplicate_case_count} cases have several "
+                "runs of one version and were not paired."
+            )
+        if comparison.mixed_factors:
+            notes.append(
+                f"- {_code(step.version)}: confounded by mixed factors "
+                f"{_code(', '.join(comparison.mixed_factors))}."
+            )
+    return notes
 
 
 def _optional_code(value: str | None) -> str:

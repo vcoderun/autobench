@@ -109,7 +109,7 @@ See [Scoring And Derivation](scoring-and-derivation.md) and
 | Price sources | Optional llm-prices and genai-prices importers that normalize external data into `PricingTable` |
 | Paired baseline | Per-case or factor-matched speedup, delta, percent change, diagnostics, and verdicts |
 | Comparison classifier | Improved, regressed, unchanged, or inconclusive outcomes with relative noise thresholds |
-| Paired inference | Exact sign (McNemar) tests, Newcombe intervals for paired success rates, case-tag subsets, and Holm-adjusted pre-declared hypotheses |
+| Paired inference | Exact sign (McNemar) tests, Newcombe intervals for paired success rates, BCa bootstrap intervals for numeric paired differences, case-tag subsets, and Holm-adjusted pre-declared hypotheses |
 
 External price sources are convenience importers, not runtime dependencies or Autobench's source
 of truth. A local pricing YAML remains fully supported.
@@ -142,7 +142,8 @@ The tracking registry understands:
 - automatic SDK-boundary discovery without tracking decorators
 - source/effective representation links, capability scopes, provenance, and cross-layer aliases
 - automatic experiment persistence and replayable span-local asset uses
-- version trajectories that pair each version with its parent on shared cases
+- version trajectories that pair each version with its parent on shared cases, pooled across records
+- root-to-leaf and version-to-version asset comparisons with confirmatory hypotheses
 
 Decorators preserve the original callable or class type so tracking does not degrade static
 typing. See [Asset Tracking](asset-tracking.md) and

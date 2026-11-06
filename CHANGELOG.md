@@ -16,7 +16,21 @@
   and diffs follow the declared parent.
 - Added asset trajectories: `build_asset_trajectory` and `report.trajectories` compare each recorded
   version of an asset with its parent version on the cases both ran, with the same paired tests as
-  variant comparisons. `compare_runs` compares any two caller-selected run groups.
+  variant comparisons. Step p-values are also Holm-adjusted across the trajectory, `variants`
+  restricts the runs, and several records of one benchmark can be pooled, for example one record
+  per generation of a self-modifying agent. `compare_runs` compares any two caller-selected run
+  groups.
+- Added asset version comparisons: `compare_asset_versions`, `report.compare` entries with `asset`,
+  and `autobench compare --asset --variant` compare two versions or the `root` and `leaf` of a
+  lineage, and can carry Holm-adjusted hypotheses. Unresolvable selectors are explained in the
+  comparison's diagnostics and make its hypothesis untestable.
+- Added `autobench trajectory RUN_DIR...`, which lists the recorded assets or renders trajectories
+  across one or more records.
+- Added 95% BCa bootstrap intervals for the mean paired difference of numeric metrics, beside the
+  Newcombe interval of boolean metrics, in comparisons, trajectories, and reports.
+- A case with more than one run on either side of a comparison, as when several variants share an
+  asset version, is never paired; it is counted as a case with several runs. Factors that differ
+  between runs of one side are reported as mixed and mark the comparison confounded.
 - Fixed spec YAML views dropping the name, case tags, and hypothesis of comparison entries.
 - Extended Pydantic AI instrumentation support to `>=2.22,<2.67`, with a 2.66.0 CI target.
 - Split case-paired comparison into `autobench.reports.comparison` and metric value resolution into
