@@ -1,0 +1,375 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "generation": {
+      "additionalProperties": false,
+      "properties": {
+        "cases": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "case": {
+                "additionalProperties": false,
+                "properties": {
+                  "attachments": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "expected": {},
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "input": {},
+                  "metadata": {
+                    "type": "object"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "type": "object"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "rejection_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "candidate",
+                  "accepted",
+                  "rejected"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "sha256",
+              "case"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "completed_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "cost": {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "currency": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "amount",
+            "currency"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "determinism": {
+          "enum": [
+            "guaranteed",
+            "not_guaranteed",
+            "unknown"
+          ]
+        },
+        "generator": {
+          "additionalProperties": false,
+          "properties": {
+            "asset_version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "provider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": false,
+          "properties": {
+            "dataset": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sha256": {
+                  "oneOf": [
+                    {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "sha256"
+              ],
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "generated": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "included": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rejected": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "generated",
+            "included",
+            "rejected"
+          ],
+          "type": "object"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request": {
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "type": "object"
+            },
+            "prompt": {
+              "additionalProperties": false,
+              "properties": {
+                "asset_version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sha256": {
+                  "oneOf": [
+                    {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "seed": {
+              "type": [
+                "integer",
+                "string",
+                "null"
+              ]
+            },
+            "seed_cases": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "attachments": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "expected": {},
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "input": {},
+                  "metadata": {
+                    "type": "object"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "settings": {
+              "type": "object"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sha256",
+            "seed_cases"
+          ],
+          "type": "object"
+        },
+        "started_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "incomplete"
+          ]
+        },
+        "usage": {
+          "additionalProperties": false,
+          "properties": {
+            "cached_input_tokens": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "input_tokens": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "metadata": {
+              "type": "object"
+            },
+            "output_tokens": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "requests": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "input_tokens",
+            "output_tokens",
+            "cached_input_tokens",
+            "requests",
+            "metadata"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "status",
+        "started_at",
+        "completed_at",
+        "determinism",
+        "generator",
+        "request",
+        "usage",
+        "output",
+        "cases"
+      ],
+      "type": "object"
+    },
+    "record": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "generation"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "record",
+    "generation"
+  ],
+  "title": "Autobench Dataset Generation Manifest YAML",
+  "type": "object"
+}
