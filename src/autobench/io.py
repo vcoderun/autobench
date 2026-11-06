@@ -574,12 +574,63 @@ def benchmark_schema() -> SchemaDocument:
         },
         "additionalProperties": False,
     }
+    string_list = {"type": "array", "items": {"type": "string"}}
+    report_metrics = {"type": ["object", "array"]}
+    comparison = {
+        "type": ["object", "null"],
+        "properties": {
+            "baseline": {"type": "string"},
+            "candidate": {"type": "string"},
+            "asset": {"type": "string", "minLength": 1},
+            "variants": string_list,
+            "tags": string_list,
+            "show": report_metrics,
+            "hypothesis": {
+                "type": "object",
+                "required": ["metric"],
+                "properties": {
+                    "metric": {"type": "string", "minLength": 1},
+                    "alternative": {
+                        "type": "string",
+                        "enum": ["candidate_better", "two_sided"],
+                        "default": "candidate_better",
+                    },
+                    "family": {"type": "string", "minLength": 1, "default": "primary"},
+                    "alpha": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "exclusiveMaximum": 1,
+                        "default": 0.05,
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+        "additionalProperties": False,
+    }
+    trajectory = {
+        "oneOf": [
+            {"type": "string", "minLength": 1},
+            {
+                "type": "object",
+                "required": ["asset"],
+                "properties": {
+                    "asset": {"type": "string", "minLength": 1},
+                    "tags": string_list,
+                    "variants": string_list,
+                    "show": report_metrics,
+                },
+                "additionalProperties": False,
+            },
+        ]
+    }
     report = {
         "type": "object",
         "properties": {
             "leaderboard": {"type": "object"},
             "matrix": {"oneOf": [{"type": "string"}, {"type": "object"}]},
-            "compare": {"type": "object"},
+            "compare": {"type": "object", "additionalProperties": comparison},
+            "trajectories": {"type": "array", "items": trajectory},
             "distributions": {"type": "array"},
             "markdown": {
                 "type": "object",

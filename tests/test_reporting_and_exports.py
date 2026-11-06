@@ -120,6 +120,18 @@ def test_report_spec_round_trips_markdown_defaults_and_overrides() -> None:
     markdown_schema = report_schema["properties"]["markdown"]
     assert markdown_schema["properties"]["profile"]["enum"] == ["summary", "full", "audit"]
     assert markdown_schema["properties"]["layout"]["enum"] == ["single", "bundle", "auto"]
+    comparison_schema = report_schema["properties"]["compare"]["additionalProperties"]
+    assert set(comparison_schema["properties"]) == {
+        "asset",
+        "baseline",
+        "candidate",
+        "hypothesis",
+        "show",
+        "tags",
+        "variants",
+    }
+    trajectory_entry = report_schema["properties"]["trajectories"]["items"]["oneOf"][1]
+    assert set(trajectory_entry["properties"]) == {"asset", "show", "tags", "variants"}
 
 
 async def test_leaderboard_case_matrix_and_comparison_use_semantic_metrics(
