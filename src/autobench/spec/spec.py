@@ -362,22 +362,32 @@ def _normalize_compare_report(raw_compare: Any) -> list[dict[str, Any]]:
 
     comparisons: list[dict[str, Any]] = []
     for comparison_key, raw_config in raw_compare.items():
-        baseline, separator, candidate = str(comparison_key).partition("->")
-        if not separator:
-            raise SpecValidationError(
-                "benchmark.<id>.report.compare keys must use '<baseline> -> <candidate>'"
-            )
         if raw_config is None:
             raw_config = {}
         if not isinstance(raw_config, dict):
             raise SpecValidationError("benchmark.<id>.report.compare entries must be mappings")
-        comparisons.append(
-            {
-                "baseline": baseline.strip(),
-                "candidate": candidate.strip(),
-                "metrics": _normalize_report_metrics(raw_config.get("show", {})),
+        baseline, separator, candidate = str(comparison_key).partition("->")
+        comparison: dict[str, Any] = {
+            "metrics": _normalize_report_metrics(raw_config.get("show", {})),
+        }
+        if separator:
+            comparison |= {"baseline": baseline.strip(), "candidate": candidate.strip()}
+        elif "baseline" in raw_config and "candidate" in raw_config:
+            comparison |= {
+                "name": str(comparison_key),
+                "baseline": raw_config["baseline"],
+                "candidate": raw_config["candidate"],
             }
-        )
+        else:
+            raise SpecValidationError(
+                "benchmark.<id>.report.compare keys must use '<baseline> -> <candidate>' "
+                "or name an entry that declares baseline and candidate"
+            )
+        if "tags" in raw_config:
+            comparison["case_tags"] = raw_config["tags"]
+        if "hypothesis" in raw_config:
+            comparison["hypothesis"] = raw_config["hypothesis"]
+        comparisons.append(comparison)
     return comparisons
 
 

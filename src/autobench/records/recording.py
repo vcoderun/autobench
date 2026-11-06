@@ -85,6 +85,7 @@ def record_experiment(
             asset_registry.write_assets(
                 staging / "assets",
                 asset_ids=persisted_asset_ids,
+                versions=[version for run in result.runs for version in run.asset_versions],
                 content_path=artifacts_dir / "asset-content.sqlite3",
                 root_dir=staging,
             )

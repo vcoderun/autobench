@@ -3,7 +3,7 @@ from __future__ import annotations as _annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 from autobench.instrumentation.pydantic_gepa.projection import OptimizationExecution
 from autobench.runtime.models import ExecutionCorrelation
@@ -26,6 +26,8 @@ ReportProfile = Literal["summary", "full", "audit"]
 ReportLayout = Literal["single", "bundle", "auto"]
 AssetDiffMode = Literal["none", "summary", "full"]
 NoticeSeverity = Literal["info", "warning", "error"]
+HypothesisAlternative = Literal["candidate_better", "two_sided"]
+HypothesisStatus = Literal["supported", "not_supported", "untestable"]
 ComparisonOutcome = Literal["improved", "regressed", "unchanged", "indeterminate"]
 EvidenceAvailability = Literal["available", "omitted", "unavailable"]
 FindingKind = Literal[
@@ -67,15 +69,46 @@ class CaseMatrixReportSpec(BaseModel):
     semantic_type: str = "coverage.ratio"
 
 
+class ComparisonHypothesis(BaseModel):
+    """A pre-declared test of one comparison metric.
+
+    Hypotheses that share a family are adjusted together with Holm's step-down method, so a
+    family should hold exactly the confirmatory tests that were declared before the run.
+    """
+
+    metric: str = Field(min_length=1)
+    alternative: HypothesisAlternative = "candidate_better"
+    family: str = Field(default="primary", min_length=1)
+    alpha: float = Field(default=0.05, gt=0.0, lt=1.0)
+
+
 class ComparisonReportSpec(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
     baseline: str
     candidate: str
     metrics: tuple[MetricAggregation, ...] = ()
+    case_tags: tuple[str, ...] = ()
+    hypothesis: ComparisonHypothesis | None = None
+
+    @model_validator(mode="after")
+    def _validate_hypothesis_metric(self) -> ComparisonReportSpec:
+        if self.hypothesis is None:
+            return self
+        names = {metric.name for metric in self.resolved_metrics()}
+        if self.hypothesis.metric not in names:
+            raise ValueError(
+                f"hypothesis metric {self.hypothesis.metric!r} is not one of the comparison "
+                f"metrics: {', '.join(sorted(names))}"
+            )
+        return self
 
     def resolved_metrics(self) -> tuple[MetricAggregation, ...]:
         if self.metrics:
             return self.metrics
         return DEFAULT_LEADERBOARD_METRICS
+
+    def label(self) -> str:
+        return self.name or f"{self.baseline} -> {self.candidate}"
 
 
 class DistributionReportSpec(BaseModel):
@@ -142,6 +175,25 @@ class ReportSpec(BaseModel):
     comparisons: tuple[ComparisonReportSpec, ...] = ()
     distributions: tuple[DistributionReportSpec, ...] = ()
     markdown: MarkdownReportConfig = Field(default_factory=MarkdownReportConfig)
+
+    @model_validator(mode="after")
+    def _validate_comparisons(self) -> ReportSpec:
+        labels = [comparison.label() for comparison in self.comparisons]
+        duplicates = sorted({label for label in labels if labels.count(label) > 1})
+        if duplicates:
+            raise ValueError(f"comparison labels must be unique: {', '.join(duplicates)}")
+        alphas: dict[str, float] = {}
+        for comparison in self.comparisons:
+            hypothesis = comparison.hypothesis
+            if hypothesis is None:
+                continue
+            declared = alphas.setdefault(hypothesis.family, hypothesis.alpha)
+            if declared != hypothesis.alpha:
+                raise ValueError(
+                    f"hypothesis family {hypothesis.family!r} mixes alpha levels "
+                    f"{declared} and {hypothesis.alpha}"
+                )
+        return self
 
     def leaderboard_metrics(self) -> tuple[MetricAggregation, ...]:
         if self.leaderboard.metrics:
@@ -333,9 +385,60 @@ class CaseMatrix(BaseModel):
     rows: dict[str, dict[str, JsonValue]] = Field(default_factory=dict)
 
 
+class PairedSignTest(BaseModel):
+    """Exact sign test over case-paired outcomes; ties carry no information and are excluded.
+
+    For a binary metric this is the exact McNemar test on the discordant pairs.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    method: Literal["exact_sign"] = "exact_sign"
+    discordant_pairs: int = Field(ge=0)
+    candidate_better_p: float = Field(ge=0.0, le=1.0)
+    two_sided_p: float = Field(ge=0.0, le=1.0)
+
+
+class PairedBinaryTable(BaseModel):
+    """Case-paired counts of a boolean metric, keyed by which side recorded ``True``."""
+
+    model_config = ConfigDict(frozen=True)
+
+    both: int = Field(ge=0)
+    candidate_only: int = Field(ge=0)
+    baseline_only: int = Field(ge=0)
+    neither: int = Field(ge=0)
+
+
+class PairedDifferenceInterval(BaseModel):
+    """Interval for the candidate minus baseline rate of ``True`` over paired cases."""
+
+    model_config = ConfigDict(frozen=True)
+
+    method: Literal["newcombe_paired_wilson"] = "newcombe_paired_wilson"
+    confidence: float = Field(gt=0.0, lt=1.0)
+    estimate: float
+    low: float
+    high: float
+
+
+class HypothesisResult(BaseModel):
+    comparison: str
+    metric: str
+    family: str
+    alternative: HypothesisAlternative
+    alpha: float
+    status: HypothesisStatus
+    p_value: float | None = None
+    adjusted_p_value: float | None = None
+    family_size: int = Field(ge=1)
+
+
 class ComparisonReport(BaseModel):
+    name: str | None = None
     baseline: str
     candidate: str
+    case_tags: tuple[str, ...] = ()
     run_count: int
     factor_deltas: dict[str, dict[str, JsonValue]] = Field(default_factory=dict)
     metric_deltas: dict[str, dict[str, JsonValue]] = Field(default_factory=dict)
@@ -365,6 +468,9 @@ class MetricComparisonReport(BaseModel):
     wins: int = 0
     ties: int = 0
     losses: int = 0
+    sign_test: PairedSignTest | None = None
+    binary_table: PairedBinaryTable | None = None
+    success_difference: PairedDifferenceInterval | None = None
 
 
 class RegressionReport(BaseModel):
@@ -557,6 +663,7 @@ class BenchmarkReport(BaseModel):
     provenance: ProvenanceReport | None = None
     case_matrix: CaseMatrix
     comparisons: list[ComparisonReport] = Field(default_factory=list)
+    hypotheses: tuple[HypothesisResult, ...] = ()
     regressions: tuple[RegressionReport, ...] = ()
     distributions: list[MetricDistribution] = Field(default_factory=list)
     optimizations: list[OptimizationRunReport] = Field(default_factory=list)
@@ -657,4 +764,11 @@ __all__ = (
     "SlowSpanReport",
     "TraceSummaryReport",
     "VariantConfigRow",
+    "ComparisonHypothesis",
+    "HypothesisAlternative",
+    "HypothesisResult",
+    "HypothesisStatus",
+    "PairedBinaryTable",
+    "PairedDifferenceInterval",
+    "PairedSignTest",
 )

@@ -25,7 +25,12 @@ from .models import (
 
 
 class AssetCandidate(BaseModel):
-    """Normalized asset definition observed at an instrumented SDK boundary."""
+    """Normalized asset definition observed at an instrumented SDK boundary.
+
+    ``parent_version`` names the version this content was derived from when the producer knows
+    its lineage, for example a reverted and then revised form. Without it the registry links each
+    new version to the latest version it has seen for the same asset.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 
@@ -42,6 +47,7 @@ class AssetCandidate(BaseModel):
     explicit_asset_id: str | None = Field(default=None, min_length=1)
     owner_locator: str | None = Field(default=None, min_length=1)
     definition_locator: str | None = Field(default=None, min_length=1)
+    parent_version: str | None = Field(default=None, min_length=1)
     provenance: AssetProvenance
     aliases: tuple[str, ...] = ()
     metadata: dict[str, SerializedValue] = Field(default_factory=dict)

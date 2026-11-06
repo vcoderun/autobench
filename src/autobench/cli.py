@@ -5,6 +5,7 @@ from types import TracebackType
 from typing import TypedDict
 
 import click
+from pydantic import ValidationError
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import (
@@ -51,7 +52,13 @@ from autobench.reports.markdown import (
     ReportPublicationError,
     write_markdown_report,
 )
-from autobench.reports.models import ReportLayout, ReportProfile, ReportSpec
+from autobench.reports.models import (
+    DEFAULT_LEADERBOARD_METRICS,
+    MetricAggregation,
+    ReportLayout,
+    ReportProfile,
+    ReportSpec,
+)
 from autobench.reports.reporting import build_report, compare_variants
 from autobench.reports.rich import (
     render_comparison,
@@ -511,15 +518,53 @@ def export(run_dir: Path, export_format: str, output_path: Path) -> None:
 @click.argument("run_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--baseline", required=True, help="Baseline variant id.")
 @click.option("--candidate", required=True, help="Candidate variant id.")
+@click.option(
+    "--tag",
+    "case_tags",
+    multiple=True,
+    help="Repeatable case tag; only cases carrying every given tag are compared.",
+)
+@click.option(
+    "--metric",
+    "metric_specs",
+    multiple=True,
+    metavar="SEMANTIC:AGGREGATE",
+    help="Repeatable metric to compare, for example result.success:ratio_true.",
+)
 def compare(
     run_dir: Path,
     baseline: str,
     candidate: str,
+    case_tags: tuple[str, ...],
+    metric_specs: tuple[str, ...],
 ) -> None:
     """Compare two recorded variants without claiming causality."""
+    metrics = tuple(_parse_metric_option(spec) for spec in metric_specs)
     result = replay_experiment(run_dir)
-    comparison = compare_variants(result, baseline=baseline, candidate=candidate)
+    comparison = compare_variants(
+        result,
+        baseline=baseline,
+        candidate=candidate,
+        metrics=metrics or DEFAULT_LEADERBOARD_METRICS,
+        case_tags=case_tags,
+    )
     render_comparison(_console, comparison)
+
+
+def _parse_metric_option(spec: str) -> MetricAggregation:
+    semantic_type, separator, aggregate = spec.rpartition(":")
+    if not separator or not semantic_type:
+        raise click.BadParameter(
+            f"expected SEMANTIC:AGGREGATE, got {spec!r}", param_hint="--metric"
+        )
+    try:
+        return MetricAggregation.model_validate(
+            {"name": semantic_type, "semantic_type": semantic_type, "fn": aggregate}
+        )
+    except ValidationError as exc:
+        raise click.BadParameter(
+            f"unknown aggregate {aggregate!r} in {spec!r}", param_hint="--metric"
+        ) from exc
 
 
 @cli.group("telemetry")

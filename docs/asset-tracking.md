@@ -165,6 +165,13 @@ assert snapshot["raw"] == SYSTEM_PROMPT.raw
 For a version with a parent, resolve its readable diff with
 `load_asset_diff(path, asset_id=..., version=..., parent_version=...)`.
 
+Recording persists every version a run used, not only the latest one, so an asset that changes
+several times inside one run keeps each snapshot and diff. Each version links to the latest version
+registered before it unless its producer declares `AssetCandidate.parent_version`, for example when a
+revised prompt derives from an earlier version rather than the most recent one; diffs are then
+computed against that declared parent. An older version recorded after a newer one is added to the
+history without moving `current_version`.
+
 ## Binding Assets To Runs
 
 ```python

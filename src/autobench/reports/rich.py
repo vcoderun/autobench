@@ -17,7 +17,12 @@ from autobench.instrumentation.registry import InstrumentorStatus
 from autobench.protocol.traces import Trace
 from autobench.records.staging import StagingInspection
 from autobench.reports.exporting import CSV_METRICS
-from autobench.reports.models import MarkdownReportPublication
+from autobench.reports.models import (
+    HypothesisResult,
+    MarkdownReportPublication,
+    MetricComparisonReport,
+    PairedSignTest,
+)
 from autobench.reports.reporting import (
     BenchmarkReport,
     ComparisonReport,
@@ -229,7 +234,7 @@ def _add_correlation_rows(table: Table, correlation: ExecutionCorrelation | None
 def render_comparison(console: Console, comparison: ComparisonReport) -> None:
     console.print(
         Panel.fit(
-            Text(f"{comparison.baseline} vs {comparison.candidate}", style="bold magenta"),
+            Text(_comparison_title(comparison), style="bold magenta"),
             title="Variant Comparison",
             border_style="magenta",
         )
@@ -239,6 +244,8 @@ def render_comparison(console: Console, comparison: ComparisonReport) -> None:
     summary.add_row("Candidate", comparison.candidate)
     summary.add_row("Paired runs", str(comparison.run_count))
     summary.add_row("Confounded", _format_value(comparison.confounded))
+    if comparison.case_tags:
+        summary.add_row("Case tags", ", ".join(comparison.case_tags))
     console.print(summary)
 
     factor_table = _data_table("Factor Deltas")
@@ -269,6 +276,66 @@ def render_comparison(console: Console, comparison: ComparisonReport) -> None:
             _format_value(payload.get("delta")),
         )
     console.print(metric_table)
+    tested = [
+        (metric, metric.sign_test)
+        for metric in comparison.metric_results
+        if metric.sign_test is not None
+    ]
+    if tested:
+        console.print(_paired_test_table(tested))
+
+
+def _comparison_title(comparison: ComparisonReport) -> str:
+    pair = f"{comparison.baseline} vs {comparison.candidate}"
+    return pair if comparison.name is None else f"{comparison.name}: {pair}"
+
+
+def _paired_test_table(metrics: Sequence[tuple[MetricComparisonReport, PairedSignTest]]) -> Table:
+    table = _data_table("Paired Tests")
+    table.add_column("Metric", style="bold")
+    table.add_column("Pairs", justify="right")
+    table.add_column("W/T/L", justify="right")
+    table.add_column("p (candidate better)", justify="right")
+    table.add_column("p (two-sided)", justify="right")
+    table.add_column("Success difference (95% CI)", justify="right")
+    for metric, sign_test in metrics:
+        interval = metric.success_difference
+        table.add_row(
+            _display_column_name(metric.name),
+            str(metric.paired_count),
+            f"{metric.wins}/{metric.ties}/{metric.losses}",
+            f"{sign_test.candidate_better_p:.4f}",
+            f"{sign_test.two_sided_p:.4f}",
+            (
+                "-"
+                if interval is None
+                else f"{interval.estimate * 100:+.0f} pts "
+                f"({interval.low * 100:.0f} to {interval.high * 100:.0f})"
+            ),
+        )
+    return table
+
+
+def _hypothesis_table(hypotheses: Sequence[HypothesisResult]) -> Table:
+    table = _data_table("Hypotheses (Holm-adjusted within each family)")
+    table.add_column("Comparison", style="bold")
+    table.add_column("Metric")
+    table.add_column("Family", justify="right")
+    table.add_column("Alternative")
+    table.add_column("p", justify="right")
+    table.add_column("Adjusted p", justify="right")
+    table.add_column("Status")
+    for hypothesis in hypotheses:
+        table.add_row(
+            hypothesis.comparison,
+            hypothesis.metric,
+            f"{hypothesis.family} ({hypothesis.family_size})",
+            hypothesis.alternative,
+            "-" if hypothesis.p_value is None else f"{hypothesis.p_value:.4f}",
+            "-" if hypothesis.adjusted_p_value is None else f"{hypothesis.adjusted_p_value:.4f}",
+            hypothesis.status,
+        )
+    return table
 
 
 def render_export_preview(
@@ -477,6 +544,8 @@ def _render_report_tables(
         console.print(table)
     for comparison in report.comparisons:
         render_comparison(console, comparison)
+    if report.hypotheses:
+        console.print(_hypothesis_table(report.hypotheses))
     for distribution in report.distributions:
         table = _data_table(f"Distribution: {distribution.name} ({distribution.semantic_type})")
         table.add_column("Variant", style="bold", no_wrap=True)

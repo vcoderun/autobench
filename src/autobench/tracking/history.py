@@ -46,6 +46,7 @@ def asset_to_yaml_view(
     existing: Any = None,
     previous_snapshot: dict[str, Any] | None = None,
     content_path: str = "content.sqlite3",
+    make_current: bool = True,
 ) -> dict[str, Any]:
     existing_versions = _existing_asset_versions(existing)
     current_snapshot = _asset_version_snapshot(asset)
@@ -103,6 +104,17 @@ def asset_to_yaml_view(
         if isinstance(entry.get("version"), str) and entry["version"] != version.version
     ]
     versions.append(version_payload)
+    if not make_current and isinstance(existing_asset, dict):
+        # An older version recorded after a newer one adds history without moving the current
+        # asset view, which describes the newest version.
+        return {
+            "record": {
+                "type": "asset",
+                "version": 2,
+            },
+            "asset": existing_asset,
+            "versions": versions,
+        }
     asset_view = _asset_yaml_view(
         asset,
         current_version=version.version,

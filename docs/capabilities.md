@@ -109,6 +109,7 @@ See [Scoring And Derivation](scoring-and-derivation.md) and
 | Price sources | Optional llm-prices and genai-prices importers that normalize external data into `PricingTable` |
 | Paired baseline | Per-case or factor-matched speedup, delta, percent change, diagnostics, and verdicts |
 | Comparison classifier | Improved, regressed, unchanged, or inconclusive outcomes with relative noise thresholds |
+| Paired inference | Exact sign (McNemar) tests, Newcombe intervals for paired success rates, case-tag subsets, and Holm-adjusted pre-declared hypotheses |
 
 External price sources are convenience importers, not runtime dependencies or Autobench's source
 of truth. A local pricing YAML remains fully supported.
@@ -135,7 +136,8 @@ The tracking registry understands:
 - callable tools, signatures, parameters, docs, and return types
 - Pydantic models, standard dataclasses, and typed classes
 - field names, annotations, descriptions, aliases, defaults, requirements, constraints, and examples
-- source hashes, structured-schema hashes, versions, parent versions, and diffs
+- source hashes, structured-schema hashes, versions, declared or chronological parent versions, and diffs
+- every version a run used, including assets that change several times within one run
 - persistent human-readable YAML asset histories
 - automatic SDK-boundary discovery without tracking decorators
 - source/effective representation links, capability scopes, provenance, and cross-layer aliases

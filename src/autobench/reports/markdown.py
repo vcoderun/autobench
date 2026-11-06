@@ -32,6 +32,7 @@ from autobench.reports.charts import (
 from autobench.reports.models import (
     AssetVersionReport,
     BenchmarkReport,
+    ComparisonReport,
     EvaluationCaseReport,
     EvaluationMetricReport,
     EvaluationSummaryReport,
@@ -131,6 +132,7 @@ def _render_markdown_document(
     _render_variants(lines, report)
     _render_leaderboard(lines, report)
     _render_comparisons(lines, report)
+    _render_hypotheses(lines, report)
     _render_regressions(lines, report)
     _render_policies(lines, report)
     _render_execution_issues(lines, report)
@@ -1248,11 +1250,16 @@ def _render_comparisons(lines: list[str], report: BenchmarkReport) -> None:
     for comparison in report.comparisons:
         lines.extend(
             [
-                f"### {_text(comparison.baseline)} vs {_text(comparison.candidate)}",
+                f"### {_comparison_heading(comparison)}",
                 "",
                 f"paired cases: {_code(str(comparison.paired_count))}",
                 f"missing pairs: {_code(str(comparison.missing_pair_count))}",
                 f"confounded: {_code(str(comparison.confounded))}",
+                *(
+                    [f"case tags: {_code(', '.join(comparison.case_tags))}"]
+                    if comparison.case_tags
+                    else []
+                ),
                 "",
             ]
         )
@@ -1282,9 +1289,12 @@ def _render_comparisons(lines: list[str], report: BenchmarkReport) -> None:
                     "outcome",
                     "paired",
                     "W/T/L",
+                    "p (candidate better)",
+                    "p (two-sided)",
+                    "success difference (95% CI)",
                 ),
                 [_comparison_row(metric) for metric in comparison.metric_results],
-                numeric_columns={1, 2, 3, 4, 6},
+                numeric_columns={1, 2, 3, 4, 6, 8, 9},
             )
         else:
             _append_table(
@@ -1319,7 +1329,65 @@ def _comparison_row(metric: MetricComparisonReport) -> tuple[str, ...]:
         metric.outcome,
         f"{metric.paired_count}/{metric.paired_count + metric.missing_pair_count}",
         f"{metric.wins}/{metric.ties}/{metric.losses}",
+        "-" if metric.sign_test is None else _p_value(metric.sign_test.candidate_better_p),
+        "-" if metric.sign_test is None else _p_value(metric.sign_test.two_sided_p),
+        _success_difference(metric),
     )
+
+
+def _comparison_heading(comparison: ComparisonReport) -> str:
+    pair = f"{_text(comparison.baseline)} vs {_text(comparison.candidate)}"
+    return pair if comparison.name is None else f"{_text(comparison.name)}: {pair}"
+
+
+def _p_value(value: float) -> str:
+    return f"{value:.4f}"
+
+
+def _success_difference(metric: MetricComparisonReport) -> str:
+    interval = metric.success_difference
+    if interval is None:
+        return "-"
+    return (
+        f"{interval.estimate * 100:+.0f} pts "
+        f"({interval.low * 100:.0f} to {interval.high * 100:.0f})"
+    )
+
+
+def _render_hypotheses(lines: list[str], report: BenchmarkReport) -> None:
+    if not report.hypotheses:
+        return
+    lines.extend(
+        [
+            "## Hypotheses",
+            "",
+            "Exact paired sign tests; p-values are Holm-adjusted within each declared family.",
+            "",
+        ]
+    )
+    _append_table(
+        lines,
+        ("comparison", "metric", "family", "alternative", "alpha", "p", "adjusted p", "status"),
+        [
+            (
+                hypothesis.comparison,
+                hypothesis.metric,
+                f"{hypothesis.family} ({hypothesis.family_size})",
+                hypothesis.alternative,
+                f"{hypothesis.alpha:g}",
+                "-" if hypothesis.p_value is None else _p_value(hypothesis.p_value),
+                (
+                    "-"
+                    if hypothesis.adjusted_p_value is None
+                    else _p_value(hypothesis.adjusted_p_value)
+                ),
+                hypothesis.status,
+            )
+            for hypothesis in report.hypotheses
+        ],
+        numeric_columns={4, 5, 6},
+    )
+    lines.append("")
 
 
 def _render_regressions(lines: list[str], report: BenchmarkReport) -> None:

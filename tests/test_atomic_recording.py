@@ -57,7 +57,7 @@ from autobench.records.views import (
     run_record_to_yaml_view,
 )
 from autobench.reports.rich import render_experiment_result
-from autobench.tracking import AssetCandidate
+from autobench.tracking import AssetCandidate, AssetVersion
 
 
 def test_recording_publishes_complete_directory_with_valid_manifest(tmp_path: Path) -> None:
@@ -188,10 +188,13 @@ def test_asset_registry_failure_never_publishes_partial_directory(tmp_path: Path
             directory: Path,
             *,
             asset_ids: Collection[str] | None = None,
+            versions: Collection[AssetVersion] | None = None,
             content_path: Path | None = None,
             root_dir: Path | None = None,
         ) -> None:
-            raise OSError(f"asset write failed: {directory}:{asset_ids}:{content_path}:{root_dir}")
+            raise OSError(
+                f"asset write failed: {directory}:{asset_ids}:{versions}:{content_path}:{root_dir}"
+            )
 
     registry = FailingRegistry()
     registered = registry.register_candidate(

@@ -113,6 +113,31 @@ benchmark:
         output: reports/benchmark.md
 ```
 
+A comparison key is either `<baseline> -> <candidate>` or a name whose entry declares `baseline`
+and `candidate`. Names let one variant pair be compared on several case subsets. `tags` restricts
+both variants to cases that carry every listed tag. `hypothesis` declares a confirmatory test of one
+`show` metric before the run:
+
+```yaml
+      compare:
+        long-horizon:
+          baseline: native
+          candidate: agent-fork
+          tags: [long]
+          show:
+            strict_pass:
+              metric: result.success
+              aggregate: ratio_true
+          hypothesis:
+            metric: strict_pass
+            alternative: candidate_better
+            family: primary
+            alpha: 0.05
+```
+
+`alternative` is `candidate_better` (one-sided) or `two_sided`. Hypotheses in one `family` are
+Holm-adjusted together and must share one `alpha`; comparison labels must be unique.
+
 `report.markdown` also accepts bounded `limits`, `traces.top_slowest`, `assets.diffs`, and
 `content.include_captured`. A configured output is staged before a CLI-recorded experiment is
 sealed. See [Markdown Reports](markdown-reports.md) for the complete document, audit, and

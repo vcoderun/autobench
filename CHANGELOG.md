@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixed case-paired comparisons of boolean metrics: pass/fail scores such as `result.success` were
+  excluded from wins, ties, and losses, so their paired counts were always empty.
+- Added exact sign (McNemar) tests to every paired comparison metric, plus the paired 2x2 table and
+  Newcombe's interval for the success-rate difference of boolean metrics, in Rich and Markdown
+  reports.
+- Added named `report.compare` entries with case `tags`, and pre-declared comparison hypotheses that
+  are Holm-adjusted within each family and reported as supported, not supported, or untestable.
+- Added `autobench compare --tag` and `--metric SEMANTIC:AGGREGATE`.
+- Fixed recording of assets that change within one run: every version a run used is persisted with
+  its snapshot and diff, where only the latest version was written before.
+- Added `AssetCandidate.parent_version` for producers that know a non-chronological parent; lineage
+  and diffs follow the declared parent.
+
 ## 0.4.0 - 2026-10-10
 
 - Preserve skipped GEPA evaluation events without closing an evaluation span that never started

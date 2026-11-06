@@ -60,6 +60,7 @@ class TrackingRegistry:
         self._asset_ids_by_locator: dict[str, str] = {}
         self._latest_versions_by_asset_id: dict[str, AssetVersion] = {}
         self._version_history: list[AssetVersion] = []
+        self._assets_by_version: dict[tuple[str, str], TrackedAsset] = {}
 
     @property
     def assets(self) -> dict[str, TrackedAsset]:
@@ -81,9 +82,20 @@ class TrackingRegistry:
         directory: Path,
         *,
         asset_ids: Collection[str] | None = None,
+        versions: Collection[AssetVersion] | None = None,
         content_path: Path | None = None,
         root_dir: Path | None = None,
     ) -> None:
+        """Persist asset histories, content snapshots, and parent diffs.
+
+        Args:
+            directory: Asset history directory.
+            asset_ids: Assets to persist; every registered asset when omitted.
+            versions: Exact versions to persist, such as every version one run used. When
+                omitted, only the latest version of each selected asset is written.
+            content_path: Content-addressed store path inside ``root_dir``.
+            root_dir: Directory that content references are relative to.
+        """
         directory.mkdir(parents=True, exist_ok=True)
         active_content_path = (
             directory / "content.sqlite3" if content_path is None else content_path
@@ -103,54 +115,49 @@ class TrackingRegistry:
                 ),
                 key=lambda asset: asset.id,
             )
-            versions = [self._version_for_asset_id(asset.id) for asset in assets]
+            registration_order = {
+                (version.asset_id, version.version): index
+                for index, version in enumerate(self._version_history)
+            }
+            requested = (
+                None
+                if versions is None
+                else {(version.asset_id, version.version) for version in versions}
+            )
+            histories = [
+                [
+                    (self._assets_by_version[(version.asset_id, version.version)], version)
+                    for version in self._version_history
+                    if version.asset_id == asset.id
+                    and (version.asset_id, version.version) in requested
+                ]
+                if requested is not None
+                else [(asset, self._version_for_asset_id(asset.id))]
+                for asset in assets
+            ]
+        index_assets: list[TrackedAsset] = []
+        index_versions: list[AssetVersion] = []
         with FileLock(directory / ".write.lock"):
             active_content_path.parent.mkdir(parents=True, exist_ok=True)
             with AssetContentStore(active_content_path) as content_store:
-                for asset, version in zip(assets, versions, strict=True):
+                for asset, history in zip(assets, histories, strict=True):
                     asset_path = directory / f"{_safe_filename(asset.id)}.yaml"
-                    existing = load_yaml(asset_path) if asset_path.exists() else None
-                    existing_asset = existing.get("asset") if isinstance(existing, dict) else None
-                    current_version = (
-                        existing_asset.get("current_version")
-                        if isinstance(existing_asset, dict)
-                        else None
-                    )
-                    previous_version = current_version if isinstance(current_version, str) else None
-                    previous_snapshot = (
-                        content_store.content(asset_id=asset.id, version=previous_version)
-                        if previous_version is not None
-                        else None
-                    )
-                    snapshot = _asset_version_snapshot(asset)
-                    content_store.write_content(
-                        asset_id=asset.id,
-                        version=version.version,
-                        content_hash=version.content_hash,
-                        snapshot=snapshot,
-                    )
-                    changes = _asset_version_changes(previous_snapshot, snapshot)
-                    diff = changes.get("diff")
-                    if previous_version is not None and isinstance(diff, str):
-                        content_store.write_diff(
-                            asset_id=asset.id,
-                            version=version.version,
-                            parent_version=previous_version,
-                            diff=diff,
-                        )
-                    _atomic_dump_yaml(
-                        asset_to_yaml_view(
-                            asset,
+                    current: tuple[TrackedAsset, AssetVersion] | None = None
+                    for asset_at_version, version in history:
+                        if _write_asset_version(
+                            content_store,
+                            asset_path,
+                            asset_at_version,
                             version,
-                            existing=existing,
-                            previous_snapshot=previous_snapshot,
-                            content_path=content_reference,
-                        ),
-                        asset_path,
-                        schema_name="asset",
-                    )
+                            content_reference=content_reference,
+                            registration_order=registration_order,
+                        ):
+                            current = (asset_at_version, version)
+                    if current is not None:
+                        index_assets.append(current[0])
+                        index_versions.append(current[1])
             index_path = directory / "index.yaml"
-            index_view = asset_index_to_yaml_view(assets, versions)
+            index_view = asset_index_to_yaml_view(index_assets, index_versions)
             if index_path.exists():
                 existing_index = load_yaml(index_path)
                 if isinstance(existing_index, dict) and isinstance(
@@ -257,10 +264,10 @@ class TrackingRegistry:
                         if candidate.python_target is None
                         else _source_path(candidate.python_target)
                     ),
-                    parent_version=(
-                        None
-                        if previous is None or previous.version == content_hash[:12]
-                        else previous.version
+                    parent_version=_candidate_parent_version(
+                        candidate,
+                        version=content_hash[:12],
+                        previous=previous,
                     ),
                     metadata={
                         "representation": candidate.representation.value,
@@ -750,11 +757,98 @@ class TrackingRegistry:
             self._assets_by_id[asset.id] = asset
             self._asset_ids_by_locator[asset.id] = asset.id
             self._latest_versions_by_asset_id[asset.id] = version
+            self._assets_by_version[(asset.id, version.version)] = asset
             if not any(
                 item.asset_id == version.asset_id and item.version == version.version
                 for item in self._version_history
             ):
                 self._version_history.append(version)
+
+
+def _write_asset_version(
+    content_store: AssetContentStore,
+    asset_path: Path,
+    asset: TrackedAsset,
+    version: AssetVersion,
+    *,
+    content_reference: str,
+    registration_order: dict[tuple[str, str], int],
+) -> bool:
+    """Write one version and report whether it became the asset's current version."""
+    existing = load_yaml(asset_path) if asset_path.exists() else None
+    existing_asset = existing.get("asset") if isinstance(existing, dict) else None
+    current_version = (
+        existing_asset.get("current_version") if isinstance(existing_asset, dict) else None
+    )
+    previous_version = current_version if isinstance(current_version, str) else None
+    recorded_versions = {
+        entry.get("version")
+        for entry in (existing.get("versions", []) if isinstance(existing, dict) else [])
+        if isinstance(entry, dict)
+    }
+    if version.version in recorded_versions and version.version != previous_version:
+        return False
+    current_rank = (
+        None
+        if previous_version is None
+        else registration_order.get((version.asset_id, previous_version))
+    )
+    make_current = current_rank is None or (
+        registration_order[(version.asset_id, version.version)] >= current_rank
+    )
+    # Diff against the version this content derives from, which differs from the stored
+    # current version when the producer declared a non-chronological parent.
+    diff_parent = version.parent_version or previous_version
+    previous_snapshot = (
+        content_store.content(asset_id=asset.id, version=diff_parent)
+        if diff_parent is not None
+        else None
+    )
+    snapshot = _asset_version_snapshot(asset)
+    content_store.write_content(
+        asset_id=asset.id,
+        version=version.version,
+        content_hash=version.content_hash,
+        snapshot=snapshot,
+    )
+    diff = _asset_version_changes(previous_snapshot, snapshot).get("diff")
+    if diff_parent is not None and diff_parent != version.version and isinstance(diff, str):
+        content_store.write_diff(
+            asset_id=asset.id,
+            version=version.version,
+            parent_version=diff_parent,
+            diff=diff,
+        )
+    _atomic_dump_yaml(
+        asset_to_yaml_view(
+            asset,
+            version,
+            existing=existing,
+            previous_snapshot=previous_snapshot,
+            content_path=content_reference,
+            make_current=make_current,
+        ),
+        asset_path,
+        schema_name="asset",
+    )
+    return make_current
+
+
+def _candidate_parent_version(
+    candidate: AssetCandidate,
+    *,
+    version: str,
+    previous: AssetVersion | None,
+) -> str | None:
+    if candidate.parent_version is not None:
+        if candidate.parent_version == version:
+            raise ValueError(
+                f"Asset version {version} of {candidate.source_locator} cannot be its own parent."
+            )
+        return candidate.parent_version
+    if previous is None or previous.version == version:
+        return None
+    return previous.version
 
 
 def _python_locator(target: Any) -> str | None:

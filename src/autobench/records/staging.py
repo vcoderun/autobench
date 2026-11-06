@@ -1217,6 +1217,7 @@ class FileRecordSession:
             self.recorder.asset_registry.write_assets(
                 asset_dir,
                 asset_ids=persisted_asset_ids,
+                versions=run.asset_versions,
                 content_path=asset_dir / "content.sqlite3",
                 root_dir=staging,
             )

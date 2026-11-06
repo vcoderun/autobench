@@ -440,6 +440,26 @@ Comparison pairs runs by case, displays changed factors, aggregates requested se
 sets `confounded=true` when multiple relevant factors changed. It reports association and deltas;
 it does not claim which factor caused the result.
 
+Every paired metric also carries an exact sign test over its wins and losses; ties carry no
+information and are excluded. For a boolean metric such as `result.success` this is the exact
+McNemar test, and the comparison adds the paired 2x2 table with Newcombe's 95% interval for the
+candidate minus baseline success rate (Newcombe 1998, method 10). Both are computed from the
+immutable record, so replaying an experiment reproduces them exactly.
+
+```bash
+autobench compare runs/support-routing --baseline baseline --candidate candidate \
+  --tag regression --metric result.success:ratio_true
+```
+
+`--tag` restricts both variants to cases carrying every given tag, and `--metric` replaces the
+default leaderboard metrics. In a spec, `report.compare` entries can declare a `hypothesis`
+([YAML Spec](yaml-spec.md)). Reports then list each hypothesis with its raw p-value, its
+Holm-adjusted p-value within the declared family, and a `supported`, `not_supported`, or
+`untestable` status. A hypothesis without paired evidence stays in its family, so a missing
+comparison never weakens the correction of the others. These are tests of association between
+variants on the same cases; `confounded=true` still marks comparisons whose variants differ in more
+than one factor.
+
 Use paired-baseline post-derivation when a per-run derived metric such as speedup must be written
 back into candidate evidence.
 

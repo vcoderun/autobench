@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from math import isclose, prod
 from pathlib import Path
 from statistics import median, pstdev
@@ -34,6 +35,11 @@ from autobench.reports.analysis import (
     build_source_identity,
     build_trace_summary,
 )
+from autobench.reports.inference import (
+    build_hypothesis_results,
+    exact_sign_test,
+    paired_success_difference,
+)
 from autobench.reports.markdown import render_markdown_report
 from autobench.reports.models import (
     DEFAULT_LEADERBOARD_METRICS,
@@ -62,6 +68,7 @@ from autobench.reports.models import (
     MetricComparisonReport,
     MetricDistribution,
     OptimizationRunReport,
+    PairedBinaryTable,
     RegressionReport,
     ReportLayout,
     ReportProfile,
@@ -108,9 +115,12 @@ def build_report(
             candidate=comparison.candidate,
             metrics=comparison.resolved_metrics(),
             registry=active_registry,
+            case_tags=comparison.case_tags,
+            name=comparison.name,
         )
         for comparison in active_report_spec.comparisons
     ]
+    hypotheses = build_hypothesis_results(active_report_spec.comparisons, comparisons)
     report = BenchmarkReport(
         benchmark_id=result.benchmark_id,
         experiment_id=result.experiment_id,
@@ -150,6 +160,7 @@ def build_report(
             registry=active_registry,
         ),
         comparisons=comparisons,
+        hypotheses=hypotheses,
         regressions=build_regressions(comparisons),
         distributions=[
             build_metric_distribution(
@@ -406,10 +417,27 @@ def compare_variants(
     candidate: str,
     metrics: tuple[MetricAggregation, ...] = DEFAULT_LEADERBOARD_METRICS,
     registry: SemanticRegistry | None = None,
+    case_tags: tuple[str, ...] = (),
+    name: str | None = None,
 ) -> ComparisonReport:
+    """Compare two variants over the cases they share.
+
+    Args:
+        result: Experiment evidence to compare.
+        baseline: Baseline variant id.
+        candidate: Candidate variant id.
+        metrics: Metrics to aggregate and pair by case.
+        registry: Semantic registry used to resolve metric values.
+        case_tags: Restrict both variants to cases carrying every listed tag.
+        name: Optional comparison label, required to tell apart comparisons of the same pair.
+
+    Returns:
+        Aggregate deltas, case-paired outcomes, and exact paired tests for every metric.
+    """
     active_registry = registry or result.semantic_registry
-    baseline_runs = [run for run in result.runs if run.variant_id == baseline]
-    candidate_runs = [run for run in result.runs if run.variant_id == candidate]
+    selected_runs = [run for run in result.runs if _has_case_tags(run, case_tags)]
+    baseline_runs = [run for run in selected_runs if run.variant_id == baseline]
+    candidate_runs = [run for run in selected_runs if run.variant_id == candidate]
     factor_deltas = _factor_deltas(baseline_runs, candidate_runs)
     metric_deltas: dict[str, dict[str, Any]] = {}
     metric_results: list[MetricComparisonReport] = []
@@ -450,7 +478,7 @@ def compare_variants(
             metric.semantic_type,
             registry=active_registry,
         )
-        wins, ties, losses, paired_metric_count = _paired_outcomes(
+        tally = _paired_outcomes(
             paired_case_ids,
             baseline_by_case=baseline_by_case,
             candidate_by_case=candidate_by_case,
@@ -473,17 +501,30 @@ def compare_variants(
                 outcome=_comparison_outcome(delta, direction),
                 baseline_count=len(baseline_samples),
                 candidate_count=len(candidate_samples),
-                paired_count=paired_metric_count,
-                missing_pair_count=len(paired_case_ids) - paired_metric_count,
-                wins=wins,
-                ties=ties,
-                losses=losses,
+                paired_count=tally.paired_count,
+                missing_pair_count=len(paired_case_ids) - tally.paired_count,
+                wins=tally.wins,
+                ties=tally.ties,
+                losses=tally.losses,
+                sign_test=(
+                    exact_sign_test(tally.wins, tally.losses)
+                    if tally.paired_count and _is_directional(direction)
+                    else None
+                ),
+                binary_table=tally.binary_table,
+                success_difference=(
+                    None
+                    if tally.binary_table is None
+                    else paired_success_difference(tally.binary_table)
+                ),
             )
         )
 
     return ComparisonReport(
+        name=name,
         baseline=baseline,
         candidate=candidate,
+        case_tags=case_tags,
         run_count=min(len(baseline_runs), len(candidate_runs)),
         factor_deltas=factor_deltas,
         metric_deltas=metric_deltas,
@@ -730,29 +771,68 @@ def _paired_outcomes(
     semantic_type: str,
     direction: str | None,
     registry: SemanticRegistry,
-) -> tuple[int, int, int, int]:
+) -> _PairedTally:
     wins = 0
     ties = 0
     losses = 0
-    paired_count = 0
+    pairs: list[tuple[bool | float, bool | float]] = []
     for case_id in case_ids:
-        baseline = _numeric_value(
+        baseline = _paired_value(
             metric_value(baseline_by_case[case_id], semantic_type, registry=registry)
         )
-        candidate = _numeric_value(
+        candidate = _paired_value(
             metric_value(candidate_by_case[case_id], semantic_type, registry=registry)
         )
         if baseline is None or candidate is None:
             continue
-        paired_count += 1
-        outcome = _comparison_outcome(candidate - baseline, direction)
+        pairs.append((baseline, candidate))
+        outcome = _comparison_outcome(float(candidate) - float(baseline), direction)
         if outcome == "improved":
             wins += 1
         elif outcome == "regressed":
             losses += 1
         elif outcome == "unchanged":
             ties += 1
-    return wins, ties, losses, paired_count
+    return _PairedTally(
+        wins=wins,
+        ties=ties,
+        losses=losses,
+        paired_count=len(pairs),
+        binary_table=_binary_table(pairs),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _PairedTally:
+    wins: int
+    ties: int
+    losses: int
+    paired_count: int
+    binary_table: PairedBinaryTable | None
+
+
+def _paired_value(value: Any) -> bool | float | None:
+    # Booleans stay out of numeric aggregates, but a pass/fail pair still orders cleanly.
+    if isinstance(value, bool):
+        return value
+    return _numeric_value(value)
+
+
+def _binary_table(pairs: Sequence[tuple[bool | float, bool | float]]) -> PairedBinaryTable | None:
+    if not pairs or not all(
+        isinstance(baseline, bool) and isinstance(candidate, bool) for baseline, candidate in pairs
+    ):
+        return None
+    return PairedBinaryTable(
+        both=sum(1 for baseline, candidate in pairs if baseline and candidate),
+        candidate_only=sum(1 for baseline, candidate in pairs if candidate and not baseline),
+        baseline_only=sum(1 for baseline, candidate in pairs if baseline and not candidate),
+        neither=sum(1 for baseline, candidate in pairs if not baseline and not candidate),
+    )
+
+
+def _has_case_tags(run: RunResult, case_tags: tuple[str, ...]) -> bool:
+    return set(case_tags).issubset(run.case.tags)
 
 
 def _numeric_delta(baseline: Any, candidate: Any) -> float | None:
@@ -770,11 +850,13 @@ def _relative_delta(baseline: Any, delta: float | None) -> float | None:
     return delta / abs(baseline_number)
 
 
+def _is_directional(direction: str | None) -> bool:
+    # Without a direction a pair has no winner, so a sign test would report no evidence.
+    return direction in {Direction.MAXIMIZE.value, Direction.MINIMIZE.value}
+
+
 def _comparison_outcome(delta: float | None, direction: str | None) -> ComparisonOutcome:
-    if delta is None or direction not in {
-        Direction.MAXIMIZE.value,
-        Direction.MINIMIZE.value,
-    }:
+    if delta is None or not _is_directional(direction):
         return "indeterminate"
     if isclose(delta, 0.0, abs_tol=1e-12):
         return "unchanged"
