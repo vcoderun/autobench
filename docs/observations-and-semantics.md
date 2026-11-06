@@ -9,7 +9,7 @@ An `Observation` carries:
 
 - stable ID and local name
 - kind: metric, factor, event, diagnostic, or artifact
-- value and optional unit
+- value and optional unit; `value_omitted` marks a value an older record writer dropped
 - semantic type
 - optimization direction and role
 - source and optional span ID

@@ -29,7 +29,12 @@ from autobench.runtime.models import (
 from autobench.runtime.tasks import TaskStatus
 from autobench.tracking import AssetUse, AssetVersion
 
-RECORD_VERSION = 6
+RECORD_VERSION = 7
+"""Version of run, experiment and summary records.
+
+Version 7 requires every observation value; writers before Autobench 0.4 dropped null and empty
+values.
+"""
 
 
 class RecordingError(AutobenchError):

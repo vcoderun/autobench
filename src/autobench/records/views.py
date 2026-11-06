@@ -36,6 +36,10 @@ from autobench.spec import (
 )
 from autobench.tracking import AssetVersion
 
+# Run records before this version may lack observation values, which writers before Autobench 0.4
+# dropped when null or empty; replay marks them `value_omitted` instead of inventing a null.
+_OBSERVATION_VALUES_REQUIRED_SINCE = 7
+
 
 def experiment_summary(record: ExperimentRecord) -> dict[str, Any]:
     return {
@@ -455,8 +459,9 @@ def run_record_payload_from_yaml_view(raw: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(extraction, dict):
         raise RecordingError("extraction must be a mapping")
 
+    record_version = record_header.get("version", RECORD_VERSION)
     payload: dict[str, Any] = {
-        "record_version": record_header.get("version", RECORD_VERSION),
+        "record_version": record_version,
         "protocol_version": protocol.get("version"),
         "semantic_registry_version": protocol.get("semantic_registry"),
         "run_id": run.get("id"),
@@ -473,7 +478,7 @@ def run_record_payload_from_yaml_view(raw: dict[str, Any]) -> dict[str, Any]:
         "case": raw.get("case", {"id": run.get("case")}),
         "task_output": raw.get("output"),
         "scores": _scores_payload(raw.get("scores")),
-        "observations": _observations_payload(raw.get("metrics")),
+        "observations": _observations_payload(raw.get("metrics"), record_version=record_version),
         "spans": _spans_payload(raw.get("spans")),
         "trace": trace,
         "trace_artifact": trace_artifact,
@@ -561,7 +566,11 @@ def _observations_view(observations: tuple[Observation, ...]) -> dict[str, Any]:
                 "id": observation.id,
                 "name": observation.name,
                 "kind": observation.kind.value,
-                "value": _to_serializable(observation.value),
+                **(
+                    {"value_omitted": True}
+                    if observation.value_omitted
+                    else {"value": _to_serializable(observation.value)}
+                ),
                 "semantic": observation.semantic_type,
                 "unit": observation.unit,
                 "goal": observation.direction.value if observation.direction is not None else None,
@@ -786,7 +795,7 @@ def _scores_payload(raw_scores: Any) -> list[dict[str, Any]]:
     return scores
 
 
-def _observations_payload(raw_metrics: Any) -> list[dict[str, Any]]:
+def _observations_payload(raw_metrics: Any, *, record_version: Any) -> list[dict[str, Any]]:
     if raw_metrics is None:
         return []
     if isinstance(raw_metrics, list):
@@ -794,6 +803,9 @@ def _observations_payload(raw_metrics: Any) -> list[dict[str, Any]]:
     if not isinstance(raw_metrics, dict):
         raise RecordingError("metrics must be a mapping or list")
 
+    values_required = (
+        not isinstance(record_version, int) or record_version >= _OBSERVATION_VALUES_REQUIRED_SINCE
+    )
     observations: list[tuple[int, bool, dict[str, Any]]] = []
     for group, default_kind in (
         ("factors", "factor"),
@@ -808,8 +820,11 @@ def _observations_payload(raw_metrics: Any) -> list[dict[str, Any]]:
             raise RecordingError(f"metrics.{group} must be a mapping")
         for name, raw_observation in raw_group.items():
             observation = _require_mapping(raw_observation, f"metrics.{group}.{name}")
-            if "value" not in observation:
-                raise RecordingError(f"metrics.{group}.{name}.value is required")
+            value_omitted = observation.get("value_omitted", False)
+            if "value" not in observation and not value_omitted:
+                if values_required:
+                    raise RecordingError(f"metrics.{group}.{name}.value is required")
+                value_omitted = True
             sequence = observation.get("sequence")
             if sequence is not None and (
                 not isinstance(sequence, int) or isinstance(sequence, bool)
@@ -828,6 +843,7 @@ def _observations_payload(raw_metrics: Any) -> list[dict[str, Any]]:
                                 "semantic", observation.get("semantic_type")
                             ),
                             "value": observation.get("value"),
+                            "value_omitted": value_omitted,
                             "unit": observation.get("unit"),
                             "direction": observation.get("goal", observation.get("direction")),
                             "role": observation.get("role"),

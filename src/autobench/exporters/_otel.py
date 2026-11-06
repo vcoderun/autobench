@@ -187,7 +187,11 @@ def _emit_run(
         for factor in run.factors:
             _add_model_event(run_span, "autobench.factor", factor.model_dump(mode="json"))
         for observation in run.observations:
-            payload = observation.model_dump(mode="json", exclude_none=True)
+            payload = observation.model_dump(
+                mode="json",
+                exclude_none=True,
+                exclude=None if observation.value_omitted else {"value_omitted"},
+            )
             if not settings.include_captured_content and observation.kind not in {
                 ObservationKind.METRIC,
                 ObservationKind.FACTOR,

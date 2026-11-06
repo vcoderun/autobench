@@ -369,6 +369,13 @@ When a newer version of the same extractor is replayed, its observations replace
 version's observations in the new derived record. The previous derived record remains the lineage
 parent, so extractor evolution is auditable without mixing two versions of one derived metric.
 
+Run records before record version 7 may lack observation values: writers before Autobench 0.4
+dropped null and empty values, such as the `{}` arguments of a tool called without arguments.
+Replay reads such an observation with `value_omitted=True` and a `None` value, so the unknown value
+is never mistaken for a recorded null; the files stay as written. A derived record keeps the marker
+as `value_omitted: true`. From version 7 on, every observation carries its value, and a missing
+value fails the replay.
+
 ## Rich Reports
 
 ```bash

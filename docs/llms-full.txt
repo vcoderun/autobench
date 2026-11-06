@@ -2071,7 +2071,7 @@ An `Observation` carries:
 
 - stable ID and local name
 - kind: metric, factor, event, diagnostic, or artifact
-- value and optional unit
+- value and optional unit; `value_omitted` marks a value an older record writer dropped
 - semantic type
 - optimization direction and role
 - source and optional span ID
@@ -2971,6 +2971,13 @@ observations, diagnostics, and evidence references without mutating the trace.
 When a newer version of the same extractor is replayed, its observations replace the older
 version's observations in the new derived record. The previous derived record remains the lineage
 parent, so extractor evolution is auditable without mixing two versions of one derived metric.
+
+Run records before record version 7 may lack observation values: writers before Autobench 0.4
+dropped null and empty values, such as the `{}` arguments of a tool called without arguments.
+Replay reads such an observation with `value_omitted=True` and a `None` value, so the unknown value
+is never mistaken for a recorded null; the files stay as written. A derived record keeps the marker
+as `value_omitted: true`. From version 7 on, every observation carries its value, and a missing
+value fails the replay.
 
 ## Rich Reports
 
@@ -5718,7 +5725,8 @@ By default, export keeps structural and semantic evidence while omitting capture
 References, hashes, counts, semantic types, status, usage, asset IDs/versions, and provenance remain
 available. `--include-captured-content` or `OTLPSettings(include_captured_content=True)` includes
 content that ABP already captured. It cannot recover content excluded or redacted by the original
-capture policy. Treat this switch as a deliberate data-export decision.
+capture policy, nor observation values that writers before Autobench 0.4 dropped: those observation
+events carry `value_omitted=true`. Treat this switch as a deliberate data-export decision.
 
 ## Failure Boundary
 
@@ -6128,7 +6136,7 @@ references, scope provenance, and captured attributes:
 ```yaml
 record:
   type: run
-  version: 4
+  version: 7
 
 protocol:
   name: abp
@@ -6432,7 +6440,7 @@ Experiment records keep replay data structured, but the outer shape stays readab
 ```yaml
 record:
   type: experiment
-  version: 5
+  version: 7
 
 experiment:
   id: exp_support_routing_20260507T120000Z

@@ -749,6 +749,47 @@ def test_missing_observation_value_is_not_invented_as_null() -> None:
         run_record_payload_from_yaml_view(raw)
 
 
+def test_values_dropped_by_older_writers_are_marked_omitted() -> None:
+    raw = {
+        "record": {"type": "run", "version": 6},
+        "run": {
+            "id": "run_1",
+            "experiment": "exp_1",
+            "benchmark": "record-demo",
+            "case": "case_1",
+            "variant": "variant_1",
+            "status": "passed",
+        },
+        "case": {"id": "case_1"},
+        "metrics": {"events": {"payload": {"id": "obs_1", "name": "payload", "kind": "event"}}},
+    }
+    record = RunRecord.model_validate(run_record_payload_from_yaml_view(raw))
+    assert record.observations == (
+        Observation(
+            id="obs_1", name="payload", kind=ObservationKind.EVENT, value=None, value_omitted=True
+        ),
+    )
+
+    derived = record.model_copy(update={"record_version": RECORD_VERSION})
+    rewritten = run_record_to_yaml_view(derived)
+    assert rewritten["metrics"]["events"]["payload"] == {
+        "sequence": 1,
+        "id": "obs_1",
+        "name": "payload",
+        "kind": "event",
+        "value_omitted": True,
+    }
+    restored = RunRecord.model_validate(run_record_payload_from_yaml_view(rewritten))
+    assert restored.observations == record.observations
+
+
+def test_observations_with_an_omitted_value_cannot_carry_one() -> None:
+    with pytest.raises(ValidationError, match="omitted value cannot carry a value"):
+        Observation(
+            id="obs_1", name="payload", kind=ObservationKind.EVENT, value={}, value_omitted=True
+        )
+
+
 def test_run_record_yaml_view_supports_primary_and_legacy_errors() -> None:
     raw = {
         "record": {"type": "run", "version": 3},

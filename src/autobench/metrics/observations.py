@@ -39,11 +39,18 @@ class ObservationSource(StrEnum):
 
 
 class Observation(BaseModel):
+    """A value a run measured, varied, produced or emitted.
+
+    `value_omitted` marks an observation replayed from a record written before Autobench 0.4, which
+    dropped null and empty values: its value is unknown, not a recorded null.
+    """
+
     id: str
     name: str
     kind: ObservationKind
     semantic_type: SemanticType | None = None
     value: Any
+    value_omitted: bool = False
     unit: str | None = None
     direction: Direction | None = None
     role: ObservationRole | None = None
@@ -62,6 +69,8 @@ class Observation(BaseModel):
             and self.direction is not None
         ):
             raise ValueError("artifact and event observations cannot declare direction")
+        if self.value_omitted and self.value is not None:
+            raise ValueError("observations with an omitted value cannot carry a value")
         return self
 
     def normalized_semantic_type(self, registry: SemanticRegistry | None = None) -> str | None:

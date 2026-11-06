@@ -382,7 +382,7 @@ references, scope provenance, and captured attributes:
 ```yaml
 record:
   type: run
-  version: 4
+  version: 7
 
 protocol:
   name: abp
@@ -686,7 +686,7 @@ Experiment records keep replay data structured, but the outer shape stays readab
 ```yaml
 record:
   type: experiment
-  version: 5
+  version: 7
 
 experiment:
   id: exp_support_routing_20260507T120000Z

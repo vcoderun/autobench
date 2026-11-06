@@ -219,6 +219,17 @@ def test_otlp_export_preserves_hierarchy_semantics_and_immutable_records() -> No
     assert event_observation_attributes is not None
     assert event_observation_attributes["name"] == "conversation"
     assert event_observation_attributes["content_omitted"] is True
+    assert "value_omitted" not in event_observation_attributes
+    omitted_observation = next(
+        event
+        for event in run_events
+        if event.name == "autobench.observation"
+        and event.attributes is not None
+        and event.attributes.get("name") == "tool.arguments"
+    )
+    omitted_observation_attributes = omitted_observation.attributes
+    assert omitted_observation_attributes is not None
+    assert omitted_observation_attributes["value_omitted"] is True
     score_event = next(event for event in run_events if event.name == "autobench.score")
     score_attributes = score_event.attributes
     assert score_attributes is not None
@@ -880,6 +891,15 @@ def _evidence_records() -> tuple[ExperimentRecord, tuple[RunRecord, ...]]:
                 semantic_type="agent.conversation",
                 value={"message": "secret"},
                 source=ObservationSource.INSTRUMENTATION,
+            ),
+            Observation(
+                id="event-2",
+                name="tool.arguments",
+                kind=ObservationKind.EVENT,
+                semantic_type="tool.call.arguments",
+                value=None,
+                value_omitted=True,
+                source=ObservationSource.TASK_OBSERVATION,
             ),
         ),
         scores=(

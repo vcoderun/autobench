@@ -148,7 +148,8 @@ By default, export keeps structural and semantic evidence while omitting capture
 References, hashes, counts, semantic types, status, usage, asset IDs/versions, and provenance remain
 available. `--include-captured-content` or `OTLPSettings(include_captured_content=True)` includes
 content that ABP already captured. It cannot recover content excluded or redacted by the original
-capture policy. Treat this switch as a deliberate data-export decision.
+capture policy, nor observation values that writers before Autobench 0.4 dropped: those observation
+events carry `value_omitted=true`. Treat this switch as a deliberate data-export decision.
 
 ## Failure Boundary
 

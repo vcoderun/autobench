@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed replay of run records written before Autobench 0.4, which failed with
+  `metrics.<group>.<name>.value is required`: their writers dropped null and empty observation
+  values, such as the `{}` arguments of a tool called without arguments. Replay now loads such an
+  observation with the new `Observation.value_omitted` set and a `None` value, so the unknown value
+  is not mistaken for a recorded null, and the files are not rewritten. OTLP observation events
+  carry the marker as `value_omitted=true`.
+- Run, experiment and summary records are now version 7, which requires every observation value;
+  a derived record keeps an omitted value as `value_omitted: true`. Autobench 0.5.1 and earlier
+  reject version 7 records.
+
 ## 0.5.1 - 2026-11-06
 
 - Require filelock 4.2.1 or later. Autobench serializes writes to its asset store with
