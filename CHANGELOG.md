@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-11-06
+
+- Published the 0.5.0 JSON schemas, whose benchmark schema describes `report.trajectories` and
+  the fields of `report.compare` entries, so editors validate both.
 - Fixed case-paired comparisons of boolean metrics: pass/fail scores such as `result.success` were
   excluded from wins, ties, and losses, so their paired counts were always empty.
 - Added exact sign (McNemar) tests to every paired comparison metric, plus the paired 2x2 table and
