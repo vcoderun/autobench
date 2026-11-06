@@ -4116,7 +4116,7 @@ task module. Rescoring and report replay never mutate the original asset history
 
 | Integration | Discovery | Representations | Default asset families |
 | --- | --- | --- | --- |
-| Pydantic AI `>=2.22,<2.37` | yes | definition + effective | agent, capability, prompt, tool, toolset, output schema, policy |
+| Pydantic AI `>=2.22,<2.67` | yes | definition + effective | agent, capability, prompt, tool, toolset, output schema, policy |
 | OpenAI Python `>=3.0,<4` | yes | effective | prompt, tool, output schema |
 | OpenAI Agents `>=0.19.2,<0.23` | yes | definition | agent, prompt, tool, output schema, guardrail, handoff, policy, toolset |
 | HTTPX `>=0.28,<0.29` | no | none | transport evidence only |
@@ -4501,7 +4501,7 @@ No manual span or metric calls are required. The instrumentor captures:
 The instrumentor composes with user event handlers and Pydantic AI's own
 `Instrumentation` capability. It does not configure, replace, or require
 OpenTelemetry. Autobench supports the audited public integration seam across
-Pydantic AI `>=2.22,<2.37`, with CI targets at 2.22.0, 2.23.0, and 2.36.0;
+Pydantic AI `>=2.22,<2.67`, with CI targets at 2.22.0, 2.23.0, 2.36.0, and 2.66.0;
 `InstrumentationManager.check()` reports incompatible
 versions before installing hooks.
 
@@ -5448,7 +5448,7 @@ Current compatibility is declared by the installed instrumentors and package ext
 
 | Extra | Supported dependency range | CI targets |
 | --- | --- | --- |
-| `autobench[pydantic-ai]` | Pydantic AI `>=2.22,<2.37` | 2.22.0, 2.23.0, 2.36.0 |
+| `autobench[pydantic-ai]` | Pydantic AI `>=2.22,<2.67` | 2.22.0, 2.23.0, 2.36.0, 2.66.0 |
 | `autobench[openai]` | OpenAI Python `>=3.0,<4` | 3.0.0, 3.6.0, 3.27.0 |
 | `autobench[openai-agents]` | OpenAI Agents `>=0.19.2,<0.23` | 0.22.0 with OpenAI 3 |
 | `autobench[httpx]` | HTTPX `>=0.28,<0.29` | 0.28.1 |

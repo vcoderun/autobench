@@ -18,6 +18,7 @@
   version of an asset with its parent version on the cases both ran, with the same paired tests as
   variant comparisons. `compare_runs` compares any two caller-selected run groups.
 - Fixed spec YAML views dropping the name, case tags, and hypothesis of comparison entries.
+- Extended Pydantic AI instrumentation support to `>=2.22,<2.67`, with a 2.66.0 CI target.
 - Split case-paired comparison into `autobench.reports.comparison` and metric value resolution into
   `autobench.reports.values`; `autobench.reports.reporting` keeps its public names.
 

@@ -428,7 +428,7 @@ task module. Rescoring and report replay never mutate the original asset history
 
 | Integration | Discovery | Representations | Default asset families |
 | --- | --- | --- | --- |
-| Pydantic AI `>=2.22,<2.37` | yes | definition + effective | agent, capability, prompt, tool, toolset, output schema, policy |
+| Pydantic AI `>=2.22,<2.67` | yes | definition + effective | agent, capability, prompt, tool, toolset, output schema, policy |
 | OpenAI Python `>=3.0,<4` | yes | effective | prompt, tool, output schema |
 | OpenAI Agents `>=0.19.2,<0.23` | yes | definition | agent, prompt, tool, output schema, guardrail, handoff, policy, toolset |
 | HTTPX `>=0.28,<0.29` | no | none | transport evidence only |

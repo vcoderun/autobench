@@ -129,7 +129,7 @@ Current compatibility is declared by the installed instrumentors and package ext
 
 | Extra | Supported dependency range | CI targets |
 | --- | --- | --- |
-| `autobench[pydantic-ai]` | Pydantic AI `>=2.22,<2.37` | 2.22.0, 2.23.0, 2.36.0 |
+| `autobench[pydantic-ai]` | Pydantic AI `>=2.22,<2.67` | 2.22.0, 2.23.0, 2.36.0, 2.66.0 |
 | `autobench[openai]` | OpenAI Python `>=3.0,<4` | 3.0.0, 3.6.0, 3.27.0 |
 | `autobench[openai-agents]` | OpenAI Agents `>=0.19.2,<0.23` | 0.22.0 with OpenAI 3 |
 | `autobench[httpx]` | HTTPX `>=0.28,<0.29` | 0.28.1 |

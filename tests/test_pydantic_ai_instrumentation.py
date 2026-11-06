@@ -141,7 +141,7 @@ def test_instrumentor_declares_and_checks_supported_public_capabilities() -> Non
 
     assert compatibility.status is CompatibilityStatus.COMPATIBLE
     assert instrumentor.info.id == "autobench.pydantic_ai"
-    assert instrumentor.info.supported_versions == ">=2.22,<2.37"
+    assert instrumentor.info.supported_versions == ">=2.22,<2.67"
     assert instrumentor.info.capabilities.model_dump(by_alias=True) == {
         "sync": True,
         "async": True,
@@ -168,7 +168,8 @@ def test_instrumentor_declares_and_checks_supported_public_capabilities() -> Non
         ("2.23.0", CompatibilityStatus.COMPATIBLE),
         ("2.24.0", CompatibilityStatus.COMPATIBLE),
         ("2.36.0", CompatibilityStatus.COMPATIBLE),
-        ("2.37.0", CompatibilityStatus.UNSUPPORTED),
+        ("2.66.0", CompatibilityStatus.COMPATIBLE),
+        ("2.67.0", CompatibilityStatus.UNSUPPORTED),
     ],
 )
 def test_instrumentor_enforces_tested_minor_version_boundaries(
