@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.2 - 2026-11-06
+
 - Fixed replay of run records written before Autobench 0.4, which failed with
   `metrics.<group>.<name>.value is required`: their writers dropped null and empty observation
   values, such as the `{}` arguments of a tool called without arguments. Replay now loads such an
