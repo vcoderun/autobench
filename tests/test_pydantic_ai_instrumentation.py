@@ -755,6 +755,64 @@ async def test_multimodal_input_and_streaming_keep_content_policy_and_partial_ev
     assert full_context.artifacts[0].name == "input.binary.1"
 
 
+def test_capabilities_without_an_id_are_scoped_by_their_serialization_name() -> None:
+    class AuditCapability(AbstractCapability[None]):
+        @classmethod
+        def get_serialization_name(cls) -> str | None:
+            return " audit "
+
+        def get_instructions(self) -> str:
+            return "Audit every answer."
+
+    agent = Agent[None, str](
+        TestModel(),
+        name="audited-agent",
+        deps_type=type(None),
+        capabilities=[AuditCapability()],
+    )
+    registry = TrackingRegistry()
+    context = _run_context()
+
+    with InstrumentationManager() as manager:
+        manager.install(PydanticAI(registry=registry))
+        with _active(context):
+            agent.run_sync("answer")
+
+    asset_ids = {version.asset_id for version in context.asset_versions}
+    assert {
+        "pydantic_ai:audit:capability:self",
+        "pydantic_ai:audit:prompt:instructions",
+    } <= asset_ids
+
+
+@pytest.mark.asyncio
+async def test_model_requests_without_settings_record_no_temperature() -> None:
+    capability = _capability()
+    context = _run_context()
+    response = ModelResponse(parts=[TextPart("response")])
+    request_context = ModelRequestContext(
+        model=TestModel(),
+        messages=[],
+        model_settings=None,
+        model_request_parameters=ModelRequestParameters(),
+    )
+
+    async def model_handler(request: ModelRequestContext) -> ModelResponse:
+        assert request is request_context
+        return response
+
+    with _active(context):
+        returned = await capability.wrap_model_request(
+            _agent_context(),
+            request_context=request_context,
+            handler=model_handler,
+        )
+
+    assert returned is response
+    [span] = _spans(context, "pydantic_ai.model.request")
+    assert "temperature" not in span.attributes
+
+
 @pytest.mark.asyncio
 async def test_capability_is_a_noop_without_an_active_autobench_run() -> None:
     capability = _capability()

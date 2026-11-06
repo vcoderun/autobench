@@ -128,6 +128,9 @@ jobs:
           - name: openai-3.27.0
             package: openai==3.27.0
             tests: tests/test_openai_instrumentation.py
+          - name: openai-3.46.0
+            package: openai==3.46.0
+            tests: tests/test_openai_instrumentation.py
           - name: openai-agents-0.19.2
             package: openai-agents==0.19.2
             tests: tests/test_openai_agents_instrumentation.py

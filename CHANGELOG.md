@@ -33,6 +33,9 @@
   between runs of one side are reported as mixed and mark the comparison confounded.
 - Fixed spec YAML views dropping the name, case tags, and hypothesis of comparison entries.
 - Extended Pydantic AI instrumentation support to `>=2.22,<2.67`, with a 2.66.0 CI target.
+- Updated the locked development dependencies to patched releases for every open security
+  advisory. The development and matrix environments now use Pydantic AI 2.66.0 and OpenAI 3.46.0,
+  with an OpenAI 3.46.0 CI target; older SDK versions stay covered by isolated CI targets.
 - Split case-paired comparison into `autobench.reports.comparison` and metric value resolution into
   `autobench.reports.values`; `autobench.reports.reporting` keeps its public names.
 
