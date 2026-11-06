@@ -275,10 +275,13 @@ class _OpenAICall:
             captured = self._stream.tool_calls.setdefault(event.item_id, _ToolCallState())
             captured.arguments += event.delta
         elif isinstance(event, ResponseFunctionCallArgumentsDoneEvent):
-            self._stream.tool_calls[event.item_id] = _ToolCallState(
-                name=event.name,
-                arguments=event.arguments,
-            )
+            captured = self._stream.tool_calls.setdefault(event.item_id, _ToolCallState())
+            captured.arguments = event.arguments
+            # Later OpenAI 3 releases no longer repeat the function name on this event; the
+            # output item announced before the arguments carries it.
+            name = getattr(event, "name", None)
+            if isinstance(name, str):
+                captured.name = name
         elif isinstance(
             event,
             (ResponseOutputItemAddedEvent, ResponseOutputItemDoneEvent),

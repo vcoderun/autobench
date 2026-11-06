@@ -336,7 +336,19 @@ def _sync_transport(*, fail: bool = False) -> httpx.MockTransport:
                         "response": completed_response,
                     },
                 )
-                body = "".join(f"data: {json.dumps(event)}\n\n" for event in events)
+                streamed = events
+                if payload.get("input") == "modern":
+                    # Current SDKs no longer repeat the function name on the arguments-done
+                    # event, and this stream does not resend the function call item.
+                    streamed = tuple(
+                        {key: value for key, value in event.items() if key != "name"}
+                        if event["type"] == "response.function_call_arguments.done"
+                        else event
+                        for event in events
+                        if event["type"] != "response.output_item.done"
+                        or event["item"] is not function_call
+                    )
+                body = "".join(f"data: {json.dumps(event)}\n\n" for event in streamed)
                 return httpx.Response(
                     200,
                     text=body,
@@ -1052,6 +1064,30 @@ def test_openai_responses_stream_manager_captures_text_tools_and_terminal_usage(
     span = _operation_spans(ctx, "openai.responses")[0]
     assert span.attributes["stream.chunk_count"] == 12
     assert span.usage["total_tokens"] == 18
+    assert _runtime_spans(ctx, "openai.responses")[0].output == {
+        "text": "done",
+        "tool_calls": [
+            {
+                "id": "fc_stream",
+                "name": "lookup",
+                "arguments": '{"id":1}',
+            }
+        ],
+    }
+
+
+def test_openai_responses_stream_keeps_the_announced_tool_name_and_id() -> None:
+    ctx = _run_context()
+    client = OpenAI(
+        api_key="test",
+        base_url="https://openai.test/v1",
+        http_client=httpx.Client(transport=_sync_transport()),
+    )
+
+    with _instrument(ctx), client.responses.stream(model="gpt-test", input="modern") as stream:
+        events = list(stream)
+
+    assert len(events) == 11
     assert _runtime_spans(ctx, "openai.responses")[0].output == {
         "text": "done",
         "tool_calls": [

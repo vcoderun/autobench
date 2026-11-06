@@ -36,6 +36,9 @@
 - Updated the locked development dependencies to patched releases for every open security
   advisory. The development and matrix environments now use Pydantic AI 2.66.0 and OpenAI 3.46.0,
   with an OpenAI 3.46.0 CI target; older SDK versions stay covered by isolated CI targets.
+- Fixed Responses stream capture on OpenAI SDK releases whose arguments-done event no longer
+  carries the function name: the event raised a capture diagnostic and dropped the tool call it
+  finalized. The name and id announced by the output item are now kept.
 - Split case-paired comparison into `autobench.reports.comparison` and metric value resolution into
   `autobench.reports.values`; `autobench.reports.reporting` keeps its public names.
 
