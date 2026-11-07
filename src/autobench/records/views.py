@@ -322,6 +322,8 @@ def run_record_to_yaml_view(record: RunRecord) -> dict[str, Any]:
     compacted = _compact(payload)
     if record.task_output is not None:
         compacted["output"] = output
+    # Factor values are configuration, including nulls and empty containers.
+    compacted["variant"] = _variant_view(record)
     return compacted
 
 
@@ -501,31 +503,32 @@ def run_record_payload_from_yaml_view(raw: dict[str, Any]) -> dict[str, Any]:
     elif raw.get("error") is not None:
         payload["error"] = raw["error"]
         payload["errors"] = [raw["error"]]
-    return _compact(payload)
+    compacted = _compact(payload)
+    compacted["factors"] = payload["factors"]
+    return compacted
 
 
 def _variant_view(record: RunRecord) -> dict[str, Any]:
-    return _compact(
-        {
-            "id": record.variant_id,
-            "factors": _factor_mapping(record.factors),
-        }
-    )
+    view: dict[str, Any] = {"id": record.variant_id}
+    if record.factors:
+        view["factors"] = _factor_mapping(record.factors)
+    return view
 
 
 def _factor_mapping(factors: tuple[FactorValue, ...]) -> dict[str, Any]:
+    """Factors by name; a mapping value is always nested under ``value`` to stay unambiguous."""
     mapped: dict[str, Any] = {}
     for factor in factors:
-        if factor.semantic_type is None and not factor.optimize:
-            mapped[factor.name] = _to_serializable(factor.value)
+        value = _to_serializable(factor.value)
+        if factor.semantic_type is None and not factor.optimize and not isinstance(value, dict):
+            mapped[factor.name] = value
             continue
-        mapped[factor.name] = _compact(
-            {
-                "value": _to_serializable(factor.value),
-                "semantic": factor.semantic_type,
-                "optimize": factor.optimize or None,
-            }
-        )
+        entry: dict[str, Any] = {"value": value}
+        if factor.semantic_type is not None:
+            entry["semantic"] = factor.semantic_type
+        if factor.optimize:
+            entry["optimize"] = True
+        mapped[factor.name] = entry
     return mapped
 
 
@@ -926,6 +929,9 @@ def _artifacts_payload(raw_artifacts: Any) -> list[dict[str, Any]]:
     return artifacts
 
 
+_FACTOR_FIELDS = frozenset({"value", "semantic", "semantic_type", "optimize"})
+
+
 def _factors_payload(raw_variant: Any) -> list[dict[str, Any]]:
     if raw_variant is None:
         return []
@@ -937,7 +943,8 @@ def _factors_payload(raw_variant: Any) -> list[dict[str, Any]]:
         raise RecordingError("variant.factors must be a mapping or list")
     factors: list[dict[str, Any]] = []
     for name, raw_factor in raw_factors.items():
-        if isinstance(raw_factor, dict):
+        # Records before Autobench 0.6 wrote a plain mapping value without nesting it.
+        if isinstance(raw_factor, dict) and _FACTOR_FIELDS & raw_factor.keys():
             factors.append(
                 {
                     "name": name,

@@ -94,6 +94,23 @@ def test_merge_case_defaults_overrides_scalar_payloads() -> None:
     assert merged.expected == 2
 
 
+def test_benchmark_spec_views_keep_mapping_factor_values() -> None:
+    spec = BenchmarkSpec(
+        benchmark=BenchmarkInfo(id="demo"),
+        dataset=DatasetSpec(cases=[Case(id="case")]),
+        task=TaskSpec(kind="python", target="app.tasks.run"),
+        variants=[Variant(id="v", factors=[FactorValue(name="form", value={"text": "Plan."})])],
+    )
+
+    view = benchmark_spec_to_yaml_view(spec)
+
+    assert view["benchmark"]["demo"]["variants"]["v"]["factors"]["form"] == {
+        "value": {"text": "Plan."}
+    }
+    restored = BenchmarkSpec.model_validate(benchmark_spec_payload_from_yaml_view(view))
+    assert restored.variants[0].factors == spec.variants[0].factors
+
+
 def test_load_benchmark_spec_supports_inline_dataset_and_variant_dict_factors(
     tmp_path: Path,
 ) -> None:

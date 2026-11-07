@@ -492,7 +492,7 @@ def _variants_to_yaml_view(variants: list[Variant]) -> dict[str, Any]:
 
 
 def _factor_to_yaml_view(factor: FactorValue) -> Any:
-    if factor.semantic_type is None and not factor.optimize:
+    if factor.semantic_type is None and not factor.optimize and not isinstance(factor.value, dict):
         return factor.value
     view: dict[str, Any] = {"value": factor.value}
     if factor.semantic_type is not None:

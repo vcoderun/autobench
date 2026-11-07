@@ -5,6 +5,11 @@
 - `AssetCandidate` can declare its lineage with `parent_fingerprint`, the content fingerprint of the
   version it derives from, or with `root=True` for a version that derives from no earlier one. A
   candidate declares at most one of `parent_version`, `parent_fingerprint` and `root`.
+- Fixed variant factors whose value is a mapping, such as `{"text": ..., "parent": ...}`: run
+  records and benchmark spec views wrote them like an annotated factor, so reading the record
+  back lost the value. Such values are now written under `value`, and factor values keep their
+  nulls and empty containers. Records from earlier versions that hold a plain mapping value read
+  as that value.
 
 ## 0.5.2 - 2026-11-06
 

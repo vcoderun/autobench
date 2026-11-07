@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from pydantic import ValidationError
 from rich.console import Console
 
@@ -23,6 +24,7 @@ from autobench import (
     ExperimentResult,
     ExperimentStatus,
     ExperimentTermination,
+    FactorValue,
     RecordingError,
     ReplayError,
     RunContext,
@@ -54,6 +56,7 @@ from autobench.records.files import (
 from autobench.records.views import (
     experiment_record_payload_from_yaml_view,
     manifest_payload_from_yaml_view,
+    run_record_payload_from_yaml_view,
     run_record_to_yaml_view,
 )
 from autobench.reports.rich import render_experiment_result
@@ -484,6 +487,42 @@ def test_experiment_termination_rejects_inconsistent_run_identity_sets() -> None
     for values in invalid_sets:
         with pytest.raises(ValidationError):
             ExperimentTermination.model_validate(values)
+
+
+def test_run_records_keep_every_factor_value() -> None:
+    factors = (
+        FactorValue(name="form", value={"text": "Plan.", "parent": None}),
+        FactorValue(name="tagged", value={"value": 1}),
+        FactorValue(name="scored", value={"depth": 2}, semantic_type="config.depth"),
+        FactorValue(name="empty", value=[]),
+        FactorValue(name="unset", value=None),
+        FactorValue(name="model", value="m"),
+    )
+    record = RunRecord(
+        run_id="run",
+        experiment_id="exp",
+        benchmark_id="benchmark",
+        case_id="case",
+        variant_id="variant",
+        status=RunStatus.PASSED,
+        evaluation_status=EvaluationStatus.PASSED,
+        task_status=TaskStatus.PASSED,
+        case=Case(id="case"),
+        factors=factors,
+    )
+
+    view = run_record_to_yaml_view(record)
+
+    assert view["variant"]["factors"]["form"] == {"value": {"text": "Plan.", "parent": None}}
+    assert view["variant"]["factors"]["model"] == "m"
+    payload = run_record_payload_from_yaml_view(yaml.safe_load(dump_yaml(view)))
+    assert RunRecord.model_validate(payload).factors == factors
+    legacy = {**view, "variant": {"id": "variant", "factors": {"form": {"text": "Plan."}}}}
+    (form,) = RunRecord.model_validate(run_record_payload_from_yaml_view(legacy)).factors
+    assert form == FactorValue(name="form", value={"text": "Plan."})
+    assert run_record_to_yaml_view(record.model_copy(update={"factors": ()}))["variant"] == {
+        "id": "variant"
+    }
 
 
 def test_record_views_reject_invalid_terminal_sections_and_serialize_unusual_values() -> None:
