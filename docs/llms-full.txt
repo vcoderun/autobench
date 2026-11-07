@@ -3711,10 +3711,18 @@ For a version with a parent, resolve its readable diff with
 
 Recording persists every version a run used, not only the latest one, so an asset that changes
 several times inside one run keeps each snapshot and diff. Each version links to the latest version
-registered before it unless its producer declares `AssetCandidate.parent_version`, for example when a
-revised prompt derives from an earlier version rather than the most recent one; diffs are then
-computed against that declared parent. An older version recorded after a newer one is added to the
-history without moving `current_version`.
+registered before it unless its producer declares the lineage itself, with at most one of:
+
+- `parent_version`: the version it derives from, for example when a revised prompt derives from an
+  earlier version rather than the most recent one.
+- `parent_fingerprint`: the 64-character content fingerprint of the parent. Autobench derives the
+  parent's version from it, so a producer that knows only the content it started from, such as an
+  optimizer or a hand-written variant of a source prompt, can still name its parent.
+- `root=True`: the version derives from no earlier version, for example a source text that was
+  edited by hand rather than produced from the previous one.
+
+Diffs are computed against the declared parent. An older version recorded after a newer one is
+added to the history without moving `current_version`.
 
 ## Binding Assets To Runs
 

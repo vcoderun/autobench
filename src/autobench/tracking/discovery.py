@@ -9,7 +9,7 @@ from json import dumps
 from types import BuiltinFunctionType, FunctionType, MethodType
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from autobench.metrics.semantics import SemanticType
 
@@ -27,9 +27,12 @@ from .models import (
 class AssetCandidate(BaseModel):
     """Normalized asset definition observed at an instrumented SDK boundary.
 
-    ``parent_version`` names the version this content was derived from when the producer knows
-    its lineage, for example a reverted and then revised form. Without it the registry links each
-    new version to the latest version it has seen for the same asset.
+    A producer that knows the lineage declares it in one of three ways. ``parent_version`` names
+    the version this content was derived from, for example a reverted and then revised form.
+    ``parent_fingerprint`` names it by the parent content's fingerprint instead, so the parent
+    can come from another record: the registry derives the version that content has under this
+    same asset. ``root`` declares that the content has no parent. Without any of them the
+    registry links each new version to the latest version it has seen for the same asset.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
@@ -48,10 +51,27 @@ class AssetCandidate(BaseModel):
     owner_locator: str | None = Field(default=None, min_length=1)
     definition_locator: str | None = Field(default=None, min_length=1)
     parent_version: str | None = Field(default=None, min_length=1)
+    parent_fingerprint: str | None = Field(default=None, min_length=64, max_length=64)
+    root: bool = False
     provenance: AssetProvenance
     aliases: tuple[str, ...] = ()
     metadata: dict[str, SerializedValue] = Field(default_factory=dict)
     sensitivity: AssetSensitivity = AssetSensitivity.INTERNAL
+
+    @model_validator(mode="after")
+    def _one_lineage_declaration(self) -> AssetCandidate:
+        declared = [
+            name
+            for name, value in (
+                ("parent_version", self.parent_version),
+                ("parent_fingerprint", self.parent_fingerprint),
+                ("root", self.root or None),
+            )
+            if value is not None
+        ]
+        if len(declared) > 1:
+            raise ValueError(f"Declare at most one of {', '.join(declared)}")
+        return self
 
 
 class AssetUse(BaseModel):

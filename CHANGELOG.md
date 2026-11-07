@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `AssetCandidate` can declare its lineage with `parent_fingerprint`, the content fingerprint of the
+  version it derives from, or with `root=True` for a version that derives from no earlier one. A
+  candidate declares at most one of `parent_version`, `parent_fingerprint` and `root`.
+
 ## 0.5.2 - 2026-11-06
 
 - Fixed replay of run records written before Autobench 0.4, which failed with

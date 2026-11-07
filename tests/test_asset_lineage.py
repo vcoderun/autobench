@@ -7,7 +7,7 @@ import pytest
 
 from autobench.io import load_yaml
 from autobench.tracking import AssetCandidate, AssetProvenance, TrackingRegistry
-from autobench.tracking.discovery import RegisteredAsset
+from autobench.tracking.discovery import RegisteredAsset, canonical_asset_hash
 from autobench.tracking.store import load_asset_content, load_asset_diff
 
 _LOCATOR = "kedi:form:planner"
@@ -100,14 +100,66 @@ def test_older_versions_recorded_later_keep_the_newest_current(tmp_path: Path) -
     )
 
 
-def _form(text: str, *, parent_version: str | None = None) -> AssetCandidate:
+def test_parent_fingerprint_links_a_version_to_a_parent_from_another_record() -> None:
+    root = TrackingRegistry().register_candidate(_form("Plan.", root=True))
+    # A later generation's record never saw the parent; its fingerprint is enough.
+    child = TrackingRegistry().register_candidate(
+        _form("Plan, then verify.", parent_fingerprint=canonical_asset_hash("Plan."))
+    )
+
+    assert root.version.parent_version is None
+    assert child.version.parent_version == root.version.version
+
+
+def test_root_declares_no_parent_instead_of_the_latest_version() -> None:
+    registry = TrackingRegistry()
+    first = registry.register_candidate(_form("Plan."))
+    unrelated = registry.register_candidate(_form("Act.", root=True))
+    chronological = registry.register_candidate(_form("Act again."))
+
+    assert unrelated.version.parent_version is None
+    assert chronological.version.parent_version == unrelated.version.version
+    assert first.version.parent_version is None
+
+
+def test_a_version_cannot_be_its_own_parent_by_fingerprint() -> None:
+    registry = TrackingRegistry()
+    with pytest.raises(ValueError, match="cannot be its own parent"):
+        registry.register_candidate(
+            _form("Plan.", parent_fingerprint=canonical_asset_hash("Plan."))
+        )
+
+
+@pytest.mark.parametrize(
+    "lineage",
+    [
+        {"parent_version": "abc", "root": True},
+        {"parent_version": "abc", "parent_fingerprint": "0" * 64},
+        {"parent_fingerprint": "0" * 64, "root": True},
+    ],
+)
+def test_a_candidate_declares_at_most_one_lineage(lineage: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="Declare at most one of"):
+        _form("Plan.", **lineage)
+
+
+def _form(
+    text: str,
+    *,
+    parent_version: str | None = None,
+    parent_fingerprint: str | None = None,
+    root: bool = False,
+) -> AssetCandidate:
     return AssetCandidate(
         kind="form",
         local_id="planner",
         name="planner",
         source_locator=_LOCATOR,
         canonical_content=text,
+        content_fingerprint=canonical_asset_hash(text),
         parent_version=parent_version,
+        parent_fingerprint=parent_fingerprint,
+        root=root,
         provenance=AssetProvenance(system="kedi", key="planner"),
     )
 

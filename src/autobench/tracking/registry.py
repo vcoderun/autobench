@@ -240,14 +240,9 @@ class TrackingRegistry:
                         "sensitivity",
                     ):
                         asset_content.pop(field_name)
-                content_hash = _hash_serialized(
-                    {
-                        "asset": asset_content,
-                        "content_fingerprint": (
-                            candidate.content_fingerprint
-                            or _hash_serialized(candidate.canonical_content)
-                        ),
-                    }
+                content_hash = _version_hash(
+                    asset_content,
+                    candidate.content_fingerprint or _hash_serialized(candidate.canonical_content),
                 )
                 previous = self._latest_versions_by_asset_id.get(asset.id)
                 version = AssetVersion(
@@ -268,6 +263,7 @@ class TrackingRegistry:
                         candidate,
                         version=content_hash[:12],
                         previous=previous,
+                        asset_content=asset_content,
                     ),
                     metadata={
                         "representation": candidate.representation.value,
@@ -834,18 +830,29 @@ def _write_asset_version(
     return make_current
 
 
+def _version_hash(asset_content: dict[str, Any], content_fingerprint: str) -> str:
+    """The version hash of content under an asset definition; versions are its first 12 hex."""
+    return _hash_serialized({"asset": asset_content, "content_fingerprint": content_fingerprint})
+
+
 def _candidate_parent_version(
     candidate: AssetCandidate,
     *,
     version: str,
     previous: AssetVersion | None,
+    asset_content: dict[str, Any],
 ) -> str | None:
-    if candidate.parent_version is not None:
-        if candidate.parent_version == version:
+    if candidate.root:
+        return None
+    declared = candidate.parent_version
+    if candidate.parent_fingerprint is not None:
+        declared = _version_hash(asset_content, candidate.parent_fingerprint)[:12]
+    if declared is not None:
+        if declared == version:
             raise ValueError(
                 f"Asset version {version} of {candidate.source_locator} cannot be its own parent."
             )
-        return candidate.parent_version
+        return declared
     if previous is None or previous.version == version:
         return None
     return previous.version
