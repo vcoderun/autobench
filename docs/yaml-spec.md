@@ -26,7 +26,7 @@ named benchmark:
 ## Complete Authoring Example
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.6.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
@@ -553,7 +553,7 @@ Generated datasets use this exact dataset format. Generation itself has two addi
 request is a portable input to an application-owned generator:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.5.2/generation_request_schema.json
+# yaml-language-server: $schema=schemas/0.6.0/generation_request_schema.json
 generation:
   request:
     seed: 17

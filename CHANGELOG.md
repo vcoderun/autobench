@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0 - 2026-11-07
+
 - `AssetCandidate` can declare its lineage with `parent_fingerprint`, the content fingerprint of the
   version it derives from, or with `root=True` for a version that derives from no earlier one. A
   candidate declares at most one of `parent_version`, `parent_fingerprint` and `root`.

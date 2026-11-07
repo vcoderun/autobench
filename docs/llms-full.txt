@@ -237,7 +237,7 @@ directory when the schema helpers run.
 For a repository-local benchmark:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.6.0/benchmark_schema.json
 benchmark:
   smoke-test:
     cases: []
@@ -341,7 +341,7 @@ second. Sync and async functions are both supported. Span duration is measured b
 Create `autobench.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.6.0/benchmark_schema.json
 benchmark:
   text-transform:
     description: Compare deterministic text transformations.
@@ -526,7 +526,7 @@ infrastructure begins.
 Use a file-backed dataset when the benchmark is a maintained regression suite:
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.6.0/benchmark_schema.json
 benchmark:
   support-routing:
     dataset:
@@ -1734,7 +1734,7 @@ is the application-owned adapter; its typed output is the portable evidence boun
 The CLI can pass a human-authored request to the generator:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.5.2/generation_request_schema.json
+# yaml-language-server: $schema=schemas/0.6.0/generation_request_schema.json
 generation:
   request:
     seed: 17
@@ -3941,7 +3941,7 @@ benchmark = Benchmark("support-agent").instrument_all(
 Or use the YAML DSL:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.6.0/benchmark_schema.json
 benchmark:
   support-agent:
     instrumentation:
@@ -4762,7 +4762,7 @@ rather than hand-authored benchmark telemetry.
 Instrumentation belongs to the named benchmark:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=schemas/0.6.0/benchmark_schema.json
 benchmark:
   support-agent:
     dataset:
@@ -5788,7 +5788,7 @@ named benchmark:
 ## Complete Authoring Example
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.6.0/benchmark_schema.json
 benchmark:
   support-routing:
     description: Compare current and candidate routing behavior.
@@ -6315,7 +6315,7 @@ Generated datasets use this exact dataset format. Generation itself has two addi
 request is a portable input to an application-owned generator:
 
 ```yaml
-# yaml-language-server: $schema=schemas/0.5.2/generation_request_schema.json
+# yaml-language-server: $schema=schemas/0.6.0/generation_request_schema.json
 generation:
   request:
     seed: 17
@@ -7776,7 +7776,7 @@ python -c "import autobench; print(autobench.__version__)"
 ```
 
 ```yaml
-# yaml-language-server: $schema=./schemas/0.5.2/benchmark_schema.json
+# yaml-language-server: $schema=./schemas/0.6.0/benchmark_schema.json
 ```
 
 Run `autobench validate` and use its file/line diagnostics. Unknown scorer, policy,
